@@ -1,0 +1,37 @@
+# =============================================================================
+# companyFinder 2.0 — .gitignore
+# =============================================================================
+
+# Environment variables — NEVER commit these
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+.env*.local
+
+# Next.js build output
+.next/
+out/
+
+# Node modules
+node_modules/
+
+# TypeScript build info
+*.tsbuildinfo
+next-env.d.ts
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor directories
+.vscode/
+.idea/
+
+# Exported files (generated at runtime)
+*.xlsx
