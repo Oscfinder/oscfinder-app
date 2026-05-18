@@ -9,7 +9,7 @@ const navItems = [
   { href: '/',                   label: 'Dashboard',        icon: LayoutDashboard },
   { href: '/new-companies',      label: 'New Companies',    icon: PlusCircle },
   { href: '/all-companies',      label: 'All Companies',    icon: Building2 },
-  { href: '/existing-clients',   label: 'Existing Clients', icon: UserCheck },
+  // { href: '/existing-clients',   label: 'Existing Clients', icon: UserCheck },
   { href: '/mail-templates',      label: 'Mail Templates',   icon: MailOpen },
 ];
 
