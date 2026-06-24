@@ -7,6 +7,7 @@ export async function getCompanies(category: string, location: string) {
     `${BASE}/textsearch/json?query=${encodeURIComponent(query)}&key=${API_KEY}`
   );
   const data = await res.json();
+  console.log('data', data)
   return (data.results ?? []).map((p: any) => ({
     name: p.name,
     address: p.formatted_address,

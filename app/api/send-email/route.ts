@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-server';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM   = process.env.RESEND_FROM ?? 'AnchorHMO <onboarding@resend.dev>';

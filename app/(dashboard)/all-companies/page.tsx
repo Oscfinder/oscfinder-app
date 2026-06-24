@@ -10,51 +10,8 @@ import { Lead } from '@/types';
 import { cn } from '@/lib/utils';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { ViewModal, EditModal, MessageModal, DeleteModal, AddModal } from '@/app/_components/RowActionModals';
+import { ActionBtn, FilterSelect, StatCard } from '@/app/_components/AllCompaniesComponent';
 
-function StatCard({ title, value, icon: Icon, color }: { title: string; value: number; icon: React.ElementType; color: string }) {
-  return (
-    <div className="rounded-xl border bg-white p-5 shadow-sm flex items-center gap-4">
-      <div className={`flex items-center justify-center w-11 h-11 rounded-lg shrink-0 ${color}`}>
-        <Icon size={20} color="white" />
-      </div>
-      <div>
-        <p className="text-sm text-gray-500">{title}</p>
-        <p className="text-2xl font-bold text-gray-800 leading-tight">{value}</p>
-      </div>
-    </div>
-  );
-}
-
-function FilterSelect({ icon: Icon, value, onChange, options, placeholder }: {
-  icon: React.ElementType; value: string; onChange: (v: string) => void; options: string[]; placeholder: string;
-}) {
-  return (
-    <div className="relative">
-      <Icon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#006285] pointer-events-none" />
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className={cn(
-          'h-10 pl-8 pr-8 rounded-lg border border-gray-300 bg-white text-sm appearance-none cursor-pointer',
-          'focus:outline-none focus:ring-2 focus:ring-[#006285]/30 focus:border-[#006285]',
-          !value ? 'text-gray-400' : 'text-gray-700'
-        )}
-      >
-        <option value="">{placeholder}</option>
-        {options.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
-      <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-    </div>
-  );
-}
-
-function ActionBtn({ icon: Icon, label, color, onClick }: { icon: React.ElementType; label: string; color: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} title={label} className={cn('flex items-center justify-center w-7 h-7 rounded-md transition-colors', color)}>
-      <Icon size={14} />
-    </button>
-  );
-}
 
 type ModalType = 'view' | 'edit' | 'message' | 'delete' | 'add' | 'bulk-send' | null;
 
@@ -82,18 +39,24 @@ export default function AllCompaniesPage() {
   const open  = (type: ModalType, lead: Lead) => { setModal(type); setActive(lead); };
   const close = () => { setModal(null); setActive(null); };
 
-  const filtered = useMemo(() => {
-    setPage(1);
-    setSelected(new Set());
-    const q = search.toLowerCase().trim();
-    return companies.filter(c => {
-      if (filterLocation && c.location !== filterLocation) return false;
-      if (filterCategory && c.category !== filterCategory) return false;
-      if (filterStatus   && c.status   !== filterStatus)   return false;
-      if (q && !c.name.toLowerCase().includes(q) && !c.address.toLowerCase().includes(q) && !c.category.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [companies, filterLocation, filterCategory, filterStatus, search]);
+
+const filtered = useMemo(() => {
+  const q = search.toLowerCase().trim();
+  return companies.filter(c => {
+    if (filterLocation && c.location !== filterLocation) return false;
+    if (filterCategory && c.category !== filterCategory) return false;
+    if (filterStatus   && c.status   !== filterStatus)   return false;
+    if (q && !c.name.toLowerCase().includes(q) && !c.address.toLowerCase().includes(q) && !c.category.toLowerCase().includes(q)) return false;
+    return true;
+  });
+}, [companies, filterLocation, filterCategory, filterStatus, search]);
+
+// 2. Safe reset engine: safely moves side-effects outside of the render drawing block
+useEffect(() => {
+  setPage(1);
+  setSelected(new Set());
+}, [filterLocation, filterCategory, filterStatus, search]);
+
 
   const totalPages    = Math.ceil(filtered.length / PER_PAGE);
   const paginated     = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
@@ -105,7 +68,10 @@ export default function AllCompaniesPage() {
   const someChecked    = pageIds.some(id => selected.has(id)) && !allPageChecked;
 
   const toggleOne = (id: string) => {
-    setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+    setSelected(prev => { 
+      const next = new Set(prev); 
+      next.has(id) ? next.delete(id) : next.add(id); return next; 
+    });
   };
   const togglePage = () => {
     setSelected(prev => {
@@ -124,21 +90,33 @@ export default function AllCompaniesPage() {
     setCompanies(prev => prev.map(c => c.id === updated.id ? updated : c));
     close();
   };
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!active) return;
-    setCompanies(prev => prev.filter(c => c.id !== active.id));
-    setSelected(prev => { const n = new Set(prev); n.delete(active.id); return n; });
+    const id = active.id;
     close();
+    const res = await fetch(`/api/leads/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setCompanies(prev => prev.filter(c => c.id !== id));
+      setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
+    }
   };
   const handleMailSent = () => {
     if (!active) return;
     setCompanies(prev => prev.map(c => c.id === active.id ? { ...c, mail_sent: true } : c));
     close();
   };
-  const handleBulkDelete = () => {
-    setCompanies(prev => prev.filter(c => !selected.has(c.id)));
-    setSelected(new Set());
+  const handleBulkDelete = async () => {
+    const ids = [...selected];
     setBulkDeleteConfirm(false);
+    const res = await fetch('/api/leads/all', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    if (res.ok) {
+      setCompanies(prev => prev.filter(c => !selected.has(c.id)));
+      setSelected(new Set());
+    }
   };
   const handleBulkSent = (ids: string[]) => {
     setCompanies(prev => prev.map(c => ids.includes(c.id) ? { ...c, mail_sent: true } : c));

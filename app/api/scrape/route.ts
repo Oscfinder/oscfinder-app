@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-server';
 import { getCompanies, getPlaceDetails } from '@/services/googlePlaces';
 import { scrapeContactData } from '@/services/scraper';
 import { checkInternalDB } from '@/services/internalApi';
@@ -45,10 +45,11 @@ async function runPipeline(jobId: string, category: string, location: string) {
         if (!website || visited.has(website)) continue;
         visited.add(website);
 
+        
+
         const isExisting = await checkInternalDB(company.name);
-        const { emails, phones } = isExisting
-          ? { emails: [], phones: [] }
-          : await scrapeContactData(website);
+        if (isExisting) continue;
+        const { emails, phones } = await scrapeContactData(website);
 
         await supabaseAdmin.from('leads').upsert({
           job_id: jobId,

@@ -4,6 +4,9 @@ import { usePathname } from 'next/navigation';
 import { LayoutDashboard, PlusCircle, Building2, UserCheck, MailOpen } from 'lucide-react';
 import { Logo } from './Logo';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import {LogOut} from 'lucide-react';
 
 const navItems = [
   { href: '/',                   label: 'Dashboard',        icon: LayoutDashboard },
@@ -14,7 +17,13 @@ const navItems = [
 ];
 
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
+  const router = useRouter();
   const pathname = usePathname();
+  const handleLogout = async () => {
+  await supabase.auth.signOut();
+  router.push('/login');
+  router.refresh();
+};
 
   return (
     <aside
@@ -54,8 +63,15 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
       {!collapsed && (
         <div className="px-4 py-3 border-t border-gray-100">
           <span className="text-xs text-gray-400">Lead Generation v2.0</span>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-xs text-white/40 hover:text-white/80 transition-colors mt-3"
+          >
+            <LogOut size={13} /> Sign out
+          </button>
         </div>
       )}
+      
     </aside>
   );
 }

@@ -12,6 +12,8 @@ interface BulkSendModalProps {
   onClose: () => void;
 }
 
+
+
 export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps) {
   const [chosenId, setChosenId]   = useState<string>('');
   const [sending, setSending]     = useState(false);

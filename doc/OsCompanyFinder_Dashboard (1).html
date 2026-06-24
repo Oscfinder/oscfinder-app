@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>OsCompanyFinder — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --blue-deep:   #006285;
+  --blue-sky:    #0099CC;
+  --green-deep:  #00A86B;
+  --green-mint:  #00C48C;
+  --navy-dark:   #0A1628;
+  --navy:        #1A3A5C;
+  --gray-mid:    #888888;
+  --gray-light:  #E5E7EB;
+  --bg:          #F8FAFC;
+  --white:       #FFFFFF;
+  --sidebar-w:   240px;
+  --topbar-h:    64px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--navy-dark);display:flex;min-height:100vh;font-size:14px;}
+
+/* ── SIDEBAR ── */
+.sidebar{width:var(--sidebar-w);background:var(--navy-dark);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100;}
+.sidebar-logo{padding:20px 20px 16px;border-bottom:1px solid rgba(255,255,255,0.07);}
+.logo-text{font-size:17px;font-weight:700;color:#fff;}
+.logo-text span.os{color:var(--blue-sky);}
+.logo-text span.finder{color:var(--green-mint);}
+.logo-sub{font-size:10px;letter-spacing:2px;color:rgba(255,255,255,0.3);margin-top:2px;}
+.sidebar-nav{flex:1;padding:16px 0;overflow-y:auto;}
+.nav-section{padding:8px 20px 4px;font-size:10px;letter-spacing:1.5px;color:rgba(255,255,255,0.25);font-weight:600;text-transform:uppercase;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;color:rgba(255,255,255,0.55);cursor:pointer;transition:.15s;border-left:2px solid transparent;font-size:13.5px;font-weight:500;}
+.nav-item:hover{color:#fff;background:rgba(255,255,255,0.05);}
+.nav-item.active{color:#fff;background:rgba(0,153,204,0.12);border-left-color:var(--blue-sky);}
+.nav-item .icon{font-size:16px;width:20px;text-align:center;}
+.nav-badge{margin-left:auto;background:var(--green-mint);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;}
+.sidebar-footer{padding:16px 20px;border-top:1px solid rgba(255,255,255,0.07);}
+.user-card{display:flex;align-items:center;gap:10px;}
+.user-avatar{width:32px;height:32px;border-radius:8px;background:var(--blue-deep);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;}
+.user-info p{font-size:13px;color:#fff;font-weight:600;}
+.user-info span{font-size:11px;color:rgba(255,255,255,0.35);}
+
+/* ── MAIN ── */
+.main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh;}
+.topbar{height:var(--topbar-h);background:var(--white);border-bottom:1px solid var(--gray-light);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:50;}
+.topbar-left h1{font-size:18px;font-weight:700;color:var(--navy-dark);}
+.topbar-left p{font-size:12px;color:var(--gray-mid);}
+.topbar-right{display:flex;align-items:center;gap:12px;}
+.btn{padding:8px 18px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:.15s;}
+.btn-primary{background:var(--green-mint);color:#fff;}
+.btn-primary:hover{background:var(--green-deep);}
+.btn-outline{background:#fff;color:var(--blue-deep);border:1.5px solid var(--blue-deep);}
+.btn-outline:hover{background:var(--blue-deep);color:#fff;}
+.btn-ghost{background:var(--bg);color:var(--navy);border:1px solid var(--gray-light);}
+.notif-btn{width:36px;height:36px;border-radius:8px;border:1px solid var(--gray-light);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;position:relative;}
+.notif-dot{width:8px;height:8px;background:var(--green-mint);border-radius:50%;position:absolute;top:6px;right:6px;border:2px solid #fff;}
+
+/* ── CONTENT ── */
+.content{padding:24px 28px;flex:1;}
+.page{display:none;}
+.page.active{display:block;}
+
+/* ── STAT CARDS ── */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+.stat-card{background:var(--white);border-radius:12px;padding:18px 20px;border:1px solid var(--gray-light);}
+.stat-label{font-size:12px;color:var(--gray-mid);font-weight:500;margin-bottom:8px;}
+.stat-value{font-size:26px;font-weight:700;color:var(--navy-dark);font-family:'DM Mono',monospace;}
+.stat-change{font-size:12px;margin-top:4px;}
+.stat-change.up{color:var(--green-deep);}
+.stat-change.down{color:#e74c3c;}
+.stat-icon{float:right;width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.stat-icon.blue{background:#e0f2fa;}
+.stat-icon.green{background:#e0f7ee;}
+.stat-icon.navy{background:#e8edf4;}
+.stat-icon.mint{background:#e0faf3;}
+
+/* ── GRID LAYOUT ── */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}
+.grid-3{display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:24px;}
+.card{background:var(--white);border-radius:12px;border:1px solid var(--gray-light);overflow:hidden;}
+.card-header{padding:16px 20px;border-bottom:1px solid var(--gray-light);display:flex;align-items:center;justify-content:space-between;}
+.card-title{font-size:14px;font-weight:700;color:var(--navy-dark);}
+.card-body{padding:20px;}
+
+/* ── TABLE ── */
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+thead th{padding:10px 14px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--gray-mid);border-bottom:1px solid var(--gray-light);background:var(--bg);}
+tbody td{padding:12px 14px;border-bottom:1px solid #f3f4f6;font-size:13px;color:var(--navy-dark);}
+tbody tr:hover{background:#fafbfc;}
+tbody tr:last-child td{border-bottom:none;}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+.badge-green{background:#e0f7ee;color:var(--green-deep);}
+.badge-blue{background:#e0f2fa;color:var(--blue-deep);}
+.badge-orange{background:#fff3e0;color:#e67e22;}
+.badge-red{background:#ffeaea;color:#e74c3c;}
+.badge-gray{background:#f3f4f6;color:var(--gray-mid);}
+.badge-navy{background:#e8edf4;color:var(--navy);}
+.badge-demo{background:#f3e8ff;color:#7c3aed;}
+
+/* ── FILTERS ── */
+.filters{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;}
+.filter-select{padding:8px 14px;border:1px solid var(--gray-light);border-radius:8px;font-family:inherit;font-size:13px;color:var(--navy-dark);background:#fff;cursor:pointer;}
+.search-input{padding:8px 14px;border:1px solid var(--gray-light);border-radius:8px;font-family:inherit;font-size:13px;flex:1;min-width:200px;max-width:320px;outline:none;}
+.search-input:focus{border-color:var(--blue-sky);}
+
+/* ── PROGRESS BAR ── */
+.progress-bar{height:6px;background:var(--gray-light);border-radius:3px;overflow:hidden;}
+.progress-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--blue-deep),var(--blue-sky));}
+.progress-fill.green{background:linear-gradient(90deg,var(--green-deep),var(--green-mint));}
+
+/* ── CHART PLACEHOLDER ── */
+.chart-area{height:160px;display:flex;align-items:flex-end;gap:6px;padding:10px 0;}
+.chart-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.chart-bar{width:100%;border-radius:4px 4px 0 0;background:linear-gradient(180deg,var(--blue-sky),var(--blue-deep));transition:.3s;}
+.chart-bar.green{background:linear-gradient(180deg,var(--green-mint),var(--green-deep));}
+.chart-label{font-size:10px;color:var(--gray-mid);}
+
+/* ── ACTIVITY ── */
+.activity-item{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid #f3f4f6;}
+.activity-item:last-child{border-bottom:none;}
+.activity-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;}
+.activity-dot.blue{background:var(--blue-sky);}
+.activity-dot.green{background:var(--green-mint);}
+.activity-dot.orange{background:#e67e22;}
+.activity-text{font-size:13px;color:var(--navy-dark);line-height:1.5;}
+.activity-time{font-size:11px;color:var(--gray-mid);margin-top:2px;}
+
+/* ── SCRAPE PAGE ── */
+.scrape-form{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+.form-group{display:flex;flex-direction:column;gap:6px;}
+.form-label{font-size:12px;font-weight:600;color:var(--navy);}
+.form-control{padding:10px 14px;border:1px solid var(--gray-light);border-radius:8px;font-family:inherit;font-size:13px;outline:none;}
+.form-control:focus{border-color:var(--blue-sky);box-shadow:0 0 0 3px rgba(0,153,204,0.1);}
+.scrape-progress{background:var(--white);border-radius:12px;border:1px solid var(--gray-light);padding:20px;margin-bottom:20px;}
+.scrape-status{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--green-mint);animation:pulse 1.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(1.3);}}
+
+/* ── EMAIL PAGE ── */
+.email-layout{display:grid;grid-template-columns:260px 1fr;gap:20px;}
+.template-list{display:flex;flex-direction:column;gap:8px;}
+.template-item{padding:12px 14px;border:1px solid var(--gray-light);border-radius:8px;cursor:pointer;background:#fff;transition:.15s;}
+.template-item:hover,.template-item.active{border-color:var(--blue-sky);background:#f0f9ff;}
+.template-item h4{font-size:13px;font-weight:600;color:var(--navy-dark);}
+.template-item p{font-size:11px;color:var(--gray-mid);margin-top:3px;}
+.email-preview{background:#fff;border:1px solid var(--gray-light);border-radius:12px;padding:20px;}
+.email-field{margin-bottom:14px;}
+.email-field label{font-size:11px;font-weight:700;color:var(--gray-mid);letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:5px;}
+.email-field input,.email-field textarea{width:100%;padding:9px 12px;border:1px solid var(--gray-light);border-radius:6px;font-family:inherit;font-size:13px;outline:none;resize:vertical;}
+.email-field textarea{min-height:120px;}
+
+/* ── USAGE PAGE ── */
+.usage-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;}
+.usage-card{background:#fff;border-radius:12px;border:1px solid var(--gray-light);padding:20px;}
+.usage-top{display:flex;justify-content:space-between;margin-bottom:14px;}
+.usage-title{font-size:13px;font-weight:600;color:var(--navy);}
+.usage-count{font-size:22px;font-weight:700;font-family:'DM Mono',monospace;color:var(--navy-dark);}
+.usage-limit{font-size:12px;color:var(--gray-mid);}
+
+/* ── ADMIN PAGE ── */
+.admin-tabs{display:flex;gap:4px;margin-bottom:20px;background:#fff;padding:4px;border-radius:10px;border:1px solid var(--gray-light);width:fit-content;}
+.admin-tab{padding:7px 18px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;color:var(--gray-mid);transition:.15s;}
+.admin-tab.active{background:var(--blue-deep);color:#fff;}
+
+/* ── PAGINATION ── */
+.pagination{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-top:1px solid var(--gray-light);}
+.page-info{font-size:12px;color:var(--gray-mid);}
+.page-btns{display:flex;gap:6px;}
+.page-btn{padding:5px 12px;border:1px solid var(--gray-light);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--navy);}
+.page-btn.active{background:var(--blue-deep);color:#fff;border-color:var(--blue-deep);}
+
+/* ── ONBOARDING ── */
+.onboard-wrap{max-width:540px;margin:40px auto;}
+.onboard-step{background:#fff;border-radius:16px;border:1px solid var(--gray-light);padding:32px;text-align:center;}
+.onboard-step h2{font-size:22px;font-weight:700;color:var(--navy-dark);margin-bottom:8px;}
+.onboard-step p{font-size:14px;color:var(--gray-mid);margin-bottom:24px;}
+.step-indicators{display:flex;gap:6px;justify-content:center;margin-bottom:24px;}
+.step-dot{width:8px;height:8px;border-radius:50%;background:var(--gray-light);}
+.step-dot.active{background:var(--blue-deep);width:24px;border-radius:4px;}
+.step-dot.done{background:var(--green-mint);}
+
+/* ── DEMO BANNER ── */
+.demo-banner{background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border-radius:10px;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+.demo-banner p{font-size:13px;}
+.demo-banner strong{font-weight:700;}
+.demo-expires{font-size:12px;opacity:.8;margin-top:2px;}
+
+/* ── EXPORT PAGE ── */
+.export-options{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
+.export-option{background:#fff;border:1.5px solid var(--gray-light);border-radius:10px;padding:18px;cursor:pointer;transition:.15s;text-align:center;}
+.export-option:hover,.export-option.selected{border-color:var(--blue-sky);background:#f0f9ff;}
+.export-icon{font-size:28px;margin-bottom:8px;}
+.export-name{font-size:13px;font-weight:700;color:var(--navy-dark);}
+.export-desc{font-size:11px;color:var(--gray-mid);margin-top:3px;}
+
+/* ── TOOLTIP ── */
+.tooltip{position:relative;display:inline-block;}
+.tooltip:hover .tip{display:block;}
+.tip{display:none;position:absolute;bottom:130%;left:50%;transform:translateX(-50%);background:var(--navy-dark);color:#fff;font-size:11px;padding:4px 10px;border-radius:6px;white-space:nowrap;z-index:999;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px;}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%);}
+  .main{margin-left:0;}
+  .stats-grid{grid-template-columns:1fr 1fr;}
+  .grid-2,.grid-3{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     SIDEBAR
+══════════════════════════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-text"><span class="os">Os</span>Company<span class="finder">Finder</span></div>
+    <div class="logo-sub">Technologies</div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section">Main</div>
+    <div class="nav-item active" onclick="showPage('dashboard')">
+      <span class="icon">📊</span> Dashboard
+    </div>
+    <div class="nav-item" onclick="showPage('leads')">
+      <span class="icon">🏢</span> Leads
+      <span class="nav-badge">247</span>
+    </div>
+    <div class="nav-item" onclick="showPage('scrape')">
+      <span class="icon">🔍</span> Generate Leads
+    </div>
+    <div class="nav-section">Outreach</div>
+    <div class="nav-item" onclick="showPage('email')">
+      <span class="icon">✉️</span> Email Campaigns
+    </div>
+    <div class="nav-item" onclick="showPage('templates')">
+      <span class="icon">📄</span> Templates
+    </div>
+    <div class="nav-section">Data</div>
+    <div class="nav-item" onclick="showPage('export')">
+      <span class="icon">📥</span> Export
+    </div>
+    <div class="nav-item" onclick="showPage('usage')">
+      <span class="icon">📈</span> Usage
+    </div>
+    <div class="nav-section">Admin</div>
+    <div class="nav-item" onclick="showPage('admin')">
+      <span class="icon">⚙️</span> Admin Panel
+    </div>
+    <div class="nav-item" onclick="showPage('demo_admin')">
+      <span class="icon">🎯</span> Demo Accounts
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-card">
+      <div class="user-avatar">AD</div>
+      <div class="user-info">
+        <p>Admin</p>
+        <span>Super Admin</span>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ══════════════════════════════════════════════════════════
+     MAIN
+══════════════════════════════════════════════════════════ -->
+<div class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <h1 id="page-title">Dashboard</h1>
+      <p id="page-sub">Welcome back, Admin</p>
+    </div>
+    <div class="topbar-right">
+      <div class="notif-btn">🔔<div class="notif-dot"></div></div>
+      <button class="btn btn-primary" onclick="showPage('scrape')">+ Generate Leads</button>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- ════════════════════════════════════════
+         PAGE: DASHBOARD
+    ════════════════════════════════════════ -->
+    <div class="page active" id="page-dashboard">
+
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon blue" style="float:right">🏢</div>
+          <div class="stat-label">Total Leads</div>
+          <div class="stat-value">1,284</div>
+          <div class="stat-change up">↑ 12% this month</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green" style="float:right">✉️</div>
+          <div class="stat-label">Emails Sent</div>
+          <div class="stat-value">3,941</div>
+          <div class="stat-change up">↑ 8% this month</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon mint" style="float:right">📥</div>
+          <div class="stat-label">Exports Used</div>
+          <div class="stat-value">18</div>
+          <div class="stat-change">of 50 this month</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon navy" style="float:right">⚙️</div>
+          <div class="stat-label">Active Jobs</div>
+          <div class="stat-value">3</div>
+          <div class="stat-change up">↑ 2 running now</div>
+        </div>
+      </div>
+
+      <!-- Chart + Activity -->
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Lead Growth</span>
+            <span class="badge badge-blue">Last 7 days</span>
+          </div>
+          <div class="card-body">
+            <div class="chart-area">
+              <div class="chart-bar-wrap"><div class="chart-bar" style="height:60%"></div><div class="chart-label">Mon</div></div>
+              <div class="chart-bar-wrap"><div class="chart-bar" style="height:80%"></div><div class="chart-label">Tue</div></div>
+              <div class="chart-bar-wrap"><div class="chart-bar" style="height:55%"></div><div class="chart-label">Wed</div></div>
+              <div class="chart-bar-wrap"><div class="chart-bar green" style="height:95%"></div><div class="chart-label">Thu</div></div>
+              <div class="chart-bar-wrap"><div class="chart-bar" style="height:70%"></div><div class="chart-label">Fri</div></div>
+              <div class="chart-bar-wrap"><div class="chart-bar" style="height:45%"></div><div class="chart-label">Sat</div></div>
+              <div class="chart-bar-wrap"><div class="chart-bar green" style="height:88%"></div><div class="chart-label">Sun</div></div>
+            </div>
+            <div style="display:flex;gap:16px;margin-top:12px;">
+              <div><div style="font-size:11px;color:var(--gray-mid)">New Leads</div><div style="font-size:18px;font-weight:700;color:var(--navy-dark);font-family:'DM Mono'">+284</div></div>
+              <div><div style="font-size:11px;color:var(--gray-mid)">Open Rate</div><div style="font-size:18px;font-weight:700;color:var(--green-deep);font-family:'DM Mono'">34%</div></div>
+              <div><div style="font-size:11px;color:var(--gray-mid)">Converted</div><div style="font-size:18px;font-weight:700;color:var(--blue-deep);font-family:'DM Mono'">12</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">Recent Activity</span></div>
+          <div class="card-body" style="padding:12px 20px;">
+            <div class="activity-item">
+              <div class="activity-dot blue"></div>
+              <div><div class="activity-text">New scrape job completed — <strong>Lagos Tech</strong></div><div class="activity-time">2 mins ago · 48 leads found</div></div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-dot green"></div>
+              <div><div class="activity-text">Email campaign sent to <strong>32 leads</strong></div><div class="activity-time">14 mins ago · 28% open rate</div></div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-dot orange"></div>
+              <div><div class="activity-text"><strong>Acme Ltd</strong> demo account expires in 2 days</div><div class="activity-time">Follow up needed</div></div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-dot blue"></div>
+              <div><div class="activity-text">Export downloaded by <strong>TechCorp Nigeria</strong></div><div class="activity-time">1 hour ago · 120 leads</div></div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-dot green"></div>
+              <div><div class="activity-text">New client activated — <strong>Growth plan</strong></div><div class="activity-time">3 hours ago</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Leads -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Recent Leads</span>
+          <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;" onclick="showPage('leads')">View all →</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Company</th><th>Category</th><th>Location</th><th>Email</th><th>Status</th><th>Score</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Dangote Group</strong></td><td>Manufacturing</td><td>Lagos</td><td>info@dangote.com</td><td><span class="badge badge-blue">Contacted</span></td><td><span style="color:var(--green-deep);font-weight:700">92</span></td></tr>
+              <tr><td><strong>Access Bank PLC</strong></td><td>Banking</td><td>Lagos</td><td>contact@accessbank.com</td><td><span class="badge badge-green">Qualified</span></td><td><span style="color:var(--green-deep);font-weight:700">88</span></td></tr>
+              <tr><td><strong>MTN Nigeria</strong></td><td>Telecoms</td><td>Abuja</td><td>info@mtn.com.ng</td><td><span class="badge badge-gray">New</span></td><td><span style="color:var(--blue-deep);font-weight:700">74</span></td></tr>
+              <tr><td><strong>Flutterwave</strong></td><td>Fintech</td><td>Lagos</td><td>hello@flutterwave.com</td><td><span class="badge badge-gray">New</span></td><td><span style="color:var(--blue-deep);font-weight:700">81</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         PAGE: LEADS
+    ════════════════════════════════════════ -->
+    <div class="page" id="page-leads">
+      <div class="filters">
+        <input class="search-input" placeholder="🔍  Search companies..." type="text"/>
+        <select class="filter-select"><option>All Categories</option><option>Manufacturing</option><option>Banking</option><option>Telecoms</option><option>Fintech</option><option>Retail</option></select>
+        <select class="filter-select"><option>All States</option><option>Lagos</option><option>Abuja</option><option>Kano</option><option>Rivers</option></select>
+        <select class="filter-select"><option>All Local Govts</option><option>Ikeja</option><option>Victoria Island</option><option>Lekki</option></select>
+        <select class="filter-select"><option>All Status</option><option>New</option><option>Contacted</option><option>Qualified</option><option>Ignored</option></select>
+        <button class="btn btn-outline" style="font-size:12px;">Export Selected</button>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">All Leads <span style="color:var(--gray-mid);font-weight:400;font-size:13px">— 247 results</span></span>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;">✉️ Email Selected</button>
+            <button class="btn btn-primary" style="font-size:12px;padding:5px 14px;" onclick="showPage('scrape')">+ Generate More</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th><input type="checkbox"/></th><th>Company</th><th>Category</th><th>State</th><th>LGA</th><th>Email</th><th>Phone</th><th>Status</th><th>Score</th><th>LinkedIn</th><th>Actions</th></tr></thead>
+            <tbody>
+              <tr><td><input type="checkbox"/></td><td><strong>Dangote Group</strong></td><td>Manufacturing</td><td>Lagos</td><td>Apapa</td><td>info@dangote.com</td><td>+234 1 460 0000</td><td><span class="badge badge-blue">Contacted</span></td><td><strong style="color:var(--green-deep)">92</strong></td><td><a href="#" style="color:var(--blue-sky)">View</a></td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Actions ▾</button></td></tr>
+              <tr><td><input type="checkbox"/></td><td><strong>Access Bank PLC</strong></td><td>Banking</td><td>Lagos</td><td>V/Island</td><td>contact@accessbank.com</td><td>+234 700 300 0000</td><td><span class="badge badge-green">Qualified</span></td><td><strong style="color:var(--green-deep)">88</strong></td><td><a href="#" style="color:var(--blue-sky)">View</a></td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Actions ▾</button></td></tr>
+              <tr><td><input type="checkbox"/></td><td><strong>MTN Nigeria</strong></td><td>Telecoms</td><td>Abuja</td><td>Central</td><td>info@mtn.com.ng</td><td>+234 803 000 0000</td><td><span class="badge badge-gray">New</span></td><td><strong style="color:var(--blue-deep)">74</strong></td><td><a href="#" style="color:var(--blue-sky)">View</a></td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Actions ▾</button></td></tr>
+              <tr><td><input type="checkbox"/></td><td><strong>Flutterwave</strong></td><td>Fintech</td><td>Lagos</td><td>Lekki</td><td>hello@flutterwave.com</td><td>+234 809 000 0000</td><td><span class="badge badge-gray">New</span></td><td><strong style="color:var(--blue-deep)">81</strong></td><td><a href="#" style="color:var(--blue-sky)">View</a></td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Actions ▾</button></td></tr>
+              <tr><td><input type="checkbox"/></td><td><strong>Konga Online</strong></td><td>E-commerce</td><td>Lagos</td><td>Ikeja</td><td>support@konga.com</td><td>+234 817 000 0000</td><td><span class="badge badge-orange">Ignored</span></td><td><strong style="color:var(--gray-mid)">45</strong></td><td>—</td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Actions ▾</button></td></tr>
+              <tr><td><input type="checkbox"/></td><td><strong>Zenith Bank</strong></td><td>Banking</td><td>Lagos</td><td>V/Island</td><td>info@zenithbank.com</td><td>+234 1 278 7000</td><td><span class="badge badge-green">Qualified</span></td><td><strong style="color:var(--green-deep)">95</strong></td><td><a href="#" style="color:var(--blue-sky)">View</a></td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Actions ▾</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <div class="page-info">Showing 1–6 of 247 leads</div>
+          <div class="page-btns">
+            <div class="page-btn">← Prev</div>
+            <div class="page-btn active">1</div>
+            <div class="page-btn">2</div>
+            <div class="page-btn">3</div>
+            <div class="page-btn">Next →</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         PAGE: SCRAPE / GENERATE LEADS
+    ════════════════════════════════════════ -->
+    <div class="page" id="page-scrape">
+      <div class="grid-2" style="margin-bottom:0">
+        <div>
+          <div class="card" style="margin-bottom:20px;">
+            <div class="card-header"><span class="card-title">Generate New Leads</span></div>
+            <div class="card-body">
+              <div class="scrape-form">
+                <div class="form-group">
+                  <label class="form-label">Industry / Category</label>
+                  <select class="form-control"><option>Select category...</option><option>Banking & Finance</option><option>Manufacturing</option><option>Telecoms</option><option>Fintech</option><option>Real Estate</option><option>Healthcare</option><option>Education</option><option>Retail</option></select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">State</label>
+                  <select class="form-control"><option>Select state...</option><option>Lagos</option><option>Abuja (FCT)</option><option>Rivers</option><option>Kano</option><option>Oyo</option></select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Local Government Area</label>
+                  <select class="form-control"><option>Select LGA...</option><option>Ikeja</option><option>Victoria Island</option><option>Lekki</option><option>Surulere</option><option>Apapa</option></select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Max Results</label>
+                  <select class="form-control"><option>50 leads</option><option>100 leads</option><option>200 leads</option></select>
+                </div>
+              </div>
+              <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" onclick="startScrape()">🔍 Start Generating Leads</button>
+            </div>
+          </div>
+
+          <!-- Usage remaining -->
+          <div class="card">
+            <div class="card-header"><span class="card-title">Scrape Usage This Month</span></div>
+            <div class="card-body">
+              <div style="margin-bottom:14px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:13px;color:var(--navy)">Searches used</span><span style="font-size:13px;font-weight:700;font-family:'DM Mono'">22 / 80</span></div>
+                <div class="progress-bar"><div class="progress-fill" style="width:27%"></div></div>
+              </div>
+              <div style="margin-bottom:14px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:13px;color:var(--navy)">Emails sent</span><span style="font-size:13px;font-weight:700;font-family:'DM Mono'">3,941 / 10,000</span></div>
+                <div class="progress-bar"><div class="progress-fill green" style="width:39%"></div></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:13px;color:var(--navy)">Exports used</span><span style="font-size:13px;font-weight:700;font-family:'DM Mono'">18 / 50</span></div>
+                <div class="progress-bar"><div class="progress-fill" style="width:36%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Jobs -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">Active Scrape Jobs</span><span class="badge badge-green">3 running</span></div>
+          <div class="card-body" style="padding:0;">
+            <div id="scrape-progress" style="padding:20px;border-bottom:1px solid var(--gray-light);">
+              <div class="scrape-status">
+                <div style="display:flex;align-items:center;gap:8px;"><div class="pulse"></div><span style="font-size:13px;font-weight:600">Lagos · Banking</span></div>
+                <span class="badge badge-green">Running</span>
+              </div>
+              <div class="progress-bar" style="margin-bottom:8px;"><div class="progress-fill green" style="width:72%"></div></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray-mid)"><span>72% complete</span><span>36 / 50 leads found</span></div>
+            </div>
+            <div style="padding:20px;border-bottom:1px solid var(--gray-light);">
+              <div class="scrape-status">
+                <div style="display:flex;align-items:center;gap:8px;"><div class="pulse"></div><span style="font-size:13px;font-weight:600">Abuja · Telecoms</span></div>
+                <span class="badge badge-blue">Processing</span>
+              </div>
+              <div class="progress-bar" style="margin-bottom:8px;"><div class="progress-fill" style="width:45%"></div></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray-mid)"><span>45% complete</span><span>22 / 50 leads found</span></div>
+            </div>
+            <div style="padding:20px;">
+              <div class="scrape-status">
+                <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:13px;font-weight:600">Kano · Manufacturing</span></div>
+                <span class="badge badge-gray">Completed</span>
+              </div>
+              <div class="progress-bar" style="margin-bottom:8px;"><div class="progress-fill green" style="width:100%"></div></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray-mid)"><span>✅ Done</span><span>50 / 50 leads found</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         PAGE: EMAIL CAMPAIGNS
+    ════════════════════════════════════════ -->
+    <div class="page" id="page-email">
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
+        <div class="stat-card"><div class="stat-label">Sent</div><div class="stat-value" style="font-size:22px;">3,941</div></div>
+        <div class="stat-card"><div class="stat-label">Delivered</div><div class="stat-value" style="font-size:22px;color:var(--green-deep)">3,820</div></div>
+        <div class="stat-card"><div class="stat-label">Opened</div><div class="stat-value" style="font-size:22px;color:var(--blue-deep)">1,340</div><div class="stat-change up">34% open rate</div></div>
+        <div class="stat-card"><div class="stat-label">Clicked</div><div class="stat-value" style="font-size:22px;color:var(--green-mint)">284</div><div class="stat-change up">7.2% CTR</div></div>
+      </div>
+      <div class="email-layout">
+        <div>
+          <div class="card-title" style="margin-bottom:12px;">Templates</div>
+          <div class="template-list">
+            <div class="template-item active">
+              <h4>Cold Outreach #1</h4>
+              <p>Intro + value prop</p>
+            </div>
+            <div class="template-item">
+              <h4>Follow-up #1</h4>
+              <p>2-day follow up</p>
+            </div>
+            <div class="template-item">
+              <h4>Demo Invite</h4>
+              <p>Book a demo</p>
+            </div>
+            <div class="template-item">
+              <h4>Proposal Send</h4>
+              <p>Send pricing doc</p>
+            </div>
+            <button class="btn btn-outline" style="width:100%;margin-top:8px;font-size:12px;">+ New Template</button>
+          </div>
+        </div>
+        <div>
+          <div class="email-preview">
+            <div class="card-title" style="margin-bottom:16px;">Compose Campaign</div>
+            <div class="email-field">
+              <label>From</label>
+              <input value="hello@oscompanyfinder.com" type="text"/>
+            </div>
+            <div class="email-field">
+              <label>Recipients</label>
+              <input value="32 leads selected" type="text"/>
+            </div>
+            <div class="email-field">
+              <label>Subject</label>
+              <input value="Grow your business with verified B2B leads" type="text"/>
+            </div>
+            <div class="email-field">
+              <label>Body</label>
+              <textarea>Hi {{company_name}},
+
+My name is [Your Name] from OsCompanyFinder Technologies.
+
+We help businesses like yours discover verified B2B leads and decision-maker contacts across Africa using data intelligence.
+
+Would you be open to a 15-minute call this week?
+
+Best regards,
+[Your Name]</textarea>
+            </div>
+            <div style="display:flex;gap:10px;">
+              <button class="btn btn-primary" style="flex:1">📤 Send Campaign</button>
+              <button class="btn btn-ghost">💾 Save Draft</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         PAGE: TEMPLATES
+    ════════════════════════════════════════ -->
+    <div class="page" id="page-templates">
+      <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
+        <div></div>
+        <button class="btn btn-primary">+ New Template</button>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Email Templates</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Title</th><th>Subject</th><th>Tag</th><th>Times Used</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Cold Outreach #1</strong></td><td>Grow your business with verified B2B leads</td><td><span class="badge badge-blue">cold</span></td><td>284</td><td>Jun 1, 2026</td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Edit</button></td></tr>
+              <tr><td><strong>Follow-up #1</strong></td><td>Just checking in — OsCompanyFinder</td><td><span class="badge badge-orange">followup</span></td><td>128</td><td>Jun 2, 2026</td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Edit</button></td></tr>
+              <tr><td><strong>Demo Invite</strong></td><td>Book a free 15-min demo</td><td><span class="badge badge-green">demo</span></td><td>64</td><td>Jun 3, 2026</td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Edit</button></td></tr>
+              <tr><td><strong>Proposal Send</strong></td><td>Your OsCompanyFinder proposal is ready</td><td><span class="badge badge-navy">proposal</span></td><td>22</td><td>Jun 4, 2026</td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Edit</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         PAGE: EXPORT
+    ════════════════════════════════════════ -->
+    <div class="page" id="page-export">
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-header"><span class="card-title">Export Leads</span></div>
+        <div class="card-body">
+          <div class="filters" style="margin-bottom:16px;">
+            <select class="filter-select"><option>All Categories</option><option>Banking</option><option>Telecoms</option></select>
+            <select class="filter-select"><option>All States</option><option>Lagos</option><option>Abuja</option></select>
+            <select class="filter-select"><option>All Status</option><option>New</option><option>Qualified</option></select>
+          </div>
+          <div class="export-options">
+            <div class="export-option selected">
+              <div class="export-icon">📊</div>
+              <div class="export-name">Excel (.xlsx)</div>
+              <div class="export-desc">Full data with all fields</div>
+            </div>
+            <div class="export-option">
+              <div class="export-icon">📄</div>
+              <div class="export-name">CSV</div>
+              <div class="export-desc">Simple comma-separated</div>
+            </div>
+            <div class="export-option" style="opacity:.5;cursor:not-allowed;" title="Locked in demo">
+              <div class="export-icon">🔒</div>
+              <div class="export-name">PDF Report</div>
+              <div class="export-desc">Enterprise plan only</div>
+            </div>
+          </div>
+          <div style="background:var(--bg);border-radius:8px;padding:14px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;">
+            <div><span style="font-size:13px;color:var(--navy)">Ready to export:</span> <strong>247 leads selected</strong></div>
+            <div style="font-size:13px;color:var(--gray-mid)">Exports used: <strong style="color:var(--navy-dark)">18 / 50</strong> this month</div>
+          </div>
+          <button class="btn btn-primary" style="padding:12px 32px;font-size:14px;">📥 Download Excel</button>
+        </div>
+      </div>
+
+      <!-- Export history -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Export History</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Filters Applied</th><th>Format</th><th>Leads</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>Jun 6, 2026</td><td>Lagos · Banking · Qualified</td><td>Excel</td><td>120</td><td><span class="badge badge-green">✅ Downloaded</span></td></tr>
+              <tr><td>Jun 5, 2026</td><td>All · Telecoms · New</td><td>CSV</td><td>85</td><td><span class="badge badge-green">✅ Downloaded</span></td></tr>
+              <tr><td>Jun 4, 2026</td><td>Abuja · All · All</td><td>Excel</td><td>200</td><td><span class="badge badge-green">✅ Downloaded</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         PAGE: USAGE
+    ════════════════════════════════════════ -->
+    <div class="page" id="page-usage">
+      <div class="usage-grid">
+        <div class="usage-card">
+          <div class="usage-top"><span class="usage-title">🔍 Scrape Searches</span><span class="badge badge-blue">Growth</span></div>
+          <div class="usage-count">22</div>
+          <div class="usage-limit">of 80 searches/month</div>
+          <div class="progress-bar" style="margin-top:12px;"><div class="progress-fill" style="width:27%"></div></div>
+          <div style="font-size:11px;color:var(--gray-mid);margin-top:6px;">58 searches remaining</div>
+        </div>
+        <div class="usage-card">
+          <div class="usage-top"><span class="usage-title">✉️ Emails Sent</span><span class="badge badge-green">Growth</span></div>
+          <div class="usage-count">3,941</div>
+          <div class="usage-limit">of 10,000 emails/month</div>
+          <div class="progress-bar" style="margin-top:12px;"><div class="progress-fill green" style="width:39%"></div></div>
+          <div style="font-size:11px;color:var(--gray-mid);margin-top:6px;">6,059 emails remaining</div>
+        </div>
+        <div class="usage-card">
+          <div class="usage-top"><span class="usage-title">📥 Exports</span><span class="badge badge-blue">Growth</span></div>
+          <div class="usage-count">18</div>
+          <div class="usage-limit">of 50 exports/month</div>
+          <div class="progress-bar" style="margin-top:12px;"><div class="progress-fill" style="width:36%"></div></div>
+          <div style="font-size:11px;color:var(--gray-mid);margin-top:6px;">32 exports remaining</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Usage Log</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Action</th><th>Units</th><th>Date</th><th>Details</th></tr></thead>
+            <tbody>
+              <tr><td><span class="badge badge-blue">google_search</span></td><td>1</td><td>Jun 6, 2026 10:42</td><td>Lagos · Banking</td></tr>
+              <tr><td><span class="badge badge-green">email_sent</span></td><td>32</td><td>Jun 6, 2026 09:15</td><td>Campaign: Cold Outreach #1</td></tr>
+              <tr><td><span class="badge badge-navy">export</span></td><td>1</td><td>Jun 5, 2026 16:30</td><td>120 leads · Excel</td></tr>
+              <tr><td><span class="badge badge-blue">google_search</span></td><td>1</td><td>Jun 5, 2026 14:20</td><td>Abuja · Telecoms</td></tr>
+              <tr><td><span class="badge badge-green">email_sent</span></td><td>85</td><td>Jun 4, 2026 11:00</td><td>Campaign: Follow-up #1</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         PAGE: ADMIN PANEL
+    ════════════════════════════════════════ -->
+    <div class="page" id="page-admin">
+      <div class="admin-tabs">
+        <div class="admin-tab active" onclick="switchAdminTab(this,'at-companies')">Companies</div>
+        <div class="admin-tab" onclick="switchAdminTab(this,'at-billing')">Billing</div>
+        <div class="admin-tab" onclick="switchAdminTab(this,'at-renewals')">Renewals Due</div>
+        <div class="admin-tab" onclick="switchAdminTab(this,'at-revenue')">Revenue</div>
+      </div>
+
+      <!-- Companies tab -->
+      <div id="at-companies">
+        <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
+          <div class="filters" style="margin-bottom:0">
+            <input class="search-input" placeholder="Search companies..." type="text" style="max-width:240px;"/>
+            <select class="filter-select"><option>All Plans</option><option>Starter</option><option>Growth</option><option>Enterprise</option><option>Demo</option></select>
+            <select class="filter-select"><option>All Status</option><option>Active</option><option>Inactive</option><option>Suspended</option></select>
+          </div>
+          <button class="btn btn-primary" onclick="showPage('demo_admin')">+ Add Company / Demo</button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Company</th><th>Plan</th><th>Status</th><th>Scrapes</th><th>Emails</th><th>Exports</th><th>Plan Expires</th><th>Setup Paid</th><th>Actions</th></tr></thead>
+              <tbody>
+                <tr><td><strong>TechCorp Nigeria</strong></td><td><span class="badge badge-blue">Growth</span></td><td><span class="badge badge-green">Active</span></td><td>22/80</td><td>3941/10K</td><td>18/50</td><td>Dec 31, 2026</td><td><span class="badge badge-green">✅ Yes</span></td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Manage</button></td></tr>
+                <tr><td><strong>Acme Ltd</strong></td><td><span class="badge badge-demo">Demo</span></td><td><span class="badge badge-green">Active</span></td><td>2/3</td><td>8/10</td><td>0/0</td><td>Jun 8, 2026 ⚠️</td><td><span class="badge badge-gray">N/A</span></td><td><button class="btn btn-primary" style="font-size:11px;padding:3px 10px;">Convert</button></td></tr>
+                <tr><td><strong>Lagos Supplies</strong></td><td><span class="badge badge-navy">Starter</span></td><td><span class="badge badge-orange">Inactive</span></td><td>0/30</td><td>0/1K</td><td>0/20</td><td>—</td><td><span class="badge badge-red">❌ No</span></td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Activate</button></td></tr>
+                <tr><td><strong>PanAfrica Group</strong></td><td><span class="badge badge-green">Enterprise</span></td><td><span class="badge badge-green">Active</span></td><td>88/200</td><td>12K/50K</td><td>∞</td><td>Mar 15, 2027</td><td><span class="badge badge-green">✅ Yes</span></td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">Manage</button></td></tr>
+                <tr><td><strong>StartupXYZ</strong></td><td><span class="badge badge-navy">Starter</span></td><td><span class="badge badge-red">Suspended</span></td><td>30/30</td><td>1K/1K</td><td>20/20</td><td>May 1, 2026 ❌</td><td><span class="badge badge-red">❌ No</span></td><td><button class="btn btn-outline" style="font-size:11px;padding:3px 10px;">Renew</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Billing tab -->
+      <div id="at-billing" style="display:none;">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Invoices</span><button class="btn btn-primary" style="font-size:12px;padding:5px 14px;">+ Create Invoice</button></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Company</th><th>Type</th><th>Amount</th><th>Status</th><th>Due Date</th><th>Reference</th><th>Actions</th></tr></thead>
+              <tbody>
+                <tr><td>TechCorp Nigeria</td><td><span class="badge badge-blue">setup</span></td><td><strong>₦1,200,000</strong></td><td><span class="badge badge-green">Paid</span></td><td>Jun 1, 2026</td><td>BT-2026-001</td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">View</button></td></tr>
+                <tr><td>PanAfrica Group</td><td><span class="badge badge-navy">renewal</span></td><td><strong>₦700,000</strong></td><td><span class="badge badge-green">Paid</span></td><td>Mar 15, 2026</td><td>BT-2026-002</td><td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;">View</button></td></tr>
+                <tr><td>StartupXYZ</td><td><span class="badge badge-navy">renewal</span></td><td><strong>₦300,000</strong></td><td><span class="badge badge-red">Overdue</span></td><td>May 1, 2026</td><td>—</td><td><button class="btn btn-outline" style="font-size:11px;padding:3px 10px;">Chase</button></td></tr>
+                <tr><td>Lagos Supplies</td><td><span class="badge badge-blue">setup</span></td><td><strong>₦700,000</strong></td><td><span class="badge badge-orange">Pending</span></td><td>Jun 10, 2026</td><td>—</td><td><button class="btn btn-primary" style="font-size:11px;padding:3px 10px;">Mark Paid</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Renewals tab -->
+      <div id="at-renewals" style="display:none;">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Renewals Due (Next 30 Days)</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Company</th><th>Plan</th><th>Renewal Fee</th><th>Expires</th><th>Days Left</th><th>Action</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Acme Ltd (Demo)</strong></td><td><span class="badge badge-demo">Demo</span></td><td>₦0</td><td>Jun 8, 2026</td><td><span style="color:#e74c3c;font-weight:700">2 days</span></td><td><button class="btn btn-primary" style="font-size:11px;padding:3px 10px;">Convert to Paid</button></td></tr>
+                <tr><td><strong>TechCorp Nigeria</strong></td><td><span class="badge badge-blue">Growth</span></td><td>₦500,000</td><td>Jun 20, 2026</td><td><span style="color:#e67e22;font-weight:700">14 days</span></td><td><button class="btn btn-outline" style="font-size:11px;padding:3px 10px;">Send Invoice</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Revenue tab -->
+      <div id="at-revenue" style="display:none;">
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-label">Total Revenue</div><div class="stat-value" style="font-size:20px;">₦3.9M</div><div class="stat-change up">↑ This year</div></div>
+          <div class="stat-card"><div class="stat-label">Active Clients</div><div class="stat-value">4</div></div>
+          <div class="stat-card"><div class="stat-label">Demo Clients</div><div class="stat-value" style="color:var(--blue-deep)">1</div></div>
+          <div class="stat-card"><div class="stat-label">Pending Invoices</div><div class="stat-value" style="color:#e67e22">₦1.0M</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════
+         PAGE: DEMO ACCOUNTS
+    ════════════════════════════════════════ -->
+    <div class="page" id="page-demo_admin">
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">🎯 Register New Demo</span></div>
+          <div class="card-body">
+            <div class="form-group" style="margin-bottom:14px;">
+              <label class="form-label">Company Name</label>
+              <input class="form-control" type="text" placeholder="e.g. Acme Ltd"/>
+            </div>
+            <div class="form-group" style="margin-bottom:14px;">
+              <label class="form-label">Contact Email</label>
+              <input class="form-control" type="email" placeholder="ceo@company.com"/>
+            </div>
+            <div class="form-group" style="margin-bottom:14px;">
+              <label class="form-label">Demo Duration</label>
+              <select class="form-control"><option>7 days</option><option>14 days</option><option>3 days</option></select>
+            </div>
+            <div class="form-group" style="margin-bottom:16px;">
+              <label class="form-label">Sales Notes</label>
+              <textarea class="form-control" rows="2" placeholder="e.g. Met at Lagos Tech Summit..."></textarea>
+            </div>
+            <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--navy);">
+              <strong>Demo limits:</strong> 3 searches · 10 emails · 20 leads · No exports
+            </div>
+            <button class="btn btn-primary" style="width:100%;padding:11px;">🎯 Create Demo Account</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">Active Demo Accounts</span></div>
+          <div class="card-body" style="padding:0;">
+            <div style="padding:16px 20px;border-bottom:1px solid var(--gray-light);">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <strong>Acme Ltd</strong>
+                <span class="badge badge-red">2 days left</span>
+              </div>
+              <div style="font-size:12px;color:var(--gray-mid);margin-bottom:10px;">ceo@acme.com</div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
+                <div style="text-align:center;background:var(--bg);border-radius:6px;padding:8px;"><div style="font-size:16px;font-weight:700;font-family:'DM Mono'">2/3</div><div style="font-size:10px;color:var(--gray-mid)">Searches</div></div>
+                <div style="text-align:center;background:var(--bg);border-radius:6px;padding:8px;"><div style="font-size:16px;font-weight:700;font-family:'DM Mono'">8/10</div><div style="font-size:10px;color:var(--gray-mid)">Emails</div></div>
+                <div style="text-align:center;background:var(--bg);border-radius:6px;padding:8px;"><div style="font-size:16px;font-weight:700;font-family:'DM Mono'">14/20</div><div style="font-size:10px;color:var(--gray-mid)">Leads</div></div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button class="btn btn-primary" style="flex:1;font-size:12px;padding:6px;">Convert to Paid</button>
+                <button class="btn btn-ghost" style="font-size:12px;padding:6px;">Extend</button>
+                <button class="btn btn-ghost" style="font-size:12px;padding:6px;color:#e74c3c;">Suspend</button>
+              </div>
+            </div>
+            <div style="padding:16px 20px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <strong>TechStart Ng</strong>
+                <span class="badge badge-blue">6 days left</span>
+              </div>
+              <div style="font-size:12px;color:var(--gray-mid);margin-bottom:10px;">info@techstart.ng</div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
+                <div style="text-align:center;background:var(--bg);border-radius:6px;padding:8px;"><div style="font-size:16px;font-weight:700;font-family:'DM Mono'">1/3</div><div style="font-size:10px;color:var(--gray-mid)">Searches</div></div>
+                <div style="text-align:center;background:var(--bg);border-radius:6px;padding:8px;"><div style="font-size:16px;font-weight:700;font-family:'DM Mono'">3/10</div><div style="font-size:10px;color:var(--gray-mid)">Emails</div></div>
+                <div style="text-align:center;background:var(--bg);border-radius:6px;padding:8px;"><div style="font-size:16px;font-weight:700;font-family:'DM Mono'">8/20</div><div style="font-size:10px;color:var(--gray-mid)">Leads</div></div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button class="btn btn-primary" style="flex:1;font-size:12px;padding:6px;">Convert to Paid</button>
+                <button class="btn btn-ghost" style="font-size:12px;padding:6px;">Extend</button>
+                <button class="btn btn-ghost" style="font-size:12px;padding:6px;color:#e74c3c;">Suspend</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+const pageTitles = {
+  dashboard:   ['Dashboard',        'Welcome back, Admin'],
+  leads:       ['All Leads',        '247 leads in your database'],
+  scrape:      ['Generate Leads',   'Search companies by category & location'],
+  email:       ['Email Campaigns',  'Compose and track outreach'],
+  templates:   ['Email Templates',  'Manage your message library'],
+  export:      ['Export Data',      'Download leads as Excel or CSV'],
+  usage:       ['Usage Tracker',    'Monitor your plan usage this month'],
+  admin:       ['Admin Panel',      'Manage companies, billing and renewals'],
+  demo_admin:  ['Demo Accounts',    'Register and manage demo clients'],
+};
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id)?.classList.add('active');
+  const info = pageTitles[id] || [id, ''];
+  document.getElementById('page-title').textContent = info[0];
+  document.getElementById('page-sub').textContent = info[1];
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick')?.includes("'" + id + "'")) n.classList.add('active');
+  });
+}
+
+function switchAdminTab(el, tabId) {
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['at-companies','at-billing','at-renewals','at-revenue'].forEach(id => {
+    const el2 = document.getElementById(id);
+    if (el2) el2.style.display = id === tabId ? 'block' : 'none';
+  });
+}
+
+function startScrape() {
+  const btn = event.target;
+  btn.textContent = '⏳ Starting job...';
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.textContent = '✅ Job started! Check Active Jobs →';
+    btn.style.background = 'var(--green-deep)';
+    setTimeout(() => {
+      btn.textContent = '🔍 Start Generating Leads';
+      btn.disabled = false;
+      btn.style.background = '';
+    }, 3000);
+  }, 1200);
+}
+</script>
+</body>
+</html>
