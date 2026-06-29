@@ -6,5 +6,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await getSession();
   if (!session) redirect('/login');
 
+  if (session.role !== 'admin' && !session.onboarding_complete) {
+    redirect('/onboarding');
+  }
+
   return <Shell>{children}</Shell>;
 }

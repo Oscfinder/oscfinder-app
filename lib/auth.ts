@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServerClient, supabaseAdmin } from './supabase-server';
 
 export type SessionUser = {
-  id:         string;
-  email:      string;
-  role:       'admin' | 'company_admin';
-  company_id: string | null;
-  full_name:  string | null;
+  id:                  string;
+  email:               string;
+  role:                'admin' | 'company_admin';
+  company_id:          string | null;
+  full_name:           string | null;
+  onboarding_complete: boolean;
 };
 
 // Reads the session cookie and returns the user with role + company_id.
@@ -18,18 +19,19 @@ export async function getSession(): Promise<SessionUser | null> {
 
   const { data: profile } = await supabaseAdmin
     .from('users')
-    .select('role, company_id, full_name')
+    .select('role, company_id, full_name, onboarding_complete')
     .eq('id', user.id)
     .single();
 
   if (!profile) return null;
 
   return {
-    id:         user.id,
-    email:      user.email!,
-    role:       profile.role,
-    company_id: profile.company_id,
-    full_name:  profile.full_name,
+    id:                  user.id,
+    email:               user.email!,
+    role:                profile.role,
+    company_id:          profile.company_id,
+    full_name:           profile.full_name,
+    onboarding_complete: profile.onboarding_complete ?? false,
   };
 }
 

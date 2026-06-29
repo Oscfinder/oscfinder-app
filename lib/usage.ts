@@ -1,9 +1,16 @@
 import { supabaseAdmin } from './supabase-server';
+import { checkAndSendUsageAlert } from './usage-alerts';
 
 type Action = 'google_search' | 'email_sent' | 'export';
 
 export async function logUsage(companyId: string, action: Action, units = 1, metadata?: object) {
   await supabaseAdmin.from('usage_logs').insert({ company_id: companyId, action, units, metadata });
+
+  // Fire-and-forget: check if 80% or 100% threshold crossed and send alert email.
+  // Not awaited so it never adds latency to the API route.
+  checkAndSendUsageAlert(companyId, action).catch(() => {
+    // Alert failure must never break the main request.
+  });
 }
 
 export async function checkLimit(companyId: string, action: Action): Promise<boolean> {
