@@ -1,77 +1,176 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { LayoutDashboard, PlusCircle, Building2, UserCheck, MailOpen } from 'lucide-react';
-import { Logo } from './Logo';
+import { usePathname, useRouter } from 'next/navigation';
+import {
+  LayoutDashboard, Building2, Zap,
+  Mail, FileText, Download, BarChart2,
+  ShieldCheck, Users, LogOut, CreditCard,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import {LogOut} from 'lucide-react';
 
-const navItems = [
-  { href: '/',                   label: 'Dashboard',        icon: LayoutDashboard },
-  { href: '/new-companies',      label: 'New Companies',    icon: PlusCircle },
-  { href: '/all-companies',      label: 'All Companies',    icon: Building2 },
-  // { href: '/existing-clients',   label: 'Existing Clients', icon: UserCheck },
-  { href: '/mail-templates',      label: 'Mail Templates',   icon: MailOpen },
+const mainNav = [
+  { href: '/',       label: 'Dashboard',      icon: LayoutDashboard },
+  { href: '/leads',  label: 'Leads',          icon: Building2 },
+  { href: '/scrape', label: 'Generate Leads', icon: Zap },
 ];
 
-export function Sidebar({ collapsed }: { collapsed: boolean }) {
-  const router = useRouter();
+const outreachNav = [
+  { href: '/email',     label: 'Email Campaigns', icon: Mail },
+  { href: '/templates', label: 'Templates',        icon: FileText },
+];
+
+const dataNav = [
+  { href: '/export', label: 'Export', icon: Download  },
+  { href: '/usage',  label: 'Usage',  icon: BarChart2 },
+];
+
+const billingNav = [
+  { href: '/billing', label: 'Billing', icon: CreditCard },
+];
+
+const adminNav = [
+  { href: '/admin',       label: 'Admin Panel',   icon: ShieldCheck },
+  { href: '/admin/demos', label: 'Demo Accounts', icon: Users },
+];
+
+function NavGroup({ label, items, collapsed, pathname }: {
+  label: string;
+  items: { href: string; label: string; icon: React.ElementType }[];
+  collapsed: boolean;
+  pathname: string;
+}) {
+  return (
+    <div className="mb-1">
+      {!collapsed && (
+        <p className="px-5 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-[1.5px] text-white/25">
+          {label}
+        </p>
+      )}
+      {items.map(({ href, label: itemLabel, icon: Icon }) => {
+        const isActive =
+          pathname === href ||
+          (href !== '/' && pathname.startsWith(href));
+        return (
+          <Link
+            key={href}
+            href={href}
+            className={cn(
+              'flex items-center gap-2.5 px-5 py-2.5 text-[13.5px] font-medium transition-all border-l-2',
+              isActive
+                ? 'text-white bg-[rgba(0,153,204,0.12)] border-l-[#0099CC]'
+                : 'text-white/55 border-l-transparent hover:text-white hover:bg-white/5'
+            )}
+          >
+            <Icon size={16} className="shrink-0" />
+            {!collapsed && <span className="whitespace-nowrap">{itemLabel}</span>}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+export function Sidebar({
+  collapsed,
+  isAdmin,
+  userName,
+  userRole,
+}: {
+  collapsed: boolean;
+  isAdmin?: boolean;
+  userName?: string;
+  userRole?: string;
+}) {
+  const router   = useRouter();
   const pathname = usePathname();
+
   const handleLogout = async () => {
-  await supabase.auth.signOut();
-  router.push('/login');
-  router.refresh();
-};
+    await supabase.auth.signOut();
+    router.push('/login');
+    router.refresh();
+  };
+
+  const initials = (userName ?? 'U')
+    .split(' ')
+    .map(w => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <aside
       className={cn(
-        'fixed top-0 left-0 h-screen bg-white border-r border-gray-200 flex flex-col z-40 transition-all duration-300',
+        'fixed top-0 left-0 h-screen bg-[#0A1628] flex flex-col z-40 transition-all duration-300',
         collapsed ? 'w-[68px]' : 'w-[240px]'
       )}
     >
-      {/* Logo area */}
-      <div className="flex items-center h-[60px] px-4 border-b border-gray-100 shrink-0">
-        <Logo collapsed={collapsed} />
+      {/* Logo */}
+      <div className="px-5 py-5 border-b border-white/[0.07] shrink-0 min-h-[64px] flex items-center">
+        {!collapsed ? (
+          <div>
+            <div className="text-[17px] font-bold leading-tight">
+              <span className="text-[#0099CC]">Os</span>
+              <span className="text-white">C</span>
+              <span className="text-[#00C48C]">Finder</span>
+            </div>
+            <div className="text-[10px] tracking-[2px] text-white/30 mt-0.5">Technologies</div>
+          </div>
+        ) : (
+          <div className="text-[17px] font-bold">
+            <span className="text-[#0099CC]">O</span>
+          </div>
+        )}
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-4 space-y-1 px-2 overflow-y-auto">
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname === href;
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-[#006285] text-white'
-                  : 'text-gray-600 hover:bg-[#006285]/8 hover:text-[#006285]'
-              )}
-            >
-              <Icon size={18} className="shrink-0" />
-              {!collapsed && <span className="whitespace-nowrap">{label}</span>}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 py-2 overflow-y-auto">
+        <NavGroup label="Main"     items={mainNav}     collapsed={collapsed} pathname={pathname} />
+        <NavGroup label="Outreach" items={outreachNav} collapsed={collapsed} pathname={pathname} />
+        <NavGroup label="Data"     items={dataNav}     collapsed={collapsed} pathname={pathname} />
+        {!isAdmin && (
+          <NavGroup label="Account" items={billingNav} collapsed={collapsed} pathname={pathname} />
+        )}
+        {isAdmin && (
+          <NavGroup label="Admin" items={adminNav} collapsed={collapsed} pathname={pathname} />
+        )}
       </nav>
 
-      {/* Footer tag */}
-      {!collapsed && (
-        <div className="px-4 py-3 border-t border-gray-100">
-          <span className="text-xs text-gray-400">Lead Generation v2.0</span>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 text-xs text-white/40 hover:text-white/80 transition-colors mt-3"
-          >
-            <LogOut size={13} /> Sign out
-          </button>
-        </div>
-      )}
-      
+      {/* Footer — user card */}
+      <div className="border-t border-white/[0.07] shrink-0">
+        {!collapsed ? (
+          <div className="px-4 py-4 flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#006285] flex items-center justify-center text-white font-bold text-[13px] shrink-0">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] text-white font-semibold leading-tight truncate">
+                {userName || 'Admin'}
+              </p>
+              <span className="text-[11px] text-white/35">
+                {userRole || 'Super Admin'}
+              </span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="text-white/35 hover:text-red-400 transition-colors"
+              title="Sign out"
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
+        ) : (
+          <div className="py-4 flex justify-center">
+            <button
+              onClick={handleLogout}
+              className="text-white/35 hover:text-red-400 transition-colors"
+              title="Sign out"
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
+        )}
+      </div>
     </aside>
   );
 }

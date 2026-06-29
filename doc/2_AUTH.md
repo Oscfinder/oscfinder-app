@@ -77,6 +77,15 @@ CREATE TRIGGER on_auth_user_created
 
 ---
 
+-- 1. Add the foreign key reference to the company_id column
+ALTER TABLE public.users 
+  ALTER COLUMN company_id TYPE UUID,
+  ADD CONSTRAINT fk_users_company 
+    FOREIGN KEY (company_id) 
+    REFERENCES companies(id) 
+    ON DELETE SET NULL;
+
+
 ## Step 3 — Create the first admin user in Supabase
 
 Go to **Supabase → Authentication → Users → Add User**.

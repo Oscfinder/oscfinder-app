@@ -56,3 +56,39 @@ export async function requireAdmin(): Promise<
   }
   return { user: user!, error: null };
 }
+
+// Log every destructive admin action to system_logs for full audit trail.
+export async function logAdminAction(
+  adminId:  string,
+  action:   string,
+  targetId?: string,
+  details?:  object
+) {
+  await supabaseAdmin.from('system_logs').insert({
+    admin_id:  adminId,
+    action,
+    target_id: targetId ?? null,
+    details:   details  ?? null,
+  });
+}
+
+// Use this after requireAuth() on every protected route (skip for role = admin).
+// Returns a 403 NextResponse if the account is suspended or expired, null if healthy.
+export async function requireActiveAccount(companyId: string): Promise<NextResponse | null> {
+  const { data } = await supabaseAdmin
+    .from('companies')
+    .select('status, plan_end_date, is_demo, demo_expires_at')
+    .eq('id', companyId)
+    .single();
+
+  if (!data || data.status !== 'active')
+    return NextResponse.json({ error: 'Account suspended. Contact support.' }, { status: 403 });
+
+  if (data.is_demo && data.demo_expires_at && new Date(data.demo_expires_at) < new Date())
+    return NextResponse.json({ error: 'Demo expired. Contact sales to upgrade.' }, { status: 403 });
+
+  if (!data.is_demo && data.plan_end_date && new Date(data.plan_end_date) < new Date())
+    return NextResponse.json({ error: 'Plan expired. Please renew.' }, { status: 403 });
+
+  return null;
+}

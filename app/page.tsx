@@ -1,175 +1,291 @@
 'use client';
 import Link from 'next/link';
-import {
-  Building2, Users, UserCheck, Mail, MailCheck, FileText,
-  TrendingUp, ArrowRight, MapPin, Briefcase, Clock, Zap,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Lead, MailTemplate } from '@/types';
 import { useQuery } from '@tanstack/react-query';
-import { BarRow, QuickLink, RecentRow, SectionTitle, StatCard } from './_components/DashboardComponent';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+} from 'recharts';
+import { Shell } from './_components/Shell';
+import { Lead, UsageLog } from '@/types';
 
-
+function buildLeadGrowth(leads: Lead[]) {
+  const days: { date: string; count: number; isToday: boolean }[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    days.push({
+      date:    d.toLocaleDateString('en-GB', { weekday: 'short' }),
+      count:   leads.filter(l => l.created_at?.slice(0, 10) === key).length,
+      isToday: i === 0,
+    });
+  }
+  return days;
+}
 
 export default function DashboardPage() {
-  const { data: allCompanies = [] } = useQuery<Lead[]>({
+  const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ['leads-all'],
-    queryFn: () => fetch('/api/leads/all').then(r => r.json()),
+    queryFn:  () => fetch('/api/leads/all').then(r => r.json()),
   });
-  const { data: existingLeads = [] } = useQuery<Lead[]>({
-    queryKey: ['leads-existing'],
-    queryFn: () => fetch('/api/leads/all?status=existing').then(r => r.json()),
+  const { data: recentLogs = [] } = useQuery<UsageLog[]>({
+    queryKey: ['usage-recent'],
+    queryFn:  () => fetch('/api/usage/recent').then(r => r.json()),
   });
-  const { data: templates = [] } = useQuery<MailTemplate[]>({
-    queryKey: ['templates'],
-    queryFn: () => fetch('/api/templates').then(r => r.json()),
+  const { data: activeJobs = 0 } = useQuery<number>({
+    queryKey:       ['active-jobs-count'],
+    queryFn:        () => fetch('/api/scrape/active-count').then(r => r.json()).then(d => d.count ?? 0),
+    refetchInterval: 5000,
+  });
+  const { data: usageSummary } = useQuery<{ export_count: number }>({
+    queryKey: ['usage-summary'],
+    queryFn:  () => fetch('/api/usage/summary').then(r => r.json()),
   });
 
-  const newLeads       = allCompanies.filter(c => c.status === 'new');
-  const mailsSent      = allCompanies.filter(c => c.mail_sent).length + existingLeads.filter(c => c.mail_sent).length;
-  const totalCompanies = allCompanies.length;
-  const totalExisting  = existingLeads.length;
-  const totalTemplates = templates.length;
-  const templateUses   = templates.reduce((s, t) => s + t.use_count, 0) ;
-  const contactRate    = totalCompanies > 0 ? Math.round((mailsSent / totalCompanies) * 100) : 0;
-
-  const categoryCounts = allCompanies.reduce<Record<string, number>>((acc, c) => {
-    acc[c.category] = (acc[c.category] ?? 0) + 1; 
-    return acc;
-  }, {});
-
-  const topCategories = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const maxCatCount   = topCategories[0]?.[1] ?? 1;
-
-  const locationCounts = allCompanies.reduce<Record<string, number>>((acc, c) => {
-    acc[c.location] = (acc[c.location] ?? 0) + 1; return acc;
-  }, {});
-  
-  const topLocations = Object.entries(locationCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-
-  const maxLocCount  = topLocations[0]?.[1] ?? 1;
-
-  const recentCompanies = [...allCompanies]
+  const totalLeads  = leads.length;
+  const emailsSent  = leads.filter(l => l.mail_sent).length;
+  const exportsUsed = usageSummary?.export_count ?? 0;
+  const newLeads    = leads.filter(l => l.status === 'new').length;
+  const contacted   = leads.filter(l => l.status === 'contacted').length;
+  const openRate    = emailsSent > 0 ? Math.round((contacted / emailsSent) * 100) : 0;
+  const chartData   = buildLeadGrowth(leads);
+  const recentLeads = [...leads]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 5);
 
+  const statCards = [
+    {
+      label:     'Total Leads',
+      value:     totalLeads.toLocaleString(),
+      sub:       `+${newLeads} new this month`,
+      subColor:  'text-[#00A86B]',
+      iconBg:    'bg-[#dff2f9]',
+    },
+    {
+      label:     'Emails Sent',
+      value:     emailsSent.toLocaleString(),
+      sub:       `${openRate}% open rate`,
+      subColor:  'text-[#00A86B]',
+      iconBg:    'bg-[#dff7ee]',
+    },
+    {
+      label:     'Exports Used',
+      value:     exportsUsed,
+      sub:       'this month',
+      subColor:  'text-[#888888]',
+      iconBg:    'bg-[#e0faf4]',
+    },
+    {
+      label:     'Active Jobs',
+      value:     activeJobs,
+      sub:       activeJobs > 0 ? `${activeJobs} running now` : 'No jobs running',
+      subColor:  activeJobs > 0 ? 'text-[#00A86B]' : 'text-[#888888]',
+      iconBg:    'bg-[#e8edf4]',
+    },
+  ];
+
   return (
-    <div className="max-w-screen-xl mx-auto space-y-8">
+    <Shell>
+      <div className="max-w-screen-xl mx-auto space-y-5">
 
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Overview of your lead generation pipeline — {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-        </p>
-      </div>
+        {/* 4 Stat Cards */}
+        <div className="grid grid-cols-4 gap-4">
+          {statCards.map(c => (
+            <div key={c.label} className="bg-white rounded-xl p-5 border border-[#E5E7EB]">
+              <div className={`w-10 h-10 rounded-[10px] ${c.iconBg} float-right`} />
+              <p className="text-[12px] text-[#888888] font-medium mb-1.5">{c.label}</p>
+              <p className="text-[26px] font-bold text-[#0A1628] font-mono leading-none">{c.value}</p>
+              <p className={`text-[12px] mt-1.5 ${c.subColor}`}>{c.sub}</p>
+            </div>
+          ))}
+        </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard title="Total Companies" value={totalCompanies}
-          sub={`${newLeads.length} new · ${allCompanies.filter(c => c.status === 'existing').length} existing`}
-          icon={Building2} color="bg-[#006285]" href="/all-companies" />
-        <StatCard title="New Leads" value={newLeads.length}
-          sub={`${newLeads.filter(c => c.mail_sent).length} contacted so far`}
-          icon={TrendingUp} color="bg-emerald-500" href="/new-companies" />
-        <StatCard title="Existing Clients" value={totalExisting}
-          sub={`${existingLeads.filter(c => c.mail_sent).length} mails sent`}
-          icon={UserCheck} color="bg-amber-500" href="/existing-clients" />
-        <StatCard title="Emails Sent" value={mailsSent}
-          sub={`${contactRate}% contact rate`}
-          icon={MailCheck} color="bg-purple-500" href="/all-companies" />
-        <StatCard title="Mail Templates" value={totalTemplates}
-          sub={`${templateUses} total uses`}
-          icon={FileText} color="bg-rose-500" href="/mail-templates" />
-        <StatCard title="Not Contacted" value={totalCompanies - allCompanies.filter(c => c.mail_sent).length}
-          sub="Companies pending outreach"
-          icon={Mail} color="bg-gray-500" href="/all-companies" />
-      </div>
+        {/* Chart 2fr + Activity 1fr */}
+        <div className="grid gap-5" style={{ gridTemplateColumns: '2fr 1fr' }}>
 
-      <div className="rounded-xl border bg-white shadow-sm p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-sm font-bold text-gray-800">Overall Contact Rate</p>
-            <p className="text-xs text-gray-400 mt-0.5">Percentage of all companies that have been emailed</p>
-          </div>
-          <span className="text-2xl font-bold text-[#006285]">{contactRate}%</span>
-        </div>
-        <div className="w-full bg-gray-100 rounded-full h-3">
-          <div className="h-3 rounded-full bg-[#006285] transition-all duration-700" style={{ width: `${contactRate}%` }} />
-        </div>
-        <div className="flex justify-between mt-2 text-xs text-gray-400">
-          <span>{mailsSent} contacted</span>
-          <span>{totalCompanies - mailsSent} remaining</span>
-        </div>
-      </div>
+          {/* Lead Growth Chart */}
+          <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB]">
+              <span className="text-[14px] font-bold text-[#0A1628]">Lead Growth</span>
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#dff2f9] text-[#006285]">
+                Last 7 days
+              </span>
+            </div>
+            <div className="px-5 pt-4 pb-3">
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={chartData} barSize={28} barGap={4}>
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: '#888' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 10, fill: '#888' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={24}
+                  />
+                  <Tooltip
+                    contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}
+                    cursor={{ fill: 'rgba(0,153,204,0.05)' }}
+                  />
+                  <defs>
+                    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#0099CC" />
+                      <stop offset="100%" stopColor="#006285" />
+                    </linearGradient>
+                    <linearGradient id="barGradGreen" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#00C48C" />
+                      <stop offset="100%" stopColor="#00A86B" />
+                    </linearGradient>
+                  </defs>
+                  <Bar dataKey="count" name="Leads" radius={[4, 4, 0, 0]}>
+                    {chartData.map((entry, index) => (
+                      <Cell
+                        key={index}
+                        fill={entry.isToday ? 'url(#barGradGreen)' : 'url(#barGrad)'}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="rounded-xl border bg-white shadow-sm p-5">
-          <SectionTitle>Top Categories</SectionTitle>
-          <div className="space-y-3">
-            {topCategories.map(([cat, count]) => (
-              <BarRow key={cat} label={cat} value={count} max={maxCatCount} color="bg-[#006285]" />
-            ))}
-          </div>
-        </div>
-        <div className="rounded-xl border bg-white shadow-sm p-5">
-          <SectionTitle>Top Locations</SectionTitle>
-          <div className="space-y-3">
-            {topLocations.map(([loc, count]) => (
-              <BarRow key={loc} label={loc} value={count} max={maxLocCount} color="bg-emerald-500" />
-            ))}
-          </div>
-        </div>
-        <div className="rounded-xl border bg-white shadow-sm p-5">
-          <SectionTitle>Template Usage</SectionTitle>
-          <div className="space-y-3">
-            {templates.slice(0, 5).map(t => (
-              <div key={t.id} className="flex items-center justify-between">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Zap size={12} className="text-amber-400 shrink-0" />
-                  <span className="text-xs text-gray-600 truncate">{t.title}</span>
+              {/* 3 mini-stats below chart */}
+              <div className="flex gap-6 mt-3 pt-3 border-t border-[#f3f4f6]">
+                <div>
+                  <p className="text-[11px] text-[#888888]">New Leads</p>
+                  <p className="text-[18px] font-bold text-[#0A1628] font-mono">+{newLeads}</p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0 ml-2">
-                  <div className="w-16 bg-gray-100 rounded-full h-1.5">
-                    <div
-                      className="h-1.5 rounded-full bg-amber-400"
-                      style={{ width: `${templates.length ? Math.round((t.use_count / Math.max(...templates.map(x => x.use_count))) * 100) : 0}%` }}
-                    />
-                  </div>
-                  <span className="text-xs font-semibold text-gray-600 w-5 text-right">{t.use_count}</span>
+                <div>
+                  <p className="text-[11px] text-[#888888]">Open Rate</p>
+                  <p className="text-[18px] font-bold text-[#00A86B] font-mono">{openRate}%</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-[#888888]">Converted</p>
+                  <p className="text-[18px] font-bold text-[#006285] font-mono">{contacted}</p>
                 </div>
               </div>
-            ))}
+            </div>
           </div>
-          <Link href="/mail-templates" className="flex items-center gap-1 text-xs text-[#006285] font-medium mt-4 hover:underline">
-            View all templates <ArrowRight size={12} />
-          </Link>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 rounded-xl border bg-white shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <SectionTitle>Recently Added Companies</SectionTitle>
-            <Link href="/all-companies" className="text-xs text-[#006285] font-medium hover:underline flex items-center gap-1">
-              View all <ArrowRight size={12} />
+          {/* Recent Activity */}
+          <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#E5E7EB]">
+              <span className="text-[14px] font-bold text-[#0A1628]">Recent Activity</span>
+            </div>
+            <div className="px-5 py-2">
+              {recentLogs.length === 0 ? (
+                <p className="text-[13px] text-[#888888] text-center py-8">No activity yet.</p>
+              ) : (
+                recentLogs.slice(0, 7).map((log, i) => {
+                  const dotColor =
+                    log.action === 'google_search' ? 'bg-[#0099CC]' :
+                    log.action === 'email_sent'    ? 'bg-[#00C48C]' :
+                                                     'bg-[#e67e22]';
+                  const actionLabel =
+                    log.action === 'google_search' ? 'Scrape completed' :
+                    log.action === 'email_sent'    ? 'Email sent' :
+                                                     'Export downloaded';
+                  return (
+                    <div
+                      key={i}
+                      className="flex items-start gap-3 py-2.5 border-b border-[#f3f4f6] last:border-0"
+                    >
+                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
+                      <div>
+                        <p className="text-[13px] text-[#0A1628] leading-snug">
+                          {actionLabel}
+                          {log.units > 1 && (
+                            <span className="font-semibold"> ×{log.units}</span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-[#888888] mt-0.5">
+                          {new Date(log.created_at).toLocaleString('en-GB', {
+                            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Leads table */}
+        <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB]">
+            <span className="text-[14px] font-bold text-[#0A1628]">Recent Leads</span>
+            <Link
+              href="/leads"
+              className="px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-[12px] font-semibold text-[#1A3A5C] hover:bg-gray-50 transition-colors"
+            >
+              View all →
             </Link>
           </div>
-          <div>
-            {recentCompanies.length === 0
-              ? <p className="text-sm text-gray-400 text-center py-8">No companies yet. Start a scrape to add leads.</p>
-              : recentCompanies.map(lead => <RecentRow key={lead.id} lead={lead} />)
-            }
-          </div>
-        </div>
-        <div className="rounded-xl border bg-white shadow-sm p-5">
-          <SectionTitle>Quick Actions</SectionTitle>
-          <div className="space-y-3">
-            <QuickLink href="/new-companies"    icon={TrendingUp} label="Find New Companies"   desc="Search & scrape new leads"        color="bg-[#006285]"   />
-            <QuickLink href="/all-companies"    icon={Building2}  label="Manage All Companies" desc="View, edit, filter & email"       color="bg-emerald-500" />
-            <QuickLink href="/existing-clients" icon={UserCheck}  label="Existing Clients"     desc="View & contact existing clients"  color="bg-amber-500"   />
-            <QuickLink href="/mail-templates"   icon={FileText}   label="Mail Templates"       desc="Create & manage email templates"  color="bg-purple-500"  />
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-[#F8FAFC]">
+                  {['Company', 'Category', 'State', 'Email', 'Status', 'Score'].map(h => (
+                    <th
+                      key={h}
+                      className="px-4 py-2.5 text-left text-[11px] font-bold tracking-[0.8px] uppercase text-[#888888] border-b border-[#E5E7EB]"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {recentLeads.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-10 text-[#888888] text-[13px]">
+                      No leads yet. Start a scrape to add leads.
+                    </td>
+                  </tr>
+                ) : (
+                  recentLeads.map(lead => {
+                    const score = lead.lead_score ?? 0;
+                    const scoreColor =
+                      score >= 80 ? 'text-[#00A86B]' :
+                      score >= 60 ? 'text-[#006285]' :
+                                    'text-[#888888]';
+                    const badgeCls =
+                      lead.status === 'contacted' ? 'bg-[#dff2f9] text-[#006285]' :
+                      lead.status === 'qualified'  ? 'bg-[#dff7ee] text-[#00A86B]' :
+                      lead.status === 'ignored'    ? 'bg-[#ffeaea] text-[#e74c3c]' :
+                                                     'bg-[#f3f4f6] text-[#888888]';
+                    return (
+                      <tr
+                        key={lead.id}
+                        className="hover:bg-[#fafbfc] border-b border-[#f3f4f6] last:border-0"
+                      >
+                        <td className="px-4 py-3 text-[13px] font-semibold text-[#0A1628]">{lead.name}</td>
+                        <td className="px-4 py-3 text-[13px] text-[#0A1628]">{lead.category}</td>
+                        <td className="px-4 py-3 text-[13px] text-[#0A1628]">{lead.state}</td>
+                        <td className="px-4 py-3 text-[13px] text-[#0A1628]">
+                          {lead.emails?.[0] ?? '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full capitalize ${badgeCls}`}>
+                            {lead.status ?? 'new'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-[13px] font-bold">
+                          <span className={scoreColor}>{score}</span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
-    </div>
+    </Shell>
   );
 }
