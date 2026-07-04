@@ -18,6 +18,12 @@ const LIMIT_COLUMN: Record<AlertAction, 'scrape_limit' | 'email_limit' | 'export
   export:        'export_limit',
 };
 
+const USAGE_COLUMN: Record<AlertAction, 'scrape_count' | 'email_count' | 'export_count'> = {
+  google_search: 'scrape_count',
+  email_sent:    'email_count',
+  export:        'export_count',
+};
+
 // ── Core alert check ─────────────────────────────────────────────
 // Called automatically by logUsage() after every write.
 // Checks if 80% or 100% threshold is crossed and sends one email
@@ -29,15 +35,15 @@ export async function checkAndSendUsageAlert(
   const month = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
 
   // 1. Current monthly usage for this action
+  const usageCol = USAGE_COLUMN[action];
   const { data: usageRow } = await supabaseAdmin
     .from('usage_monthly_summary')
-    .select('total_units')
+    .select(usageCol)
     .eq('company_id', companyId)
-    .eq('action', action)
     .eq('month', month)
-    .single();
+    .maybeSingle();
 
-  const used = usageRow?.total_units ?? 0;
+  const used = (usageRow?.[usageCol] as number | null | undefined) ?? 0;
 
   // 2. Company plan + contact details
   const { data: company } = await supabaseAdmin

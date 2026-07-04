@@ -25,11 +25,11 @@ function buildLeadGrowth(leads: Lead[]) {
 export default function DashboardPage() {
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ['leads-all'],
-    queryFn:  () => fetch('/api/leads/all').then(r => r.json()),
+    queryFn:  () => fetch('/api/leads/all').then(r => r.json()).then(d => Array.isArray(d) ? d : []),
   });
   const { data: recentLogs = [] } = useQuery<UsageLog[]>({
     queryKey: ['usage-recent'],
-    queryFn:  () => fetch('/api/usage/recent').then(r => r.json()),
+    queryFn:  () => fetch('/api/usage/recent').then(r => r.json()).then(d => Array.isArray(d) ? d : []),
   });
   const { data: activeJobs = 0 } = useQuery<number>({
     queryKey:       ['active-jobs-count'],

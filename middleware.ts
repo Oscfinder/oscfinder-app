@@ -26,13 +26,15 @@ export async function middleware(req: NextRequest) {
 
   const { pathname } = req.nextUrl;
 
-  // If logged in and visiting /login → send to dashboard
-  if (user && pathname === '/login') {
+  const publicPaths = ['/login', '/forgot-password', '/reset-password'];
+
+  // If logged in and visiting an auth page → send to dashboard
+  if (user && publicPaths.includes(pathname)) {
     return NextResponse.redirect(new URL('/', req.url));
   }
 
-  // If NOT logged in and visiting any non-login page → send to /login
-  if (!user && pathname !== '/login') {
+  // If NOT logged in and visiting a protected page → send to /login
+  if (!user && !publicPaths.includes(pathname)) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 

@@ -2,6 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth } from '@/lib/auth';
 
+// GET /api/onboarding/company — returns the current company's name, industry, location
+export async function GET() {
+  const { user, error } = await requireAuth();
+  if (error) return error;
+  if (!user.company_id)
+    return NextResponse.json({ name: '', industry: '', location: '' });
+
+  const { data } = await supabaseAdmin
+    .from('companies')
+    .select('name, industry, location')
+    .eq('id', user.company_id)
+    .single();
+
+  return NextResponse.json(data ?? { name: '', industry: '', location: '' });
+}
+
 // PATCH /api/onboarding/company
 // Body: { industry?: string, location?: string }
 export async function PATCH(req: NextRequest) {

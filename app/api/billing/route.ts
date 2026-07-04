@@ -28,11 +28,12 @@ export async function GET() {
 
   // Current month usage
   const month = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
-  const { data: usage = [] } = await supabaseAdmin
+  const { data: usageSummary } = await supabaseAdmin
     .from('usage_monthly_summary')
-    .select('action, total_units')
+    .select('scrape_count, email_count, export_count')
     .eq('company_id', companyId)
-    .eq('month', month);
+    .eq('month', month)
+    .maybeSingle();
 
   // Plan limits
   const { data: limits } = await supabaseAdmin
@@ -51,16 +52,12 @@ export async function GET() {
     .order('created_at', { ascending: false })
     .limit(20);
 
-  // Flatten usage_monthly_summary rows into a map { action → total_units }
-  const usageMap: Record<string, number> = {};
-  for (const u of usage) usageMap[u.action] = u.total_units;
-
   return NextResponse.json({
     company,
     usage: {
-      scrapes_used: usageMap['google_search'] ?? 0,
-      emails_used:  usageMap['email_sent']    ?? 0,
-      exports_used: usageMap['export']        ?? 0,
+      scrapes_used: usageSummary?.scrape_count ?? 0,
+      emails_used:  usageSummary?.email_count  ?? 0,
+      exports_used: usageSummary?.export_count ?? 0,
     },
     limits: {
       scrape_limit: limits?.scrape_limit ?? 0,

@@ -9,6 +9,9 @@ export default async function OnboardingLayout({
   const session = await getSession();
   if (!session) redirect('/login');
 
+  // Admin never needs onboarding — skip straight to dashboard
+  if (session.role === 'admin') redirect('/');
+
   // Already completed onboarding — send to dashboard
   if (session.onboarding_complete) redirect('/');
 

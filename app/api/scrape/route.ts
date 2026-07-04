@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth, requireActiveAccount } from '@/lib/auth';
-import { checkLimit, logUsage } from '@/lib/usage';
-import { getCompanies, getPlaceDetails } from '@/services/googlePlaces';
-import { scrapeContactData } from '@/services/scraper';
-import { checkInternalDB } from '@/services/internalApi';
+import { supabaseAdmin }                                            from '@/lib/supabase-server';
+import { requireAuth, requireActiveAccount }                        from '@/lib/auth';
+import { checkLimit, logUsage }                                     from '@/lib/usage';
+import { getCompanies, getPlaceDetails, parseAddressComponents }    from '@/services/googlePlaces';
+import { scrapeContactData, calculateLeadScore }                    from '@/services/scraper';
+import { checkInternalDB }                                          from '@/services/internalApi';
 
 export async function POST(req: NextRequest) {
   const { user, error } = await requireAuth();
@@ -21,9 +21,8 @@ export async function POST(req: NextRequest) {
 
   const { category, location } = await req.json();
 
-  if (!category || !location) {
+  if (!category || !location)
     return NextResponse.json({ error: 'category and location are required' }, { status: 400 });
-  }
 
   const { data: job, error: jobError } = await supabaseAdmin
     .from('scrape_jobs')
@@ -43,7 +42,7 @@ export async function POST(req: NextRequest) {
 async function runPipeline(jobId: string, category: string, location: string, companyId: string) {
   try {
     const companies = await getCompanies(category, location);
-    const visited = new Set<string>();
+    const visited   = new Set<string>();
 
     await supabaseAdmin
       .from('scrape_jobs')
@@ -59,27 +58,40 @@ async function runPipeline(jobId: string, category: string, location: string, co
         if (!website || visited.has(website)) continue;
         visited.add(website);
 
-        
-
         const isExisting = await checkInternalDB(company.name);
         if (isExisting) continue;
-        const { emails, phones } = await scrapeContactData(website);
+
+        // ── Enrichment ────────────────────────────────────────────
+        const { emails, phones, linkedin_url } = await scrapeContactData(website);
+        const { state, local_govt }             = parseAddressComponents(details?.address_components);
+        const lead_score                        = calculateLeadScore({
+          emails,
+          phones,
+          website,
+          linkedin_url,
+          category,
+        });
+        // ─────────────────────────────────────────────────────────
 
         await supabaseAdmin.from('leads').upsert({
-          job_id:     jobId,
-          company_id: companyId,
-          place_id:   company.placeId,
-          name:       company.name,
-          address:    company.address,
+          job_id:       jobId,
+          company_id:   companyId,
+          place_id:     company.placeId,
+          name:         company.name,
+          address:      company.address,
           website,
           emails,
           phones,
-          status:     'new',
+          status:       'new',
           category,
           location,
-          state:      location,
-          source:     'google_places',
+          state:        state ?? location,
+          local_govt:   local_govt ?? null,
+          linkedin_url: linkedin_url ?? null,
+          lead_score,
+          source:       'google_places',
         }, { onConflict: 'place_id' });
+
       } catch {
         // skip failed company, continue pipeline
       }
@@ -96,6 +108,7 @@ async function runPipeline(jobId: string, category: string, location: string, co
       .from('scrape_jobs')
       .update({ status: 'completed' })
       .eq('id', jobId);
+
   } catch {
     await supabaseAdmin
       .from('scrape_jobs')

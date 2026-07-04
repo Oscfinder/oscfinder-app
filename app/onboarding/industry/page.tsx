@@ -1,8 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Loader2 } from 'lucide-react';
-import { StepProgress } from '@/app/onboarding/page';
+import { ArrowRight, ArrowLeft, Loader2 } from 'lucide-react';
+import { StepProgress } from '@/app/onboarding/StepProgress';
 import { cn } from '@/lib/utils';
 
 const INDUSTRIES = [
@@ -85,6 +85,13 @@ export default function IndustryPage() {
             ? <Loader2 size={18} className="animate-spin" />
             : <><span>Continue</span> <ArrowRight size={16} /></>
           }
+        </button>
+
+        <button
+          onClick={() => router.push('/onboarding')}
+          className="flex items-center gap-1.5 text-[12px] text-[#888888] hover:text-[#0A1628] transition-colors"
+        >
+          <ArrowLeft size={13} /> Back
         </button>
       </div>
     </div>

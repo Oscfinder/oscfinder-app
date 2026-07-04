@@ -1,32 +1,21 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/lib/supabase';
 
-export function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({
+  children,
+  isAdmin   = false,
+  userName  = '',
+  userRole  = '',
+}: {
+  children:  React.ReactNode;
+  isAdmin?:  boolean;
+  userName?: string;
+  userRole?: string;
+}) {
   const [collapsed, setCollapsed] = useState(false);
-  const [isAdmin,   setIsAdmin]   = useState(false);
-  const [userName,  setUserName]  = useState('');
-  const [userRole,  setUserRole]  = useState('');
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) return;
-      const email = session.user.email ?? '';
-      supabase
-        .from('users')
-        .select('role, full_name')
-        .eq('id', session.user.id)
-        .single()
-        .then(({ data }) => {
-          setUserName(data?.full_name ?? email);
-          setUserRole(data?.role === 'admin' ? 'Super Admin' : 'Company Admin');
-          if (data?.role === 'admin') setIsAdmin(true);
-        });
-    });
-  }, []);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">

@@ -1,8 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Zap, Loader2, CheckCircle, ArrowRight, Building2 } from 'lucide-react';
-import { StepProgress } from '@/app/onboarding/page';
+import { Zap, Loader2, CheckCircle, ArrowRight, Building2, ArrowLeft } from 'lucide-react';
+import { StepProgress } from '@/app/onboarding/StepProgress';
 
 type Phase = 'ready' | 'running' | 'done' | 'error';
 
@@ -17,14 +17,21 @@ interface LeadPreview {
 export default function FirstRunPage() {
   const router = useRouter();
 
-  const [query,     setQuery]     = useState('');
+  const [category,  setCategory]  = useState('');
+  const [location,  setLocation]  = useState('');
   const [phase,     setPhase]     = useState<Phase>('ready');
   const [leads,     setLeads]     = useState<LeadPreview[]>([]);
   const [errMsg,    setErrMsg]    = useState('');
   const [finishing, setFinishing] = useState(false);
 
+  useEffect(() => {
+    fetch('/api/onboarding/company')
+      .then(r => r.json())
+      .then(d => { if (d.location) setLocation(d.location); });
+  }, []);
+
   const startScrape = async () => {
-    if (!query.trim()) return;
+    if (!category || !location) return;
     setPhase('running');
     setErrMsg('');
 
@@ -32,7 +39,7 @@ export default function FirstRunPage() {
       const startRes = await fetch('/api/scrape', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ query: query.trim(), limit: 10 }),
+        body:    JSON.stringify({ category, location }),
       });
 
       if (!startRes.ok) {
@@ -102,28 +109,133 @@ export default function FirstRunPage() {
           <div>
             <h1 className="text-[22px] font-bold text-[#0A1628]">Generate your first leads</h1>
             <p className="text-[13px] text-[#888888] mt-0.5">
-              Search any business type in any Nigerian city.
+              Pick a category and we&apos;ll find real businesses across Nigeria.
             </p>
           </div>
         </div>
 
-        {/* Search input — shown in ready + error states */}
+        {/* Category + location — shown in ready + error states */}
         {(phase === 'ready' || phase === 'error') && (
           <>
             <div>
               <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">
-                What type of businesses are you looking for?
+                What category of businesses are you looking for?
+              </label>
+              <div className="relative">
+                <select
+                  value={category}
+                  onChange={e => setCategory(e.target.value)}
+                  className="w-full h-11 px-4 pr-10 rounded-xl border border-[#E5E7EB] text-[13px] text-[#0A1628] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC]"
+                >
+                  <option value="">— Select a category —</option>
+
+                  <optgroup label="Financial Services">
+                    <option>Microfinance Banks</option>
+                    <option>Commercial Banks</option>
+                    <option>Insurance Companies</option>
+                    <option>Investment &amp; Asset Management Companies</option>
+                    <option>Fintech Companies</option>
+                    <option>Mortgage Banks</option>
+                  </optgroup>
+
+                  <optgroup label="Healthcare">
+                    <option>Private Hospitals</option>
+                    <option>Pharmacies</option>
+                    <option>Diagnostic &amp; Laboratory Centers</option>
+                    <option>Dental Clinics</option>
+                    <option>Optical Shops</option>
+                    <option>Physiotherapy Centers</option>
+                  </optgroup>
+
+                  <optgroup label="Technology">
+                    <option>Technology Companies</option>
+                    <option>IT Services &amp; Support</option>
+                    <option>Software Development Companies</option>
+                    <option>Digital Marketing Agencies</option>
+                    <option>Cybersecurity Firms</option>
+                    <option>Telecom Companies</option>
+                  </optgroup>
+
+                  <optgroup label="Education">
+                    <option>Private Schools</option>
+                    <option>Universities &amp; Polytechnics</option>
+                    <option>Vocational Training Centers</option>
+                    <option>Tutoring &amp; Coaching Centers</option>
+                  </optgroup>
+
+                  <optgroup label="Real Estate &amp; Construction">
+                    <option>Real Estate Companies</option>
+                    <option>Property Developers</option>
+                    <option>Estate Agents</option>
+                    <option>Construction Companies</option>
+                    <option>Interior Design Companies</option>
+                  </optgroup>
+
+                  <optgroup label="Hospitality &amp; Events">
+                    <option>Hotels</option>
+                    <option>Restaurants &amp; Eateries</option>
+                    <option>Event Centers</option>
+                    <option>Catering Services</option>
+                    <option>Travel &amp; Tour Agencies</option>
+                  </optgroup>
+
+                  <optgroup label="Professional Services">
+                    <option>Law Firms</option>
+                    <option>Accounting &amp; Audit Firms</option>
+                    <option>Management Consulting Firms</option>
+                    <option>HR &amp; Recruitment Agencies</option>
+                    <option>Advertising Agencies</option>
+                    <option>PR Firms</option>
+                  </optgroup>
+
+                  <optgroup label="Manufacturing &amp; Industry">
+                    <option>Food Processing Companies</option>
+                    <option>Textile &amp; Garment Companies</option>
+                    <option>Packaging Companies</option>
+                    <option>Chemical &amp; Pharmaceutical Manufacturers</option>
+                    <option>Building Materials Suppliers</option>
+                  </optgroup>
+
+                  <optgroup label="Retail &amp; Commerce">
+                    <option>Supermarkets &amp; Grocery Stores</option>
+                    <option>Electronics &amp; Gadget Stores</option>
+                    <option>Fashion Boutiques</option>
+                    <option>Auto Dealers &amp; Spare Parts</option>
+                    <option>E-commerce Companies</option>
+                  </optgroup>
+
+                  <optgroup label="Logistics &amp; Transport">
+                    <option>Logistics &amp; Courier Companies</option>
+                    <option>Freight &amp; Shipping Companies</option>
+                    <option>Haulage Companies</option>
+                    <option>Aviation Companies</option>
+                  </optgroup>
+
+                  <optgroup label="Energy &amp; Utilities">
+                    <option>Solar Energy Companies</option>
+                    <option>Oil &amp; Gas Companies</option>
+                    <option>Power Generation Companies</option>
+                    <option>Water Treatment Companies</option>
+                  </optgroup>
+                </select>
+                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#888888]">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">
+                Location <span className="font-normal text-[#888888]">(state or city)</span>
               </label>
               <input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && startScrape()}
-                placeholder='"Pharmacies in Ikeja" or "Private hospitals Lagos"'
+                value={location}
+                onChange={e => setLocation(e.target.value)}
+                placeholder="e.g. Lagos, Abuja, Kano..."
                 className="w-full h-11 px-4 rounded-xl border border-[#E5E7EB] text-[13px] text-[#0A1628] focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] placeholder:text-[#888888]"
               />
-              <p className="text-[11px] text-[#888888] mt-1.5">
-                Tip: include the city or state for more precise results.
-              </p>
             </div>
 
             {errMsg && (
@@ -132,19 +244,27 @@ export default function FirstRunPage() {
 
             <button
               onClick={startScrape}
-              disabled={!query.trim()}
+              disabled={!category || !location}
               className="w-full h-12 rounded-xl bg-[#00C48C] hover:bg-[#00A86B] text-white text-[15px] font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
             >
               <Zap size={16} /> Find Leads
             </button>
 
-            <button
-              onClick={finish}
-              disabled={finishing}
-              className="w-full text-[12px] text-[#888888] hover:text-[#0A1628] transition-colors"
-            >
-              Skip for now — I&apos;ll generate leads from the dashboard
-            </button>
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => router.push('/onboarding/location')}
+                className="flex items-center gap-1.5 text-[12px] text-[#888888] hover:text-[#0A1628] transition-colors"
+              >
+                <ArrowLeft size={13} /> Back
+              </button>
+              <button
+                onClick={finish}
+                disabled={finishing}
+                className="text-[12px] text-[#888888] hover:text-[#0A1628] transition-colors"
+              >
+                Skip — go to dashboard
+              </button>
+            </div>
           </>
         )}
 

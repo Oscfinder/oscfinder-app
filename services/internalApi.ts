@@ -1,10 +1,14 @@
+const _warned = { once: false };
+
 export async function checkInternalDB(companyName: string): Promise<boolean> {
   const internalApiUrl = process.env.INTERNAL_COMPANY_API_URL;
 
-  // 1. Guard check: Safe build if variable is missing or has template brackets
   if (!internalApiUrl || internalApiUrl.includes('<')) {
-    console.warn("⚠️ INTERNAL_COMPANY_API_URL is missing or misconfigured.");
-    return false; 
+    if (!_warned.once) {
+      console.warn("⚠️ INTERNAL_COMPANY_API_URL not set — duplicate-company check skipped.");
+      _warned.once = true;
+    }
+    return false;
   }
 
   try {

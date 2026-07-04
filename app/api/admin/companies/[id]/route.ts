@@ -5,15 +5,16 @@ import { requireAdmin, logAdminAction } from '@/lib/auth';
 // ── GET /api/admin/companies/[id] ────────────────────────────────
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const { error } = await requireAdmin();
   if (error) return error;
 
   const { data: company, error: companyError } = await supabaseAdmin
     .from('companies')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (companyError || !company)
@@ -22,7 +23,7 @@ export async function GET(
   const { data: users = [] } = await supabaseAdmin
     .from('users')
     .select('id, email, full_name, role, is_active, last_login, created_at')
-    .eq('company_id', params.id);
+    .eq('company_id', id);
 
   return NextResponse.json({ company, users });
 }
@@ -34,8 +35,9 @@ export async function GET(
 //                 industry, location
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const { user: admin, error } = await requireAdmin();
   if (error) return error;
 
@@ -58,7 +60,7 @@ export async function PATCH(
   const { data: company, error: updateError } = await supabaseAdmin
     .from('companies')
     .update(updates)
-    .eq('id', params.id)
+    .eq('id', id)
     .select()
     .single();
 
@@ -74,7 +76,7 @@ export async function PATCH(
   }
   if ('plan' in updates) action = 'change_plan';
 
-  await logAdminAction(admin.id, action, params.id, updates);
+  await logAdminAction(admin.id, action, id, updates);
 
   return NextResponse.json(company);
 }

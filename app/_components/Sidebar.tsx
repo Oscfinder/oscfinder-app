@@ -148,7 +148,7 @@ export function Sidebar({
                 {userName || 'Admin'}
               </p>
               <span className="text-[11px] text-white/35">
-                {userRole || 'Super Admin'}
+                {userRole}
               </span>
             </div>
             <button

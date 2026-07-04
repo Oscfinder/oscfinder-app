@@ -10,5 +10,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect('/onboarding');
   }
 
-  return <Shell>{children}</Shell>;
+  return (
+    <Shell
+      isAdmin={session.role === 'admin'}
+      userName={session.full_name ?? session.email}
+      userRole={session.role === 'admin' ? 'Super Admin' : 'Company Admin'}
+    >
+      {children}
+    </Shell>
+  );
 }
