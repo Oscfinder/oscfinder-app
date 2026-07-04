@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAdmin, logAdminAction } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
 // ── GET /api/admin/companies/[id] ────────────────────────────────
 export async function GET(
   _req: NextRequest,
