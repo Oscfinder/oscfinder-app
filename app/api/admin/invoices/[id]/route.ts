@@ -10,8 +10,9 @@ import { requireAdmin, logAdminAction } from '@/lib/auth';
 //   renewal invoice → plan_end_date + 1 year,  renewal_fee_paid = true, status = 'active'
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const { user: admin, error } = await requireAdmin();
   if (error) return error;
 
@@ -24,7 +25,7 @@ export async function PATCH(
   const { data: invoice, error: fetchError } = await supabaseAdmin
     .from('invoices')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (fetchError || !invoice)
@@ -38,9 +39,9 @@ export async function PATCH(
     await supabaseAdmin
       .from('invoices')
       .update({ status: 'cancelled' })
-      .eq('id', params.id);
+      .eq('id', id);
 
-    await logAdminAction(admin.id, 'cancel_invoice', invoice.company_id, { invoice_id: params.id });
+    await logAdminAction(admin.id, 'cancel_invoice', invoice.company_id, { invoice_id: id });
     return NextResponse.json({ success: true });
   }
 
@@ -55,7 +56,7 @@ export async function PATCH(
       payment_method: payment_method ?? null,
       reference:      reference      ?? null,
     })
-    .eq('id', params.id);
+    .eq('id', id);
 
   if (invoice.invoice_type === 'setup') {
     await supabaseAdmin
@@ -90,7 +91,7 @@ export async function PATCH(
   }
 
   await logAdminAction(admin.id, 'mark_invoice_paid', invoice.company_id, {
-    invoice_id:    params.id,
+    invoice_id:    id,
     invoice_type:  invoice.invoice_type,
     amount:        invoice.amount,
     payment_method,

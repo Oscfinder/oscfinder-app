@@ -60,7 +60,7 @@ export function ViewModal({ lead, onClose }: { lead: Lead; onClose: () => void }
         <DetailRow icon={Mail}      label="Emails"   value={lead.emails?.join(', ')} />
         <DetailRow icon={Phone}     label="Phones"   value={lead.phones?.join(', ')} />
         <DetailRow icon={Briefcase} label="Category" value={lead.category} />
-        <DetailRow icon={MapPin}    label="Location" value={lead.location} />
+        <DetailRow icon={MapPin}    label="Location" value={[lead.local_govt, lead.state].filter(Boolean).join(', ')} />
         <div className="flex items-start gap-3 py-2.5">
           <div className="flex items-center justify-center w-7 h-7 rounded-md bg-[#006285]/8 shrink-0 mt-0.5">
             <Mail size={13} className="text-[#006285]" />
@@ -92,8 +92,9 @@ export function EditModal({ lead, onSave, onClose }: EditModalProps) {
     website:  lead.website,
     emails:   lead.emails?.join(', ') ?? '',
     phones:   lead.phones?.join(', ') ?? '',
-    category: lead.category,
-    location: lead.location,
+    category:  lead.category,
+    state:     lead.state,
+    local_govt: lead.local_govt,
   });
 
   const field = (key: keyof typeof form) => (
@@ -117,8 +118,9 @@ export function EditModal({ lead, onSave, onClose }: EditModalProps) {
       website:  form.website,
       emails:   form.emails.split(',').map(e => e.trim()).filter(Boolean),
       phones:   form.phones.split(',').map(p => p.trim()).filter(Boolean),
-      category: form.category,
-      location: form.location,
+      category:   form.category,
+      state:      form.state,
+      local_govt: form.local_govt,
     });
   };
 
@@ -126,7 +128,7 @@ export function EditModal({ lead, onSave, onClose }: EditModalProps) {
     <Modal onClose={onClose}>
       <ModalHeader title="Edit Company" subtitle={lead.name} onClose={onClose} />
       <div className="px-6 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
-        {(['name', 'address', 'website', 'emails', 'phones', 'category', 'location'] as const).map(field)}
+        {(['name', 'address', 'website', 'emails', 'phones', 'category', 'state', 'local_govt'] as const).map(field)}
       </div>
       <div className="px-6 py-3 border-t border-gray-100 flex justify-end gap-3">
         <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -233,7 +235,7 @@ export function DeleteModal({ lead, onConfirm, onClose }: DeleteModalProps) {
 // ─── ADD MODAL ─────────────────────────────────────────────────────────────
 interface AddModalProps { onSave: (lead: Lead) => void; onClose: () => void; }
 
-const EMPTY_FORM = { name: '', address: '', website: '', emails: '', phones: '', category: '', location: '' };
+const EMPTY_FORM = { name: '', address: '', website: '', emails: '', phones: '', category: '', state: '', local_govt: '' };
 
 export function AddModal({ onSave, onClose }: AddModalProps) {
   const [form, setForm] = useState(EMPTY_FORM);
@@ -243,7 +245,7 @@ export function AddModal({ onSave, onClose }: AddModalProps) {
   const validate = () => {
     const e: Partial<typeof EMPTY_FORM> = {};
     if (!form.name.trim())     e.name     = 'Company name is required';
-    if (!form.location.trim()) e.location = 'Location is required';
+    if (!form.state.trim())    e.state    = 'State is required';
     if (!form.category.trim()) e.category = 'Category is required';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -254,18 +256,24 @@ export function AddModal({ onSave, onClose }: AddModalProps) {
     setSaving(true);
     await new Promise(r => setTimeout(r, 800));
     onSave({
-      id:         `manual-${Date.now()}`,
-      place_id:   `manual-${Date.now()}`,
-      name:       form.name.trim(),
-      address:    form.address.trim(),
-      website:    form.website.trim(),
-      emails:     form.emails.split(',').map(e => e.trim()).filter(Boolean),
-      phones:     form.phones.split(',').map(p => p.trim()).filter(Boolean),
-      category:   form.category.trim(),
-      location:   form.location.trim(),
-      status:     'new',
-      mail_sent:  false,
-      created_at: new Date().toISOString(),
+      id:          `manual-${Date.now()}`,
+      company_id:  '',
+      place_id:    `manual-${Date.now()}`,
+      name:        form.name.trim(),
+      address:     form.address.trim(),
+      website:     form.website.trim(),
+      emails:      form.emails.split(',').map(e => e.trim()).filter(Boolean),
+      phones:      form.phones.split(',').map(p => p.trim()).filter(Boolean),
+      category:    form.category.trim(),
+      state:       form.state.trim(),
+      local_govt:  form.local_govt.trim(),
+      linkedin_url: '',
+      source:      'manual',
+      lead_score:  0,
+      enriched_at: null,
+      status:      'new',
+      mail_sent:   false,
+      created_at:  new Date().toISOString(),
     });
   };
 
@@ -275,8 +283,9 @@ export function AddModal({ onSave, onClose }: AddModalProps) {
     { key: 'website',  label: 'Website',            placeholder: 'e.g. https://www.example.com'                  },
     { key: 'emails',   label: 'Emails',             placeholder: 'Separate multiple with commas'                  },
     { key: 'phones',   label: 'Phone Numbers',      placeholder: 'Separate multiple with commas'                  },
-    { key: 'category', label: 'Category',           placeholder: 'e.g. Technology Companies',      required: true },
-    { key: 'location', label: 'State / Location',   placeholder: 'e.g. Lagos',                     required: true },
+    { key: 'category',   label: 'Category',  placeholder: 'e.g. Technology Companies', required: true },
+    { key: 'state',      label: 'State',     placeholder: 'e.g. Lagos',               required: true },
+    { key: 'local_govt', label: 'City / LGA', placeholder: 'e.g. Ikeja'                             },
   ];
 
   return (

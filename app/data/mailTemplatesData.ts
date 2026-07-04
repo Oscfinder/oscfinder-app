@@ -3,6 +3,7 @@ import { MailTemplate } from '@/types';
 export const DUMMY_TEMPLATES: MailTemplate[] = [
   {
     id: 'tpl-1',
+    company_id: '',
     title: 'Initial Outreach',
     subject: 'Partnership Opportunity with {{company_name}}',
     tag: 'Outreach',
@@ -26,6 +27,7 @@ companyFinder Team
   },
   {
     id: 'tpl-2',
+    company_id: '',
     title: 'Follow-Up After No Response',
     subject: 'Following Up — Health Insurance for {{company_name}}',
     tag: 'Follow-up',
@@ -46,6 +48,7 @@ companyFinder Team`,
   },
   {
     id: 'tpl-3',
+    company_id: '',
     title: 'Partnership Introduction',
     subject: 'Exploring a Strategic Partnership with {{company_name}}',
     tag: 'Partnership',
@@ -68,6 +71,7 @@ companyFinder`,
   },
   {
     id: 'tpl-4',
+    company_id: '',
     title: 'New Year Introduction',
     subject: 'New Year, New Health Benefits for {{company_name}}',
     tag: 'Introduction',
@@ -93,6 +97,7 @@ companyFinder Team`,
   },
   {
     id: 'tpl-5',
+    company_id: '',
     title: 'Promotional Offer',
     subject: 'Exclusive Offer for {{company_name}} — Limited Time',
     tag: 'Promotion',
@@ -118,6 +123,7 @@ companyFinder`,
   },
   {
     id: 'tpl-6',
+    company_id: '',
     title: 'General Enquiry Response',
     subject: 'Re: Your Enquiry — companyFinder Health Plans',
     tag: 'General',

@@ -43,7 +43,7 @@ export async function checkAndSendUsageAlert(
     .eq('month', month)
     .maybeSingle();
 
-  const used = (usageRow?.[usageCol] as number | null | undefined) ?? 0;
+  const used = ((usageRow as Record<string, unknown> | null)?.[usageCol] as number | null | undefined) ?? 0;
 
   // 2. Company plan + contact details
   const { data: company } = await supabaseAdmin
@@ -62,7 +62,7 @@ export async function checkAndSendUsageAlert(
     .eq('plan', company.plan)
     .single();
 
-  const limit = limits?.[limitCol] as number | null | undefined;
+  const limit = ((limits as Record<string, unknown> | null)?.[limitCol]) as number | null | undefined;
 
   // null = unlimited (enterprise exports) — nothing to alert on
   if (limit == null || limit === 0) return;

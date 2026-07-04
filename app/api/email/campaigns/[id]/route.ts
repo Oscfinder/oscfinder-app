@@ -5,15 +5,16 @@ import { requireAuth } from '@/lib/auth';
 // ── GET /api/email/campaigns/[id] ────────────────────────────────
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const { user, error } = await requireAuth();
   if (error) return error;
 
   let campaignQuery = supabaseAdmin
     .from('email_campaigns')
     .select('*, template:email_templates(title, subject, tag)')
-    .eq('id', params.id);
+    .eq('id', id);
 
   if (user.role !== 'admin') {
     campaignQuery = campaignQuery.eq('company_id', user.company_id);
@@ -27,7 +28,7 @@ export async function GET(
   const { data: events = [] } = await supabaseAdmin
     .from('email_events')
     .select('email, event, created_at')
-    .eq('campaign_id', params.id)
+    .eq('campaign_id', id)
     .order('created_at', { ascending: false })
     .limit(100);
 
@@ -38,15 +39,16 @@ export async function GET(
 // Only draft campaigns can be deleted.
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const { user, error } = await requireAuth();
   if (error) return error;
 
   let query = supabaseAdmin
     .from('email_campaigns')
     .delete()
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('status', 'draft');
 
   if (user.role !== 'admin') {

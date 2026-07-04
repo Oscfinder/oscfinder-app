@@ -38,6 +38,6 @@ export async function checkLimit(companyId: string, action: Action): Promise<boo
 
   if (action === 'google_search') return (summary?.scrape_count ?? 0) < (limits?.scrape_limit ?? 0);
   if (action === 'email_sent')   return (summary?.email_count  ?? 0) < (limits?.email_limit  ?? 0);
-  if (action === 'export')       return limits?.export_limit === null || (summary?.export_count ?? 0) < limits.export_limit;
+  if (action === 'export')       return limits?.export_limit == null || (summary?.export_count ?? 0) < limits.export_limit;
   return true;
 }

@@ -55,7 +55,7 @@ export function RecentRow({ lead }: { lead: Lead }) {
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-800 truncate">{lead.name}</p>
           <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
-            <MapPin size={10} /> {lead.location} · <Briefcase size={10} /> {lead.category}
+            <MapPin size={10} /> {lead.state} · <Briefcase size={10} /> {lead.category}
           </p>
         </div>
       </div>
