@@ -2,12 +2,13 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Send, Trash2, Eye, X, ChevronDown, Search } from 'lucide-react';
-import { EmailCampaign, MailTemplate } from '@/types';
+import { EmailCampaign, MailTemplate, EmailSender } from '@/types';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { cn } from '@/lib/utils';
+import { LockedFeatureCard } from '@/app/_components/LockedFeatureCard';
 
 // ── Local types ───────────────────────────────────────────────────
-type CampaignStatus = 'draft' | 'sending' | 'completed' | 'failed';
+type CampaignStatus = 'draft' | 'queued' | 'sending' | 'completed' | 'failed';
 
 type DetailData = {
   campaign: EmailCampaign;
@@ -16,6 +17,7 @@ type DetailData = {
 
 const STATUS_BADGE: Record<CampaignStatus, string> = {
   draft:     'bg-[#f3f4f6] text-[#888888]',
+  queued:    'bg-[#f3f4f6] text-[#888888]',
   sending:   'bg-[#dff2f9] text-[#0099CC]',
   completed: 'bg-[#dff7ee] text-[#00A86B]',
   failed:    'bg-[#ffeaea] text-[#e74c3c]',
@@ -224,7 +226,7 @@ function NewCampaignModal({
           {/* Summary bar */}
           <div className="bg-[#F8FAFC] rounded-lg px-4 py-3 flex items-center justify-between">
             <div className="text-[13px] text-[#1A3A5C]">
-              <strong className="text-[#0A1628]">{matchingLeads.length}</strong> leads will receive this campaign
+              <strong className="text-[#0A1628]">{matchingLeads.length}</strong> leads will be queued for this campaign
             </div>
             <div className="text-[12px] text-[#888888]">
               Emails: <strong className="text-[#0A1628]">{emailsUsed}</strong>
@@ -259,7 +261,7 @@ function NewCampaignModal({
             disabled={isSending || matchingLeads.length === 0}
             className="flex items-center gap-1.5 h-9 px-5 rounded-lg bg-[#00C48C] hover:bg-[#00A86B] text-white text-[13px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSending ? 'Sending...' : <><Send size={13} /> Send Now</>}
+            {isSending ? 'Queuing...' : <><Send size={13} /> Send Now</>}
           </button>
         </div>
       </div>
@@ -386,9 +388,15 @@ export default function EmailPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [deletingId,   setDeletingId]   = useState<string | null>(null);
 
+  const { data: sender, isLoading: senderLoading } = useQuery<EmailSender | null>({
+    queryKey: ['sender'],
+    queryFn:  () => fetch('/api/senders').then(r => r.json()),
+  });
+
   const { data: campaigns = [], isLoading } = useQuery<EmailCampaign[]>({
     queryKey: ['campaigns'],
     queryFn:  () => fetch('/api/email/campaigns').then(r => r.json()),
+    enabled:  sender?.status === 'verified',
   });
 
   const { data: templates = [] } = useQuery<MailTemplate[]>({
@@ -426,6 +434,21 @@ export default function EmailPage() {
     queryClient.invalidateQueries({ queryKey: ['campaigns'] });
   };
 
+  if (senderLoading) {
+    return <div className="text-center py-16 text-[13px] text-[#888888]">Loading...</div>;
+  }
+
+  if (!sender || sender.status !== 'verified') {
+    return (
+      <LockedFeatureCard
+        heading="Email campaigns require a verified sending mailbox"
+        description="Connect and verify your own mailbox (e.g. Zoho, Gmail) so campaign emails go out from your own domain instead of a shared platform address."
+        ctaHref="/settings/sender"
+        ctaLabel="Set Up Sender"
+      />
+    );
+  }
+
   return (
     <div className="max-w-screen-xl mx-auto space-y-5">
 
@@ -457,7 +480,7 @@ export default function EmailPage() {
               className="h-9 pl-3 pr-8 rounded-lg border border-[#E5E7EB] bg-white text-[13px] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] text-[#0A1628]"
             >
               <option value="">All Status</option>
-              {(['draft', 'sending', 'completed', 'failed'] as CampaignStatus[]).map(s => (
+              {(['draft', 'queued', 'sending', 'completed', 'failed'] as CampaignStatus[]).map(s => (
                 <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
               ))}
             </select>

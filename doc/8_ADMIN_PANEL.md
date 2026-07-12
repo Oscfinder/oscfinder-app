@@ -1,5 +1,7 @@
 # Phase 8 — Admin Panel
 
+> **STATUS: IMPLEMENTED** — Admin panel is live at `/admin` and `/admin/demos`. This document is kept as implementation reference.
+
 > **Goal:** Give the super admin (you) full control over all tenants, billing, and demos  
 > from a single panel — no SQL editor needed for day-to-day operations.
 

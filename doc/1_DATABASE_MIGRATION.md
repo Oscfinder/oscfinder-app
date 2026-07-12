@@ -1,8 +1,11 @@
-# Database Migration Guide
+# Phase 1 — Database Migration Guide
 
-> Migrating from single-tenant schema → multi-tenant SaaS schema  
+> **STATUS: IMPLEMENTED** — The schema migration was applied to Supabase. This document is the historical migration guide kept as reference.  
+> For the current schema overview, see `ARCHITECTURE.md` (Section 5 — Database Schema).
+
+> Original goal: Migrate from single-tenant schema → multi-tenant SaaS schema  
 > Based on Phase 1 of `SCALING_DOC.md`  
-> Run every SQL block in **Supabase → SQL Editor** in the exact order shown.
+> All SQL blocks were run in **Supabase → SQL Editor** in the order shown below.
 
 ---
 

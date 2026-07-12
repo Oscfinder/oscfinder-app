@@ -1,5 +1,10 @@
 # Phase 11 — Usage Alerts
 
+> **STATUS: IMPLEMENTED** — Usage alert emails are live via `lib/usage-alerts.ts`. This document is kept as implementation reference.  
+> **SQL pending:** Run the `usage_alerts_sent` table migration in Supabase if not yet done (see `CHECKS.md`).  
+> **Bug fixed during audit:** The `checkAndSendUsageAlert()` code in this document originally queried `total_units` per `action` row from `usage_monthly_summary`. The actual table has flat columns `scrape_count, email_count, export_count` on a single row per company/month. The live `lib/usage-alerts.ts` uses the correct column map (`USAGE_COLUMN`) and `.maybeSingle()`. See `CHECKS.md` Bug 2 for details.  
+> **Integration:** `logUsage()` in `lib/usage.ts` calls `checkAndSendUsageAlert()` as a fire-and-forget side effect after every usage write. No route changes were needed — alerts fire automatically.
+
 > **Goal:** Automatically email a company when they reach 80% and 100% of any plan limit (scrapes, emails, exports).  
 > Alerts are sent once per threshold per action per month — never duplicated.
 

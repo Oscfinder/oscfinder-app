@@ -1,39 +1,61 @@
 # OsCompanyFinder — SaaS Scaling Roadmap
 
-> From single-tenant internal tool → multi-tenant SaaS platform  
-> Reference UI: `OsCompanyFinder_Dashboard (1).html`  
-> Reference Architecture: `TECHNICAL_ARCHITECTURE.md`  
-> Current State: `ARCHITECTURE.md`
+> **STATUS: ALL 12 PHASES IMPLEMENTED** — This document is the historical build plan.  
+> It is kept as a record of what was built and why each decision was made.  
+> For the current system description, see `ARCHITECTURE.md`.  
+> For the audit of what's running, see `CHECKS.md`.
 
 ---
 
-## Where We Are Now
+## Implementation Status — All Phases
 
-| Area | Current State |
+| Phase | Name | Status |
+|---|---|---|
+| 1 | Database Migration | ✅ DONE |
+| 2 | Authentication System | ✅ DONE |
+| 3 | Multi-Tenancy | ✅ DONE |
+| 4 | Usage Tracking | ✅ DONE |
+| 5 | Account Status Guard | ✅ DONE |
+| 6 | New UI | ✅ DONE |
+| 7 | Email Campaign System | ✅ DONE |
+| 8 | Admin Panel | ✅ DONE |
+| 9 | Billing System | ✅ DONE (bug fixed — see CHECKS.md) |
+| 10 | Client Onboarding Flow | ✅ DONE (SQL pending — see CHECKS.md) |
+| 11 | Usage Alerts | ✅ DONE (bug fixed — see CHECKS.md) |
+| 12 | Lead Enrichment Upgrades | ✅ DONE |
+
+---
+
+## Current System State
+
+| Area | Implemented State |
 |---|---|
-| Auth | None — fully open, no login |
-| Tenancy | Single-tenant (AnchorHMO only) |
-| Leads table | No `company_id`, globally shared |
-| Scrape jobs | No `company_id` |
-| Usage tracking | None |
-| Billing | None |
-| Admin panel | None |
-| Email campaigns | Basic single-send via Resend |
-| Lead status | `new` / `existing` only |
-| UI | AnchorHMO brand, 4 pages |
-
-## Where We Are Going
-
-| Area | Target State |
-|---|---|
-| Auth | Supabase Auth + RBAC (admin / company_admin) |
+| Auth | Supabase Auth + RBAC (`admin` / `company_admin`) — JWT verified, role from DB |
 | Tenancy | Full multi-tenant — every row scoped to `company_id` |
-| Leads | Enriched with `state`, `local_govt`, `lead_score`, `linkedin_url`, expanded status |
-| Usage tracking | `usage_logs` + `usage_monthly_summary` per company |
-| Billing | Invoices, renewals, overage charges, demo management |
-| Admin panel | Full CRM — companies, billing, renewals, revenue, demo accounts |
-| Email campaigns | Campaigns, templates, event tracking (sent/opened/clicked) |
-| UI | New dark-sidebar design (from HTML mockup), 9 pages |
+| Leads table | Has `company_id`, `state`, `local_govt`, `lead_score`, `linkedin_url`, `source` |
+| Lead status | `new` / `contacted` / `qualified` / `ignored` |
+| Scrape jobs | Has `company_id`, status, progress, error_msg |
+| Usage tracking | `usage_logs` + `usage_monthly_summary` per company/month |
+| Billing | Invoices, renewals, demo management — client billing page live |
+| Admin panel | 4-tab panel: Companies, Billing, Renewals, Revenue |
+| Email campaigns | Full campaign builder + Resend + event tracking |
+| UI | Dark navy sidebar, DM Sans/DM Mono fonts, 10 pages |
+| Onboarding | 4-step wizard for new company_admin users |
+| Usage alerts | 80%/100% threshold emails via Resend, dedup via `usage_alerts_sent` |
+| Lead enrichment | State/LGA from address_components, LinkedIn URL, lead score 0–100 |
+
+---
+
+## Historical Build Plan — Phases 1–12
+
+> The sections below are the original planning notes for each phase.  
+> All phases are now implemented. Read them for context on design decisions.
+
+---
+
+## Phase 1 — Database Migration (Foundation) ✅ DONE
+
+**Goal:** Upgrade the Supabase schema to support multi-tenancy without breaking existing data.
 
 ---
 
@@ -186,17 +208,26 @@ export async function getSession() {
 
 ### Step 2.3 — Add middleware for route protection
 
-Create `middleware.ts` at the project root:
+> **OUTDATED CODE BELOW** — This was the original planning sketch. The actual implemented middleware is different:  
+> - Does NOT read role from cookies (role is never in cookies)  
+> - Does NOT check role at all — middleware only checks if a JWT exists  
+> - Public paths are `['/login', '/forgot-password', '/reset-password']` — not just `/login`  
+> - Uses `supabase.auth.getUser()` from `@supabase/ssr` (JWT-verified)  
+> - API routes excluded from middleware (they use `requireAuth()` themselves)  
+> See `2_AUTH.md` for the correct implementation.
+
+Original planning sketch (do not use):
 
 ```typescript
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+// ⚠️ OUTDATED — do not use. See 2_AUTH.md for the correct implementation.
 export function middleware(req: NextRequest) {
   const token = req.cookies.get('sb-access-token')?.value;
-  const role  = req.cookies.get('user-role')?.value;
+  const role  = req.cookies.get('user-role')?.value;  // ← WRONG: role is never in cookies
 
-  const publicPaths = ['/login'];
+  const publicPaths = ['/login'];  // ← WRONG: also needs /forgot-password, /reset-password
   if (publicPaths.includes(req.nextUrl.pathname)) return NextResponse.next();
 
   if (!token) return NextResponse.redirect(new URL('/login', req.url));

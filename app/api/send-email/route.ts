@@ -5,7 +5,7 @@ import { requireAuth, requireActiveAccount } from '@/lib/auth';
 import { checkLimit, logUsage } from '@/lib/usage';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM   = process.env.RESEND_FROM ?? 'OsCompanyFinder <onboarding@resend.dev>';
+const FROM   = process.env.RESEND_FROM ?? 'OsCFinder <hello@mail.oscfinder.com>';
 
 export async function POST(req: NextRequest) {
   const { user, error } = await requireAuth();

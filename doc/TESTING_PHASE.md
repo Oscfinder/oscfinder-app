@@ -1,7 +1,8 @@
 # OsCompanyFinder — Testing Guide
 
 > Manual browser + Supabase tests for every feature built across Phases 1–12.  
-> Run these in order — each phase depends on the ones before it.
+> Run these in order — each phase depends on the ones before it.  
+> **Prerequisites before testing:** Run the Phase 10 SQL (`onboarding_complete` column) and Phase 11 SQL (`usage_alerts_sent` table) in Supabase — see `CHECKS.md` for the exact statements.
 
 ---
 

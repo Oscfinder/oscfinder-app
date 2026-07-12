@@ -1,62 +1,60 @@
-# Authentication Implementation Guide
+# Phase 2 — Authentication & RBAC
 
-> Implementing Supabase Auth + RBAC from scratch on the existing companyFinder codebase.  
-> Follow every step in order — each step depends on the previous one.
-
----
-
-## What We Are Building
-
-- A `/login` page (email + password)
-- Server-side session reading on every protected route
-- Middleware that blocks unauthenticated users
-- A `(auth)` layout group with NO sidebar (just the login form)
-- A `(dashboard)` layout group that requires a valid session
-- A `users` table in Supabase that stores each user's `role` and `company_id`
-- Two roles only: `admin` (you) and `company_admin` (your clients)
-- A logout button in the sidebar
-- The first admin user created manually in Supabase
+> **STATUS: IMPLEMENTED** — Auth is fully live. This document describes the current implementation.  
+> Do not follow this as a step-by-step guide — all steps are already done.
 
 ---
 
-## Step 1 — Install the SSR package
+## What Was Built
 
-The existing `@supabase/supabase-js` cannot read cookies server-side.
-We need `@supabase/ssr` for Next.js App Router auth.
-
-Run in the terminal:
-
-```bash
-npm install @supabase/ssr
-```
+- `/login` page (email + password via Supabase Auth)
+- `/forgot-password` and `/reset-password` pages
+- Server-side session reading on every protected route via `lib/auth.ts`
+- Middleware that protects all non-public routes
+- `(auth)` layout group — no sidebar, just the login/reset forms
+- `(dashboard)` layout group — requires a valid session + redirects to onboarding if needed
+- `public.users` table linking each Supabase Auth user to a `role` and `company_id`
+- Two roles: `admin` (super admin) and `company_admin` (client users)
+- Logout button in the sidebar
 
 ---
 
-## Step 2 — Add the Supabase users table
+## Files Implemented
 
-Go to **Supabase → SQL Editor** and run this SQL.
+| File | What it does |
+|---|---|
+| `lib/supabase-server.ts` | `supabaseAdmin` (service role) + `createSupabaseServerClient()` |
+| `lib/supabase.ts` | Browser client (`createBrowserClient`) |
+| `lib/auth.ts` | `getSession()`, `requireAuth()`, `requireAdmin()`, `requireActiveAccount()`, `logAdminAction()` |
+| `middleware.ts` | Session refresh + route guard (public: `/login`, `/forgot-password`, `/reset-password`) |
+| `app/(auth)/layout.tsx` | Minimal centered layout for auth pages |
+| `app/(auth)/login/page.tsx` | Login form |
+| `app/(dashboard)/layout.tsx` | Protects dashboard, reads session, passes props to Shell |
+| `app/_components/Shell.tsx` | Client component — receives `isAdmin`, `userName`, `userRole` as props |
+| `app/_components/Sidebar.tsx` | Logout button via `supabase.auth.signOut()` |
 
-> ⚠️ **Prerequisite:** The `companies` table must exist before running this. If you have not yet run the schema from `TECHNICAL_ARCHITECTURE.md`, do that first — or temporarily remove the `REFERENCES companies(id)` line and add it back later with `ALTER TABLE`.
+---
 
-This creates the `users` table that links a Supabase Auth user (from `auth.users`) to a `company_id` and a `role`:
+## Database: `public.users` Table
 
 ```sql
 CREATE TABLE public.users (
-  id          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  company_id  UUID REFERENCES companies(id) ON DELETE SET NULL,
-  email       TEXT NOT NULL,
-  full_name   TEXT,
-  role        TEXT NOT NULL DEFAULT 'company_admin',
+  id                   UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  company_id           UUID REFERENCES companies(id) ON DELETE SET NULL,
+  email                TEXT NOT NULL,
+  full_name            TEXT,
+  role                 TEXT NOT NULL DEFAULT 'company_admin',
   -- role values: 'admin' | 'company_admin'
-  is_active   BOOLEAN NOT NULL DEFAULT TRUE,
-  last_login  TIMESTAMPTZ,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  onboarding_complete  BOOLEAN NOT NULL DEFAULT false,
+  is_active            BOOLEAN NOT NULL DEFAULT TRUE,
+  last_login           TIMESTAMPTZ,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX users_company_idx ON public.users(company_id);
 CREATE INDEX users_role_idx    ON public.users(role);
 
--- Auto-insert into public.users whenever a new auth user signs up
+-- Trigger: auto-insert a row into public.users when a new auth user signs up
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -77,62 +75,7 @@ CREATE TRIGGER on_auth_user_created
 
 ---
 
--- 1. Add the foreign key reference to the company_id column
-ALTER TABLE public.users 
-  ALTER COLUMN company_id TYPE UUID,
-  ADD CONSTRAINT fk_users_company 
-    FOREIGN KEY (company_id) 
-    REFERENCES companies(id) 
-    ON DELETE SET NULL;
-
-
-## Step 3 — Create the first admin user in Supabase
-
-Go to **Supabase → Authentication → Users → Add User**.
-
-Fill in:
-- Email: your admin email (e.g. `osimesimon@gmail.com`)
-- Password: a strong password
-- Click **Create User**
-
-Then in **SQL Editor**, set that user as admin and link them to your company:
-
-```sql
--- Get the user's UUID from Supabase Auth dashboard and paste it below
-UPDATE public.users
-SET
-  role       = 'admin',
-  company_id = NULL,  -- admin has no company — they see everything
-  full_name  = 'Admin'
-WHERE email = 'osimesimon@gmail.com';
-```
-
----
-
-## Step 4 — Split the Supabase client into two files
-
-> ⚠️ **Why two files:** `supabaseAdmin` uses `SUPABASE_SERVICE_ROLE_KEY` which has no `NEXT_PUBLIC_` prefix and is `undefined` in the browser. If it shares a file with the browser `supabase` client, any `'use client'` component that imports `supabase` will also bundle `supabaseAdmin` and crash with *"supabaseKey is required"*. Keeping them in separate files prevents this entirely.
-
-### 4a — Update `lib/supabase.ts` (browser client only)
-
-Replace the entire file. This is the only file client components should ever import from:
-
-```typescript
-import { createBrowserClient } from '@supabase/ssr';
-
-// Browser client — safe to import in 'use client' components.
-// Uses createBrowserClient (NOT createClient from supabase-js) so the
-// session is stored in cookies instead of localStorage. This is required
-// for the middleware and server components to read the session.
-export const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-```
-
-### 4b — Create `lib/supabase-server.ts` (server only)
-
-Create this new file. API routes and `lib/auth.ts` import from here — never client components:
+## `lib/supabase-server.ts` (current implementation)
 
 ```typescript
 import { createClient } from '@supabase/supabase-js';
@@ -141,10 +84,11 @@ import { cookies } from 'next/headers';
 
 // Server-only file — never import this from a 'use client' component.
 
-// Admin client: bypasses RLS, used in API routes.
+// Admin client: bypasses RLS, used in API routes and lib/auth.ts.
+// Fallback strings prevent module-evaluation crash during `next build`.
 export const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL      ?? 'https://placeholder.supabase.co',
+  process.env.SUPABASE_SERVICE_ROLE_KEY     ?? 'placeholder-service-role-key'
 );
 
 // Cookie-aware server client: used in Server Components and lib/auth.ts.
@@ -167,38 +111,33 @@ export async function createSupabaseServerClient() {
 }
 ```
 
-### Import rules going forward
+### Import rules
 
 | What you need | Import from |
 |---|---|
-| `supabase` (login, logout, client components) | `@/lib/supabase` |
+| `supabase` (login, logout — client components) | `@/lib/supabase` |
 | `supabaseAdmin`, `createSupabaseServerClient` | `@/lib/supabase-server` |
 
 ---
 
-## Step 5 — Create `lib/auth.ts`
-
-Create this new file. It provides two functions used by every API route and server component:
-
-- `getSession()` — reads the current logged-in user + their role + company_id
-- `requireAuth()` — returns the session OR a 401 response if not logged in
-
-**File:** `lib/auth.ts`
+## `lib/auth.ts` (current implementation)
 
 ```typescript
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient, supabaseAdmin } from './supabase-server';
 
 export type SessionUser = {
-  id:         string;
-  email:      string;
-  role:       'admin' | 'company_admin';
-  company_id: string | null;
-  full_name:  string | null;
+  id:                  string;
+  email:               string;
+  role:                'admin' | 'company_admin';
+  company_id:          string | null;   // null for the admin user
+  full_name:           string | null;
+  onboarding_complete: boolean;
 };
 
-// Reads the session cookie and returns the user with role + company_id.
-// Returns null if not logged in.
+// Reads the session cookie (JWT-verified) then fetches role + company_id from public.users.
+// Role is NEVER read from cookies, headers, user_metadata, or app_metadata.
+// Returns null if not logged in or no DB profile found.
 export async function getSession(): Promise<SessionUser | null> {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -206,23 +145,23 @@ export async function getSession(): Promise<SessionUser | null> {
 
   const { data: profile } = await supabaseAdmin
     .from('users')
-    .select('role, company_id, full_name')
+    .select('role, company_id, full_name, onboarding_complete')
     .eq('id', user.id)
     .single();
 
   if (!profile) return null;
 
   return {
-    id:         user.id,
-    email:      user.email!,
-    role:       profile.role,
-    company_id: profile.company_id,
-    full_name:  profile.full_name,
+    id:                  user.id,
+    email:               user.email!,
+    role:                profile.role,
+    company_id:          profile.company_id,
+    full_name:           profile.full_name,
+    onboarding_complete: profile.onboarding_complete ?? false,
   };
 }
 
-// Use this at the top of every API route that requires login.
-// Returns the session user OR a ready-made 401 NextResponse.
+// Use this at the top of every API route that requires a login.
 export async function requireAuth(): Promise<
   { user: SessionUser; error: null } | { user: null; error: NextResponse }
 > {
@@ -244,17 +183,49 @@ export async function requireAdmin(): Promise<
   }
   return { user: user!, error: null };
 }
+
+// Use this in non-admin routes to ensure the company account is in good standing.
+export async function requireActiveAccount(companyId: string): Promise<NextResponse | null> {
+  const { data: company } = await supabaseAdmin
+    .from('companies')
+    .select('status, is_demo, demo_expires_at, plan_end_date')
+    .eq('id', companyId)
+    .single();
+
+  if (!company) return NextResponse.json({ error: 'Company not found' }, { status: 404 });
+
+  if (company.status === 'suspended')
+    return NextResponse.json({ error: 'Account suspended. Contact support.' }, { status: 403 });
+
+  if (company.status === 'inactive')
+    return NextResponse.json({ error: 'Account inactive. Setup payment required.' }, { status: 403 });
+
+  if (company.is_demo && company.demo_expires_at && new Date(company.demo_expires_at) < new Date())
+    return NextResponse.json({ error: 'Demo account has expired.' }, { status: 403 });
+
+  if (!company.is_demo && company.plan_end_date && new Date(company.plan_end_date) < new Date())
+    return NextResponse.json({ error: 'Plan has expired. Please renew.' }, { status: 403 });
+
+  return null; // account is active
+}
+
+// Writes an admin action to system_logs. Fire-and-forget — never throws.
+export async function logAdminAction(
+  adminId: string,
+  action: string,
+  details?: object
+): Promise<void> {
+  await supabaseAdmin.from('system_logs').insert({
+    admin_id: adminId,
+    action,
+    details,
+  }).catch(() => {});
+}
 ```
 
 ---
 
-## Step 6 — Create the middleware
-
-Create this file at the **project root** (same level as `package.json`).
-
-The middleware runs on every request. If the user is not logged in and tries to access any dashboard page, they are redirected to `/login`. If they are logged in and visit `/login`, they are redirected to `/`.
-
-**File:** `middleware.ts` (project root)
+## `middleware.ts` (current implementation)
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server';
@@ -263,7 +234,6 @@ import { createServerClient } from '@supabase/ssr';
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
 
-  // Build a Supabase client that can read/write cookies in middleware
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -280,25 +250,30 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // Refresh the session if it has expired
+  // Refreshes the session if the access token has expired.
+  // Only checks if a valid user exists — does NOT read role.
   const { data: { user } } = await supabase.auth.getUser();
 
   const { pathname } = req.nextUrl;
 
-  // If logged in and visiting /login → send to dashboard
-  if (user && pathname === '/login') {
+  // All three auth pages are public
+  const publicPaths = ['/login', '/forgot-password', '/reset-password'];
+
+  // Logged-in user visiting an auth page → send to dashboard
+  if (user && publicPaths.includes(pathname)) {
     return NextResponse.redirect(new URL('/', req.url));
   }
 
-  // If NOT logged in and visiting any non-login page → send to /login
-  if (!user && pathname !== '/login') {
+  // Not logged in visiting a protected page → send to /login
+  if (!user && !publicPaths.includes(pathname)) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 
   return res;
 }
 
-// Run middleware on everything EXCEPT static files and API routes
+// Run middleware on everything EXCEPT static files and API routes.
+// API routes protect themselves via requireAuth().
 export const config = {
   matcher: [
     '/((?!_next/static|_next/image|favicon.ico|api/).*)',
@@ -306,46 +281,13 @@ export const config = {
 };
 ```
 
+> **Important:** The middleware does NOT check role or `company_id`. It only verifies that a valid JWT exists. Role-based access is enforced by layouts (for pages) and `requireAdmin()` (for API routes).
+
 ---
 
-## Step 7 — Restructure the root layout
+## `app/(dashboard)/layout.tsx` (current implementation)
 
-Right now the root layout wraps EVERYTHING (including the future login page) inside `<Shell>` which renders the sidebar. We need to split this into two separate layouts:
-
-1. **Root layout** — minimal, no Shell, just Providers
-2. **Dashboard layout** — adds Shell (sidebar + header) for all dashboard pages
-3. **Auth layout** — plain, no sidebar, for the login page
-
-### 7a — Update `app/layout.tsx`
-
-Replace with a minimal root layout that only provides global styles and the Query provider:
-
-```tsx
-import type { Metadata } from 'next';
-import './globals.css';
-import { Providers } from './_components/Providers';
-
-export const metadata: Metadata = {
-  title: 'OsCompanyFinder',
-  description: 'B2B Lead Generation SaaS',
-};
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <body>
-        <Providers>{children}</Providers>
-      </body>
-    </html>
-  );
-}
-```
-
-### 7b — Create `app/(dashboard)/layout.tsx`
-
-This layout wraps all dashboard pages inside Shell. It protects the route (redirects to `/login` if no session) and passes the logged-in user into Shell so the sidebar can show the user's name and role:
-
-```tsx
+```typescript
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { Shell } from '@/app/_components/Shell';
@@ -354,210 +296,97 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await getSession();
   if (!session) redirect('/login');
 
-  return <Shell user={session}>{children}</Shell>;
-}
-```
+  // Non-admin users who haven't completed onboarding are redirected to the wizard
+  if (session.role !== 'admin' && !session.onboarding_complete) {
+    redirect('/onboarding');
+  }
 
-Then update `Shell.tsx` to accept the `user` prop and forward it to `Sidebar.tsx`. Update `Sidebar.tsx` to display `user.full_name` and `user.role` in the footer card.
-
-### 7c — Create `app/(auth)/layout.tsx`
-
-A plain layout for the login page — no sidebar, no header, centered on screen:
-
-```tsx
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
+    <Shell
+      isAdmin={session.role === 'admin'}
+      userName={session.full_name ?? session.email}
+      userRole={session.role === 'admin' ? 'Super Admin' : 'Company Admin'}
+    >
       {children}
-    </div>
+    </Shell>
   );
 }
 ```
 
 ---
 
-## Step 8 — Create the login page
+## `app/_components/Shell.tsx` (current implementation)
 
-**File:** `app/(auth)/login/page.tsx`
+Shell is a `'use client'` component. It receives all user data as props from the server-side layout — it does NOT fetch user data itself. There is no `useEffect`, no `supabase.auth.getSession()`, and no DB calls inside Shell.
 
 ```tsx
 'use client';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { Sidebar } from './Sidebar';
+import { Header } from './Header';
+import { cn } from '@/lib/utils';
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError]       = useState('');
-  const [loading, setLoading]   = useState(false);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
-
-    router.push('/');
-    router.refresh();
-  };
+export function Shell({
+  children,
+  isAdmin   = false,
+  userName  = '',
+  userRole  = '',
+}: {
+  children:  React.ReactNode;
+  isAdmin?:  boolean;
+  userName?: string;
+  userRole?: string;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <div className="w-full max-w-sm">
-      {/* Logo */}
-      <div className="text-center mb-8">
-        <div className="text-2xl font-bold">
-          <span className="text-[#0099CC]">Os</span>Company
-          <span className="text-[#00C48C]">Finder</span>
-        </div>
-        <p className="text-sm text-gray-500 mt-1">Sign in to your account</p>
-      </div>
-
-      {/* Card */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
-        <form onSubmit={handleLogin} className="space-y-5">
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              placeholder="you@company.com"
-              className="w-full h-10 px-3 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#006285]/30 focus:border-[#006285]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              placeholder="••••••••"
-              className="w-full h-10 px-3 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#006285]/30 focus:border-[#006285]"
-            />
-          </div>
-
-          {error && (
-            <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full h-10 rounded-lg bg-[#006285] text-white text-sm font-semibold hover:bg-[#004f6b] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-      </div>
-
-      <p className="text-center text-xs text-gray-400 mt-6">
-        Access is invitation-only. Contact your admin for credentials.
-      </p>
+    <div className="min-h-screen bg-[#F8FAFC]">
+      <Sidebar
+        collapsed={collapsed}
+        isAdmin={isAdmin}
+        userName={userName}
+        userRole={userRole}
+      />
+      <Header collapsed={collapsed} setCollapsed={setCollapsed} />
+      <main
+        className={cn(
+          'pt-[64px] min-h-screen transition-all duration-300',
+          collapsed ? 'ml-[68px]' : 'ml-[240px]'
+        )}
+      >
+        <div className="p-6">{children}</div>
+      </main>
     </div>
   );
 }
 ```
 
----
-
-## Step 9 — Add logout to the Sidebar
-
-Open `app/_components/Sidebar.tsx` and add a logout button at the bottom of the sidebar, replacing or extending the existing footer user card.
-
-Add the logout function:
-
-```tsx
-'use client';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-
-// Inside the sidebar component:
-const router = useRouter();
-
-const handleLogout = async () => {
-  await supabase.auth.signOut();
-  router.push('/login');
-  router.refresh();
-};
-```
-
-Add a logout button in the sidebar footer (below the user avatar):
-
-```tsx
-<button
-  onClick={handleLogout}
-  className="flex items-center gap-2 text-xs text-white/40 hover:text-white/80 transition-colors mt-3"
->
-  <LogOut size={13} /> Sign out
-</button>
-```
-
-Import `LogOut` from `lucide-react`.
+Shell passes `isAdmin`, `userName`, `userRole` down to `Sidebar` which uses them for the user footer card and conditional nav items (Billing only for non-admin, Admin Panel only for admin).
 
 ---
 
-## Step 10 — Update the `.env` file
+## How Role Determines What the User Sees
 
-Add this variable to `.env` (used by `@supabase/ssr` internally — same value as your existing anon key):
-
-```env
-# Already present — no change needed:
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
-```
-
-No new variables needed. The SSR package reads the same keys.
-
----
-
-## Step 11 — Test the auth flow
-
-1. Start the dev server: `npm run dev`
-2. Visit `http://localhost:3000` — you should be redirected to `/login`
-3. Enter the admin credentials you created in Step 3
-4. You should be redirected to the dashboard with the sidebar visible
-5. Click "Sign out" — you should be redirected back to `/login`
-6. Try visiting `http://localhost:3000` directly — should redirect to `/login` again
+| Condition | Where it's checked | What happens |
+|---|---|---|
+| No session | Middleware + `(dashboard)/layout.tsx` | Redirect to `/login` |
+| Session + not onboarded | `(dashboard)/layout.tsx` | Redirect to `/onboarding` |
+| `role === 'admin'` | `(dashboard)/layout.tsx` | Admin bypasses onboarding redirect |
+| `role === 'admin'` | `Shell` → `Sidebar` | Shows Admin Panel + Demo Accounts nav; hides Billing |
+| `role === 'company_admin'` | `Shell` → `Sidebar` | Shows Billing nav; hides Admin sections |
+| `role !== 'admin'` | API routes | `company_id` filter applied to all queries |
+| `role === 'admin'` | API routes + admin routes | Sees all data; `requireAdmin()` returns user |
 
 ---
 
-## Step 12 — (After auth works) Add `requireAuth` to API routes
+## Multi-Tenancy in API Routes
 
-Once login is working, protect every API route with this pattern:
+The admin has `company_id = null`. Never apply `company_id` filter unconditionally:
 
 ```typescript
-import { requireAuth } from '@/lib/auth';
-
-// Inside the handler function:
-const { user, error } = await requireAuth();
-if (error) return error;
-```
-
-> ⚠️ **Admin null company_id gotcha:** The admin user has `company_id = null`. If you blindly add `.eq('company_id', user.company_id)` to every query, the admin will get zero results. Always guard the filter with a role check:
-
-```typescript
+// Pattern used in every data-fetching route:
 let query = supabaseAdmin.from('leads').select('*');
 
-// Only scope to company if the user is not a super admin
 if (user.role !== 'admin') {
   query = query.eq('company_id', user.company_id);
 }
@@ -565,51 +394,76 @@ if (user.role !== 'admin') {
 const { data } = await query.order('created_at', { ascending: false });
 ```
 
-Routes to update (in order of importance):
-1. `app/api/leads/all/route.ts`
-2. `app/api/leads/[id]/route.ts`
-3. `app/api/scrape/route.ts`
-4. `app/api/scrape/[jobId]/route.ts`
-5. `app/api/send-email/route.ts`
-6. `app/api/export/route.ts`
-7. `app/api/templates/route.ts`
+---
+
+## API Route Pattern
+
+Every API route follows this guard chain:
+
+```typescript
+import { requireAuth, requireActiveAccount } from '@/lib/auth';
+import { checkLimit, logUsage } from '@/lib/usage';
+
+export async function POST(req: NextRequest) {
+  // 1. Require valid session
+  const { user, error } = await requireAuth();
+  if (error) return error;
+
+  // 2. Non-admin: check account is active (not suspended/expired)
+  if (user.role !== 'admin') {
+    const accountError = await requireActiveAccount(user.company_id!);
+    if (accountError) return accountError;
+  }
+
+  // 3. Non-admin: check usage quota
+  const allowed = await checkLimit(user.company_id!, 'google_search');
+  if (!allowed)
+    return NextResponse.json({ error: 'Limit reached for this month' }, { status: 403 });
+
+  // ... main logic ...
+
+  // 4. Log usage
+  await logUsage(user.company_id!, 'google_search');
+  // logUsage also fires checkAndSendUsageAlert() as a fire-and-forget side effect
+}
+```
 
 ---
 
-## File Summary
+## Dynamic API Route Params (Next.js 16)
 
-| Action | File |
-|---|---|
-| Install | `npm install @supabase/ssr` |
-| SQL | Run users table + trigger in Supabase |
-| SQL | Create first admin user in Supabase Auth + update role |
-| Modify | `lib/supabase.ts` — browser client only (strip out admin + server exports) |
-| Create | `lib/supabase-server.ts` — `supabaseAdmin` + `createSupabaseServerClient` |
-| Create | `lib/auth.ts` — `getSession`, `requireAuth`, `requireAdmin` |
-| Create | `middleware.ts` (project root) — redirect guard |
-| Modify | `app/layout.tsx` — remove Shell, keep only Providers |
-| Create | `app/(dashboard)/layout.tsx` — adds Shell, checks session, passes user |
-| Create | `app/(auth)/layout.tsx` — plain centered layout |
-| Create | `app/(auth)/login/page.tsx` — login form |
-| Modify | `app/_components/Sidebar.tsx` — add logout button |
-| Modify | All `app/api/*/route.ts` files — import `supabaseAdmin` from `@/lib/supabase-server` |
+Dynamic route handlers receive `params` as a `Promise`. Always `await params` before using the ID:
+
+```typescript
+// app/api/scrape/[jobId]/route.ts
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ jobId: string }> }
+) {
+  const { jobId } = await params;
+  // ...
+}
+```
 
 ---
 
 ## Common Issues
 
-**"Cannot read cookies in middleware"**  
-→ Make sure `middleware.ts` is at the project root, not inside `app/`.
+**"Redirect loop on login"**
+Make sure all three public paths are in `publicPaths`. The current implementation handles this correctly with:
+```typescript
+const publicPaths = ['/login', '/forgot-password', '/reset-password'];
+```
 
-**"Redirect loop on login"**  
-→ The middleware matcher is catching the `/login` page itself. Make sure `/login` is excluded — the matcher pattern `(?!_next/static|_next/image|favicon.ico|api/)` does not exclude `/login`. The middleware handles this by checking `pathname === '/login'` explicitly before redirecting.
+**"Session is null even after login"**
+The client and server must share the same cookie. `createSupabaseServerClient()` uses `cookies()` from `next/headers` — do not use hardcoded cookie strings.
 
-**"Session is null even after login"**  
-→ The client and server must share the same cookie. Make sure `createSupabaseServerClient()` uses the `cookies()` helper from `next/headers`, not a hardcoded cookie string.
-
-**"users table has no row for my auth user"**  
-→ The trigger in Step 2 only fires for NEW signups. If you created the auth user before running the SQL, insert the row manually:
+**"users table has no row for my auth user"**
+The trigger fires only for NEW signups. If you created the auth user before running the SQL, insert the row manually:
 ```sql
 INSERT INTO public.users (id, email, role)
 VALUES ('your-auth-user-uuid', 'your@email.com', 'admin');
 ```
+
+**"admin user gets no results from queries"**
+The admin has `company_id = null`. Make sure every query that filters by `company_id` checks `user.role !== 'admin'` first. Never apply `company_id` filter for admin users.

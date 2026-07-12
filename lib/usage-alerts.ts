@@ -122,11 +122,12 @@ async function sendAlertEmail(params: AlertEmailParams): Promise<void> {
     ? `You've reached your ${label} limit — OsCFinder`
     : `You've used 80% of your ${label} limit — OsCFinder`;
 
-  const html = buildAlertEmail({ companyName, label, planLabel, used, limit, pctUsed, month: monthFmt, is100 });
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.oscfinder.com';
+  const html = buildAlertEmail({ companyName, label, planLabel, used, limit, pctUsed, month: monthFmt, is100, appUrl });
 
   // Alert to company contact
   await resend.emails.send({
-    from:    'OsCFinder <billing@oscompanyfinder.com>',
+    from:    'OsCFinder <billing@mail.oscfinder.com>',
     to:      companyEmail,
     subject,
     html,
@@ -135,8 +136,8 @@ async function sendAlertEmail(params: AlertEmailParams): Promise<void> {
   // 100% alerts also notify the admin
   if (is100) {
     await resend.emails.send({
-      from:    'OsCFinder Alerts <billing@oscompanyfinder.com>',
-      to:      'billing@oscompanyfinder.com',
+      from:    'OsCFinder Alerts <billing@mail.oscfinder.com>',
+      to:      'billing@mail.oscfinder.com',
       subject: `[Admin] ${companyName} hit their ${label} limit`,
       html: `<p><strong>${companyName}</strong> (${plan}) has used all ${limit.toLocaleString()} ${label} for ${monthFmt}.</p>
              <p>They may qualify for an overage invoice or a plan upgrade.</p>`,
@@ -154,6 +155,7 @@ function buildAlertEmail(p: {
   pctUsed:     number;
   month:       string;
   is100:       boolean;
+  appUrl:      string;
 }): string {
   const barColor  = p.is100 ? '#e74c3c' : '#e67e22';
   const barWidth  = `${p.pctUsed}%`;
@@ -222,7 +224,7 @@ function buildAlertEmail(p: {
             <table cellpadding="0" cellspacing="0">
               <tr>
                 <td style="background:#0099CC;border-radius:10px;padding:12px 24px;">
-                  <a href="https://app.oscompanyfinder.com/billing"
+                  <a href="${p.appUrl}/billing"
                      style="color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;">
                     ${p.is100 ? 'Contact Us to Upgrade' : 'View Usage &amp; Billing'}
                   </a>
@@ -238,7 +240,7 @@ function buildAlertEmail(p: {
             <p style="margin:0;font-size:11px;color:#888888;">
               You are receiving this because you have an active OsCFinder account.<br>
               Questions? Reply to this email or contact
-              <a href="mailto:billing@oscompanyfinder.com" style="color:#0099CC;">billing@oscompanyfinder.com</a>
+              <a href="mailto:billing@mail.oscfinder.com" style="color:#0099CC;">billing@mail.oscfinder.com</a>
             </p>
           </td>
         </tr>

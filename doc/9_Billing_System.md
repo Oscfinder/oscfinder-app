@@ -1,5 +1,8 @@
 # Phase 9 — Billing System
 
+> **STATUS: IMPLEMENTED** — Client billing page (`/billing`) and all billing APIs are live. This document is kept as implementation reference.  
+> **Bug fixed during audit:** `app/api/billing/route.ts` was querying non-existent columns `action, total_units` from `usage_monthly_summary`. Fixed to use the correct columns `scrape_count, email_count, export_count` with `.maybeSingle()`. See `CHECKS.md` for details.
+
 > **Goal:** Complete the billing lifecycle — client-visible invoice tracking,  
 > automated overage detection and invoicing, renewal reminders, and  
 > pg_cron automation to suspend expired accounts without manual intervention.

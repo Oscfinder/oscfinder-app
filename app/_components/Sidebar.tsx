@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Building2, Zap,
   Mail, FileText, Download, BarChart2,
-  ShieldCheck, Users, LogOut, CreditCard,
+  ShieldCheck, Users, LogOut, CreditCard, Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -26,7 +26,8 @@ const dataNav = [
 ];
 
 const billingNav = [
-  { href: '/billing', label: 'Billing', icon: CreditCard },
+  { href: '/billing',         label: 'Billing',         icon: CreditCard },
+  { href: '/settings/sender', label: 'Sender Settings', icon: Settings },
 ];
 
 const adminNav = [
