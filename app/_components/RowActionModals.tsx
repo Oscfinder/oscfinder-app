@@ -96,6 +96,8 @@ export function EditModal({ lead, onSave, onClose }: EditModalProps) {
     state:     lead.state,
     local_govt: lead.local_govt,
   });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const field = (key: keyof typeof form) => (
     <div key={key}>
@@ -110,18 +112,32 @@ export function EditModal({ lead, onSave, onClose }: EditModalProps) {
     </div>
   );
 
-  const handleSave = () => {
-    onSave({
-      ...lead,
-      name:     form.name,
-      address:  form.address,
-      website:  form.website,
-      emails:   form.emails.split(',').map(e => e.trim()).filter(Boolean),
-      phones:   form.phones.split(',').map(p => p.trim()).filter(Boolean),
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError('');
+    const payload = {
+      name:       form.name,
+      address:    form.address,
+      website:    form.website,
+      emails:     form.emails.split(',').map(e => e.trim()).filter(Boolean),
+      phones:     form.phones.split(',').map(p => p.trim()).filter(Boolean),
       category:   form.category,
       state:      form.state,
       local_govt: form.local_govt,
-    });
+    };
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) { setSaveError(data.error ?? 'Failed to save changes'); setSaving(false); return; }
+      onSave({ ...lead, ...payload });
+    } catch {
+      setSaveError('Failed to save changes');
+      setSaving(false);
+    }
   };
 
   return (
@@ -129,10 +145,11 @@ export function EditModal({ lead, onSave, onClose }: EditModalProps) {
       <ModalHeader title="Edit Company" subtitle={lead.name} onClose={onClose} />
       <div className="px-6 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
         {(['name', 'address', 'website', 'emails', 'phones', 'category', 'state', 'local_govt'] as const).map(field)}
+        {saveError && <p className="text-xs text-red-500">{saveError}</p>}
       </div>
       <div className="px-6 py-3 border-t border-gray-100 flex justify-end gap-3">
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSave}>Save Changes</Button>
+        <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button onClick={handleSave} isLoading={saving}>{saving ? 'Saving...' : 'Save Changes'}</Button>
       </div>
     </Modal>
   );
@@ -148,12 +165,24 @@ export function MessageModal({ lead, onSent, onClose }: MessageModalProps) {
     `Dear ${lead.name} Team,\n\nWe would like to explore a potential partnership with your organization.\n\nKindly reach out to us at your earliest convenience.\n\nBest regards,\nThe companyFinder Team`
   );
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
 
   const handleSend = async () => {
     setSending(true);
-    await new Promise(r => setTimeout(r, 1200));
-    setSending(false);
-    onSent();
+    setSendError('');
+    try {
+      const res = await fetch('/api/send-email', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ leadId: lead.id, to, subject, body }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setSendError(data.error ?? 'Failed to send email'); setSending(false); return; }
+      onSent();
+    } catch {
+      setSendError('Failed to send email');
+      setSending(false);
+    }
   };
 
   return (
@@ -181,6 +210,7 @@ export function MessageModal({ lead, onSent, onClose }: MessageModalProps) {
             className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#006285]/30 focus:border-[#006285]"
           />
         </div>
+        {sendError && <p className="text-xs text-red-500">{sendError}</p>}
       </div>
       <div className="px-6 py-3 border-t border-gray-100 flex justify-end gap-3">
         <Button variant="outline" onClick={onClose} disabled={sending}>Cancel</Button>
@@ -241,6 +271,7 @@ export function AddModal({ onSave, onClose }: AddModalProps) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Partial<typeof EMPTY_FORM>>({});
+  const [saveError, setSaveError] = useState('');
 
   const validate = () => {
     const e: Partial<typeof EMPTY_FORM> = {};
@@ -254,27 +285,29 @@ export function AddModal({ onSave, onClose }: AddModalProps) {
   const handleSave = async () => {
     if (!validate()) return;
     setSaving(true);
-    await new Promise(r => setTimeout(r, 800));
-    onSave({
-      id:          `manual-${Date.now()}`,
-      company_id:  '',
-      place_id:    `manual-${Date.now()}`,
-      name:        form.name.trim(),
-      address:     form.address.trim(),
-      website:     form.website.trim(),
-      emails:      form.emails.split(',').map(e => e.trim()).filter(Boolean),
-      phones:      form.phones.split(',').map(p => p.trim()).filter(Boolean),
-      category:    form.category.trim(),
-      state:       form.state.trim(),
-      local_govt:  form.local_govt.trim(),
-      linkedin_url: '',
-      source:      'manual',
-      lead_score:  0,
-      enriched_at: null,
-      status:      'new',
-      mail_sent:   false,
-      created_at:  new Date().toISOString(),
-    });
+    setSaveError('');
+    try {
+      const res = await fetch('/api/leads', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          name:       form.name.trim(),
+          address:    form.address.trim(),
+          website:    form.website.trim(),
+          emails:     form.emails.split(',').map(e => e.trim()).filter(Boolean),
+          phones:     form.phones.split(',').map(p => p.trim()).filter(Boolean),
+          category:   form.category.trim(),
+          state:      form.state.trim(),
+          local_govt: form.local_govt.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setSaveError(data.error ?? 'Failed to add company'); setSaving(false); return; }
+      onSave(data as Lead);
+    } catch {
+      setSaveError('Failed to add company');
+      setSaving(false);
+    }
   };
 
   const fields: { key: keyof typeof EMPTY_FORM; label: string; placeholder: string; required?: boolean }[] = [
@@ -309,6 +342,7 @@ export function AddModal({ onSave, onClose }: AddModalProps) {
             {errors[key] && <p className="text-xs text-red-500 mt-1">{errors[key]}</p>}
           </div>
         ))}
+        {saveError && <p className="text-xs text-red-500">{saveError}</p>}
       </div>
       <div className="px-6 py-3 border-t border-gray-100 flex justify-end gap-3 bg-gray-50 rounded-b-2xl">
         <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>

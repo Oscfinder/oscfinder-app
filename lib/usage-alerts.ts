@@ -1,7 +1,9 @@
 import { Resend } from 'resend';
 import { supabaseAdmin } from './supabase-server';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Fallback string prevents module-evaluation crash during `next build`
+// when env vars aren't yet resolved; never used at runtime.
+const resend = new Resend(process.env.RESEND_API_KEY ?? 'placeholder-resend-key');
 
 type AlertAction = 'google_search' | 'email_sent' | 'export';
 type Threshold   = '80%' | '100%';

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { supabaseAdmin }                                            from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount }                        from '@/lib/auth';
 import { checkLimit, logUsage }                                     from '@/lib/usage';
@@ -34,7 +34,10 @@ export async function POST(req: NextRequest) {
 
   await logUsage(user.company_id!, 'google_search');
 
-  runPipeline(job.id, category, location, user.company_id!);
+  // `after()` keeps the serverless invocation alive until the pipeline
+  // finishes, instead of letting the platform freeze/kill it once the
+  // response below is sent (which would silently strand jobs at "running").
+  after(() => runPipeline(job.id, category, location, user.company_id!));
 
   return NextResponse.json({ jobId: job.id });
 }

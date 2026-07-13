@@ -1,10 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Send, CheckCheck, ChevronDown, MailOpen, Users } from 'lucide-react';
 import { Lead, MailTemplate } from '@/types';
 import { Button } from './Button';
 import { cn } from '@/lib/utils';
-import { DUMMY_TEMPLATES } from '@/app/data/mailTemplatesData';
 
 interface BulkSendModalProps {
   selected: Lead[];
@@ -12,23 +11,61 @@ interface BulkSendModalProps {
   onClose: () => void;
 }
 
-
+const fillTemplate = (text: string, lead: Lead) => text.replace(/\{\{company_name\}\}/g, lead.name);
 
 export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps) {
-  const [chosenId, setChosenId]   = useState<string>('');
-  const [sending, setSending]     = useState(false);
-  const [done, setDone]           = useState(false);
+  const [templates, setTemplates]   = useState<MailTemplate[]>([]);
+  const [loadingTpl, setLoadingTpl] = useState(true);
+  const [chosenId, setChosenId]     = useState<string>('');
+  const [sending, setSending]       = useState(false);
+  const [done, setDone]             = useState(false);
+  const [error, setError]           = useState('');
 
-  const chosen = DUMMY_TEMPLATES.find(t => t.id === chosenId) ?? null;
+  useEffect(() => {
+    fetch('/api/templates')
+      .then(r => r.json())
+      .then(data => setTemplates(Array.isArray(data) ? data : []))
+      .catch(() => setError('Failed to load templates'))
+      .finally(() => setLoadingTpl(false));
+  }, []);
+
+  const chosen = templates.find(t => t.id === chosenId) ?? null;
+  const recipients = selected.filter(l => l.emails?.[0]);
+  const skipped = selected.length - recipients.length;
 
   const handleSend = async () => {
     if (!chosen) return;
     setSending(true);
-    await new Promise(r => setTimeout(r, 1500));
+    setError('');
+
+    const sentIds: string[] = [];
+    for (const lead of recipients) {
+      try {
+        const res = await fetch('/api/send-email', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            leadId:  lead.id,
+            to:      lead.emails[0],
+            subject: fillTemplate(chosen.subject, lead),
+            body:    fillTemplate(chosen.body, lead),
+          }),
+        });
+        if (res.ok) sentIds.push(lead.id);
+        else if (res.status === 403) { setError((await res.json()).error ?? 'Email limit reached'); break; }
+      } catch {
+        // skip this recipient, continue with the rest
+      }
+    }
+
     setSending(false);
-    setDone(true);
-    await new Promise(r => setTimeout(r, 900));
-    onSent(selected.map(l => l.id));
+    if (sentIds.length > 0) {
+      setDone(true);
+      await new Promise(r => setTimeout(r, 700));
+      onSent(sentIds);
+    } else if (!error) {
+      setError('Failed to send to any recipient');
+    }
   };
 
   return (
@@ -42,6 +79,7 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
             <h2 className="text-base font-bold text-gray-800">Send Template to Selected</h2>
             <p className="text-xs text-gray-500 mt-0.5">
               Sending to <span className="font-semibold text-[#006285]">{selected.length}</span> {selected.length === 1 ? 'company' : 'companies'}
+              {skipped > 0 && <span className="text-amber-600"> ({skipped} skipped — no email on file)</span>}
             </p>
           </div>
           <button onClick={onClose} className="flex items-center justify-center w-7 h-7 rounded-lg hover:bg-gray-100 transition-colors">
@@ -77,19 +115,23 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
               <select
                 value={chosenId}
                 onChange={e => setChosenId(e.target.value)}
+                disabled={loadingTpl}
                 className={cn(
                   'w-full h-11 pl-4 pr-9 rounded-lg border text-sm appearance-none cursor-pointer',
                   'focus:outline-none focus:ring-2 focus:ring-[#006285]/30 focus:border-[#006285]',
                   !chosenId ? 'text-gray-400 border-gray-300' : 'text-gray-700 border-[#006285]'
                 )}
               >
-                <option value="">— Select a template —</option>
-                {DUMMY_TEMPLATES.map(t => (
+                <option value="">{loadingTpl ? '— Loading templates —' : '— Select a template —'}</option>
+                {templates.map(t => (
                   <option key={t.id} value={t.id}>{t.title} ({t.tag})</option>
                 ))}
               </select>
               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
+            {!loadingTpl && templates.length === 0 && (
+              <p className="text-xs text-gray-400 mt-1.5">No templates yet — create one on the Templates page first.</p>
+            )}
           </div>
 
           {/* Template preview */}
@@ -103,6 +145,8 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
               <p className="text-xs text-gray-500 leading-relaxed line-clamp-3 whitespace-pre-line">{chosen.body}</p>
             </div>
           )}
+
+          {error && <p className="text-xs text-red-500">{error}</p>}
         </div>
 
         {/* Footer */}
@@ -114,14 +158,14 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
             <Button variant="outline" onClick={onClose} disabled={sending || done}>Cancel</Button>
             <Button
               onClick={handleSend}
-              disabled={!chosenId || done}
+              disabled={!chosenId || done || recipients.length === 0}
               isLoading={sending}
               className={cn('gap-2 min-w-[130px]', done && 'bg-emerald-600 hover:bg-emerald-600')}
             >
               {done
                 ? <><CheckCheck size={15} /> Sent!</>
                 : !sending
-                  ? <><Send size={14} /> Send to {selected.length}</>
+                  ? <><Send size={14} /> Send to {recipients.length}</>
                   : 'Sending...'
               }
             </Button>

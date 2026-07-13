@@ -4,7 +4,9 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount } from '@/lib/auth';
 import { checkLimit, logUsage } from '@/lib/usage';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Fallback string prevents module-evaluation crash during `next build`
+// when env vars aren't yet resolved; never used at runtime.
+const resend = new Resend(process.env.RESEND_API_KEY ?? 'placeholder-resend-key');
 const FROM   = process.env.RESEND_FROM ?? 'OsCompanyFinder <onboarding@resend.dev>';
 
 export async function POST(req: NextRequest) {
