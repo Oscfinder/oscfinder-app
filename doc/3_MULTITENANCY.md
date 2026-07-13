@@ -1,8 +1,10 @@
 # Phase 3 — Multi-Tenancy (Data Isolation)
 
+> **STATUS: IMPLEMENTED** — All API routes are scoped by `company_id`. This document is kept as implementation reference.
+
 > Goal: Every database query is scoped to the logged-in user's `company_id`.  
 > A `company_admin` can only see their own company's data.  
-> An `admin` (you) can see everything.
+> An `admin` (super admin) can see everything.
 
 ---
 

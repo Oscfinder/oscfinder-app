@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount } from '@/lib/auth';
-import { checkLimit, logUsage } from '@/lib/usage';
-import { Resend } from 'resend';
+import { checkLimit } from '@/lib/usage';
+import { getSender, getRemainingDailyQuota } from '@/lib/senders';
 
-// Fallback string prevents module-evaluation crash during `next build`
-// when env vars aren't yet resolved; never used at runtime.
-const resend = new Resend(process.env.RESEND_API_KEY ?? 'placeholder-resend-key');
-const FROM   = process.env.RESEND_FROM ?? 'OsCompanyFinder <onboarding@resend.dev>';
+// Actual sending happens in app/api/campaigns/process/route.ts, via the company's own
+// SMTP mailbox — this route only validates, gates, and enqueues campaign_recipients.
+// Resend is not used here; it remains platform-only (usage alerts, admin notifications).
 
 // ── GET /api/email/campaigns ─────────────────────────────────────
 export async function GET() {
@@ -65,7 +64,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ campaign, sent: 0, skipped: 0 });
   }
 
-  // ── Send Now ─────────────────────────────────────────────────
+  // ── Send Now (queues for the campaign worker — see app/api/campaigns/process) ──
   if (!template_id)
     return NextResponse.json({ error: 'Select a template before sending' }, { status: 400 });
 
@@ -80,12 +79,25 @@ export async function POST(req: NextRequest) {
   if (tplError || !template)
     return NextResponse.json({ error: 'Template not found' }, { status: 404 });
 
-  // 2. Check email limit
+  // 2. Sender must be verified before any campaign can be queued
+  const sender = await getSender(user.company_id!);
+  if (!sender || sender.status !== 'verified')
+    return NextResponse.json({ error: 'No verified sending mailbox configured' }, { status: 403 });
+
+  // 3. Check plan's monthly email limit
   const allowed = await checkLimit(user.company_id!, 'email_sent');
   if (!allowed)
     return NextResponse.json({ error: 'Email limit reached for this month' }, { status: 403 });
 
-  // 3. Build recipient list
+  // 4. Sender's own daily cap — if already exhausted today, don't even queue yet
+  const remainingToday = await getRemainingDailyQuota(sender);
+  if (remainingToday <= 0)
+    return NextResponse.json(
+      { error: 'Daily sending limit reached for your mailbox. Sends resume tomorrow.' },
+      { status: 429 }
+    );
+
+  // 5. Build recipient list
   let leadQuery = supabaseAdmin
     .from('leads')
     .select('id, name, emails, category, state, local_govt, website')
@@ -107,14 +119,14 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
 
-  // 4. Create campaign record (status: sending)
+  // 6. Create campaign record (status: queued) — the worker takes it from here
   const { data: campaign, error: campaignError } = await supabaseAdmin
     .from('email_campaigns')
     .insert({
       company_id:       user.company_id,
       template_id,
       name:             name.trim(),
-      status:           'sending',
+      status:           'queued',
       total_recipients: recipients.length,
     })
     .select()
@@ -123,78 +135,29 @@ export async function POST(req: NextRequest) {
   if (campaignError)
     return NextResponse.json({ error: campaignError.message }, { status: 500 });
 
-  // 5. Send emails + track events
-  let sentCount = 0;
-  const skipped: string[] = [];
+  // 7. Enqueue one campaign_recipients row per lead
+  const { error: recipientsError } = await supabaseAdmin
+    .from('campaign_recipients')
+    .insert(
+      recipients.map(lead => ({
+        campaign_id: campaign.id,
+        company_id:  user.company_id,
+        lead_id:     lead.id,
+        email:       lead.emails[0],
+        status:      'queued',
+      }))
+    );
 
-  for (const lead of recipients) {
-    const to      = lead.emails[0];
-    const subject = personalize(template.subject, lead);
-    const html    = personalize(template.body,    lead);
-
-    const { error: sendError } = await resend.emails.send({
-      from: FROM,
-      to:   [to],
-      subject,
-      html,
-      tags: [
-        { name: 'campaign_id', value: campaign.id },
-        { name: 'company_id',  value: user.company_id! },
-      ],
-    });
-
-    if (sendError) {
-      skipped.push(to);
-      continue;
-    }
-
-    sentCount++;
-
-    await supabaseAdmin.from('email_events').insert({
-      company_id:  user.company_id,
-      campaign_id: campaign.id,
-      email:       to,
-      event:       'sent',
-    });
-
-    await supabaseAdmin
-      .from('leads')
-      .update({ mail_sent: true, status: 'contacted' })
-      .eq('id', lead.id)
-      .eq('company_id', user.company_id!);
-  }
-
-  // 6. Log usage + increment template counter
-  if (sentCount > 0) {
-    await logUsage(user.company_id!, 'email_sent', sentCount, {
-      campaign_id:   campaign.id,
-      campaign_name: name,
-    });
-
-    await supabaseAdmin.rpc('increment_template_use_count', {
-      p_template_id: template_id,
-    });
-  }
-
-  // 7. Finalize campaign
-  await supabaseAdmin
-    .from('email_campaigns')
-    .update({
-      status:       sentCount > 0 ? 'completed' : 'failed',
-      sent_count:   sentCount,
-      completed_at: new Date().toISOString(),
-    })
-    .eq('id', campaign.id);
+  if (recipientsError)
+    return NextResponse.json({ error: recipientsError.message }, { status: 500 });
 
   return NextResponse.json({
     campaign_id: campaign.id,
-    sent:        sentCount,
-    skipped:     skipped.length,
-    total:       recipients.length,
+    queued:      recipients.length,
   });
 }
 
-function personalize(
+export function personalize(
   text: string,
   lead: { name: string; category: string; state?: string; website?: string }
 ) {

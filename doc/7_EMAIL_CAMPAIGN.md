@@ -1,5 +1,7 @@
 # Phase 7 — Email Campaign System
 
+> **STATUS: IMPLEMENTED** — Campaign builder, Resend sending, and event webhook tracking are all live. This document is kept as implementation reference.
+
 > **Goal:** Replace single-shot email sends with tracked campaigns.  
 > Every email is attributed to a named campaign. Opens, clicks, and bounces  
 > flow back via Resend webhooks and update the campaign's live stats.

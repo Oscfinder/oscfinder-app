@@ -1,5 +1,10 @@
 # Phase 10 — Client Onboarding Flow
 
+> **STATUS: IMPLEMENTED** — The 4-step onboarding wizard is live. Admin users bypass it entirely. This document is kept as implementation reference.  
+> **SQL pending:** Run the `onboarding_complete` column migration in Supabase if not yet done (see `CHECKS.md`).  
+> **Note on first-run page code:** The `first-run/page.tsx` sample below calls `/api/scrape` with `{ query }`. The actual scrape API requires `{ category, location }` — not a single `query` string. The live implementation uses `{ category, location }`.  
+> **Note on dashboard layout code:** The `(dashboard)/layout.tsx` sample shows `<Shell>{children}</Shell>` without passing props. The actual layout passes `isAdmin`, `userName`, and `userRole` as individual props to Shell. See `2_AUTH.md` for the correct implementation.
+
 > **Goal:** New company users see a 4-step setup wizard on their very first login  
 > instead of an empty dashboard. They pick their industry, choose their state/LGA,  
 > and generate their first batch of leads before reaching the main app.

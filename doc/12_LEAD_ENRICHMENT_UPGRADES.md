@@ -1,5 +1,7 @@
 # Phase 12 — Lead Enrichment Upgrades
 
+> **STATUS: IMPLEMENTED** — All four enriched fields are populated by the scrape pipeline on every lead. This document is kept as implementation reference.
+
 > **Goal:** Populate the four new lead fields — `state`, `local_govt`, `lead_score`, `linkedin_url` —  
 > during the scrape pipeline so every lead comes out enriched.
 

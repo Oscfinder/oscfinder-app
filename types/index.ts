@@ -207,7 +207,7 @@ export interface RevenueSummary {
 }
 
 // ── Email Campaign ───────────────────────────────────────────────
-export type CampaignStatus = 'draft' | 'sending' | 'completed' | 'failed';
+export type CampaignStatus = 'draft' | 'queued' | 'sending' | 'completed' | 'failed';
 
 export interface EmailCampaign {
   id:               string;
@@ -239,6 +239,42 @@ export interface EmailEvent {
   email:       string;
   event:       EmailEventType;
   metadata:    Record<string, unknown> | null;
+  created_at:  string;
+}
+
+// ── Email Sender (per-client SMTP mailbox for campaign sends) ────
+export type SenderStatus = 'pending' | 'verified' | 'failed';
+
+export interface EmailSender {
+  id:                string;
+  company_id:        string;
+  domain_id:         string | null;
+  email:             string;
+  is_default:        boolean;
+  display_name:      string | null;
+  smtp_host:         string | null;
+  smtp_port:         number | null;
+  smtp_username:     string | null;
+  // smtp_password intentionally omitted — never returned by the API
+  reply_to:          string | null;
+  daily_limit:       number;
+  status:            SenderStatus;
+  last_verified_at:  string | null;
+  last_error:        string | null;
+  created_at:        string;
+}
+
+export type CampaignRecipientStatus = 'queued' | 'sent' | 'failed';
+
+export interface CampaignRecipient {
+  id:          string;
+  campaign_id: string;
+  company_id:  string;
+  lead_id:     string | null;
+  email:       string;
+  status:      CampaignRecipientStatus;
+  error:       string | null;
+  sent_at:     string | null;
   created_at:  string;
 }
 

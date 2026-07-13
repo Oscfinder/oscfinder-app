@@ -1,5 +1,8 @@
 # Phase 4 — Usage Tracking
 
+> **STATUS: IMPLEMENTED** — `lib/usage.ts` is live. `logUsage()` and `checkLimit()` are wired into all three billable routes. This document is kept as implementation reference.  
+> **Note:** The `logUsage()` function shown in this doc was later extended in Phase 11 to also call `checkAndSendUsageAlert()` as a fire-and-forget side effect. See `11_USAGE_ALERTS.md` for that update.
+
 > Goal: Every billable action (scrape, email, export) writes to `usage_logs`.  
 > The `update_usage_summary` DB trigger keeps `usage_monthly_summary` up to date automatically.  
 > Every API checks the limit **before** executing — if the company is over their plan limit, they get a 403.

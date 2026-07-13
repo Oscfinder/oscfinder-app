@@ -1,5 +1,7 @@
 # Phase 6 — New UI (Front-End Rebuild)
 
+> **STATUS: IMPLEMENTED** — The new UI is live. This document is the original build guide kept as implementation reference.
+
 > Goal: Rebuild the frontend to exactly match `OsCompanyFinder_Dashboard (1).html`.  
 > Dark navy sidebar, DM Sans + DM Mono fonts, 9 pages, updated dashboard.
 
@@ -311,38 +313,29 @@ export function Sidebar({
 
 ## Step 6 — Update `app/_components/Shell.tsx`
 
-**Key differences:** topbar is now 64px, fetch user name + role to pass to Sidebar footer.
+**Key differences:** topbar is now 64px. `isAdmin`, `userName`, and `userRole` are received as props from the server-side `(dashboard)/layout.tsx` — Shell does NOT fetch user data client-side.
+
+> **Important:** There is NO `useEffect`, NO `supabase.auth.getSession()` call, and NO DB queries inside Shell. The server layout reads the session and passes the data down as props. Shell only manages the `collapsed` sidebar state.
 
 ```tsx
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/lib/supabase';
 
-export function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({
+  children,
+  isAdmin   = false,
+  userName  = '',
+  userRole  = '',
+}: {
+  children:  React.ReactNode;
+  isAdmin?:  boolean;
+  userName?: string;
+  userRole?: string;
+}) {
   const [collapsed, setCollapsed] = useState(false);
-  const [isAdmin,   setIsAdmin]   = useState(false);
-  const [userName,  setUserName]  = useState('');
-  const [userRole,  setUserRole]  = useState('');
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) return;
-      supabase
-        .from('users')
-        .select('role, full_name')
-        .eq('id', session.user.id)
-        .single()
-        .then(({ data }) => {
-          if (!data) return;
-          setUserName(data.full_name ?? session.user.email ?? '');
-          setUserRole(data.role === 'admin' ? 'Super Admin' : 'Company Admin');
-          if (data.role === 'admin') setIsAdmin(true);
-        });
-    });
-  }, []);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -362,6 +355,34 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <div className="p-6 max-w-screen-xl mx-auto">{children}</div>
       </main>
     </div>
+  );
+}
+```
+
+Shell receives its data from `app/(dashboard)/layout.tsx`:
+
+```tsx
+// app/(dashboard)/layout.tsx — server component
+import { redirect } from 'next/navigation';
+import { getSession } from '@/lib/auth';
+import { Shell } from '@/app/_components/Shell';
+
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const session = await getSession();
+  if (!session) redirect('/login');
+
+  if (session.role !== 'admin' && !session.onboarding_complete) {
+    redirect('/onboarding');
+  }
+
+  return (
+    <Shell
+      isAdmin={session.role === 'admin'}
+      userName={session.full_name ?? session.email}
+      userRole={session.role === 'admin' ? 'Super Admin' : 'Company Admin'}
+    >
+      {children}
+    </Shell>
   );
 }
 ```

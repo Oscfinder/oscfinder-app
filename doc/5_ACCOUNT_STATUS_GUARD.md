@@ -1,5 +1,7 @@
 # Phase 5 — Account Status Guard
 
+> **STATUS: IMPLEMENTED** — `requireActiveAccount()` is live in `lib/auth.ts` and called from all non-admin routes. This document is kept as implementation reference.
+
 > Goal: Every API call checks 3 things in order: **(1) logged in → (2) account active → (3) within plan limits.**  
 > If a company's account is suspended, a demo has expired, or a paid plan has lapsed, every protected route returns a 403 before any data is touched.
 
@@ -326,17 +328,22 @@ export async function GET(req: NextRequest) {
   const location = searchParams.get('location') ?? '';
   const category = searchParams.get('category') ?? '';
 
+  // NOTE: 'existing' status no longer exists. Lead status values are:
+  // 'new' | 'contacted' | 'qualified' | 'ignored'
+  // The /existing-clients route is a legacy feature from before the Phase 1 migration.
+  // The leads table no longer has a 'location' column — use 'state' and 'local_govt'.
   let query = supabaseAdmin
     .from('leads')
     .select('*', { count: 'exact' })
-    .eq('status', 'existing')
+    .eq('status', 'existing')   // ← LEGACY: 'existing' status was removed in Phase 1 migration
     .order('created_at', { ascending: false });
 
   if (user.role !== 'admin') {
     query = query.eq('company_id', user.company_id);
   }
 
-  if (location) query = query.eq('location', location);
+  // NOTE: leads no longer has a 'location' column — use 'state' and 'local_govt' instead
+  if (location) query = query.eq('location', location); // ← LEGACY: 'location' column removed in Phase 1
   if (category) query = query.eq('category', category);
   if (search)   query = query.or(`name.ilike.%${search}%,address.ilike.%${search}%,category.ilike.%${search}%`);
 
