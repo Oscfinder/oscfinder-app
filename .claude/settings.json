@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(node -e ' *)",
+      "Bash(node \"C:\\\\Users\\\\ANCHOR\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-ANCHOR-Documents-OscompanyFinder-oscfinder-app\\\\9b57d087-fa00-4406-9472-ca7ff507ea3a\\\\scratchpad\\\\check-rpc.js\" \".env\" \"$\\(pwd\\)/node_modules/@supabase/supabase-js\")"
+    ]
+  }
+}
