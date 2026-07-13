@@ -39,20 +39,12 @@ export async function getRemainingDailyQuota(sender: SenderRow): Promise<number>
   return Math.max(0, sender.daily_limit - (data?.sent_count ?? 0));
 }
 
+// Atomic — the increment happens in a single SQL statement (see migration 014), so
+// concurrent callers (the cron worker and a live bulk-send hitting the same sender at
+// the same moment) can't race each other into losing an increment.
 export async function incrementDailyUsage(senderId: string): Promise<void> {
-  const day = todayKey();
-
-  const { data: existing } = await supabaseAdmin
-    .from('sender_daily_usage')
-    .select('sent_count')
-    .eq('sender_id', senderId)
-    .eq('day', day)
-    .maybeSingle();
-
-  await supabaseAdmin
-    .from('sender_daily_usage')
-    .upsert(
-      { sender_id: senderId, day, sent_count: (existing?.sent_count ?? 0) + 1 },
-      { onConflict: 'sender_id,day' }
-    );
+  await supabaseAdmin.rpc('increment_sender_daily_usage', {
+    p_sender_id: senderId,
+    p_day:       todayKey(),
+  });
 }

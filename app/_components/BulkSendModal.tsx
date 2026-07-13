@@ -52,7 +52,7 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
           }),
         });
         if (res.ok) sentIds.push(lead.id);
-        else if (res.status === 403) { setError((await res.json()).error ?? 'Email limit reached'); break; }
+        else if (res.status === 403 || res.status === 429) { setError((await res.json()).error ?? 'Sending stopped'); break; }
       } catch {
         // skip this recipient, continue with the rest
       }
