@@ -1,13 +1,27 @@
-const API_KEY = process.env.GOOGLE_PLACES_API_KEY!;
-const BASE    = 'https://maps.googleapis.com/maps/api/place';
+const BASE = 'https://maps.googleapis.com/maps/api/place';
+
+// Statuses that mean "the request worked, there just might be no data".
+// Anything else (REQUEST_DENIED, OVER_QUERY_LIMIT, INVALID_REQUEST, UNKNOWN_ERROR)
+// means the key/quota/request is broken and must not be treated as "no results".
+const OK_STATUSES = new Set(['OK', 'ZERO_RESULTS']);
+
+function getApiKey(): string {
+  const key = process.env.GOOGLE_PLACES_API_KEY;
+  if (!key) throw new Error('GOOGLE_PLACES_API_KEY is not set');
+  return key;
+}
 
 export async function getCompanies(category: string, location: string) {
   const query = `${category} in ${location}`;
   const res   = await fetch(
-    `${BASE}/textsearch/json?query=${encodeURIComponent(query)}&key=${API_KEY}`
+    `${BASE}/textsearch/json?query=${encodeURIComponent(query)}&key=${getApiKey()}`
   );
   const data = await res.json();
-  console.log('data', data);
+
+  if (!OK_STATUSES.has(data.status)) {
+    throw new Error(`Google Places textsearch failed: ${data.status} — ${data.error_message ?? 'no details'}`);
+  }
+
   return (data.results ?? []).map((p: any) => ({
     name:    p.name,
     address: p.formatted_address,
@@ -18,9 +32,14 @@ export async function getCompanies(category: string, location: string) {
 export async function getPlaceDetails(placeId: string) {
   // address_components added so we can extract real state + LGA
   const res  = await fetch(
-    `${BASE}/details/json?place_id=${placeId}&fields=name,website,formatted_phone_number,address_components&key=${API_KEY}`
+    `${BASE}/details/json?place_id=${placeId}&fields=name,website,formatted_phone_number,address_components&key=${getApiKey()}`
   );
   const data = await res.json();
+
+  if (!OK_STATUSES.has(data.status)) {
+    throw new Error(`Google Places details failed: ${data.status} — ${data.error_message ?? 'no details'}`);
+  }
+
   return data.result ?? null;
 }
 

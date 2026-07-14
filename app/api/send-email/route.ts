@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount } from '@/lib/auth';
 import { checkLimit, logUsage } from '@/lib/usage';
+import { decrypt } from '@/lib/crypto';
+import { getSender, getRemainingDailyQuota, incrementDailyUsage } from '@/lib/senders';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM   = process.env.RESEND_FROM ?? 'OsCFinder <hello@mail.oscfinder.com>';
-
+// Direct lead outreach (single-send + bulk-send from the Leads page) — must go through
+// the company's own verified SMTP mailbox, same as campaigns. Client outreach must
+// never go through the platform Resend account. See doc/13_EMAIL_SMTP_SENDERS.md.
 export async function POST(req: NextRequest) {
   const { user, error } = await requireAuth();
   if (error) return error;
@@ -21,18 +23,49 @@ export async function POST(req: NextRequest) {
     if (accountError) return accountError;
   }
 
+  const sender = await getSender(user.company_id!);
+  if (!sender || sender.status !== 'verified' || !sender.smtp_password)
+    return NextResponse.json({ error: 'No verified sending mailbox configured' }, { status: 403 });
+
   const allowed = await checkLimit(user.company_id!, 'email_sent');
   if (!allowed)
     return NextResponse.json({ error: 'Email limit reached for this month' }, { status: 403 });
 
-  const { error: sendError } = await resend.emails.send({
-    from:    FROM,
-    to:      [to],
-    subject,
-    text:    body,
+  const remainingToday = await getRemainingDailyQuota(sender);
+  if (remainingToday <= 0)
+    return NextResponse.json(
+      { error: 'Daily sending limit reached for your mailbox. Sends resume tomorrow.' },
+      { status: 429 }
+    );
+
+  let password: string;
+  try {
+    password = decrypt(sender.smtp_password);
+  } catch {
+    return NextResponse.json({ error: 'Sender credentials could not be decrypted — reverify your mailbox in Settings' }, { status: 500 });
+  }
+
+  const port = sender.smtp_port ?? 465;
+  const transporter = nodemailer.createTransport({
+    host:   sender.smtp_host!,
+    port,
+    secure: port === 465,
+    auth:   { user: sender.smtp_username ?? sender.email, pass: password },
   });
 
-  if (sendError) return NextResponse.json({ error: sendError.message }, { status: 500 });
+  try {
+    await transporter.sendMail({
+      from:    `"${sender.display_name || sender.email}" <${sender.email}>`,
+      replyTo: sender.reply_to ?? sender.email,
+      to,
+      subject,
+      text:    body,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? 'Failed to send email' }, { status: 500 });
+  }
+
+  await incrementDailyUsage(sender.id);
 
   const recipientCount = Array.isArray(to) ? to.length : 1;
   await logUsage(user.company_id!, 'email_sent', recipientCount);
