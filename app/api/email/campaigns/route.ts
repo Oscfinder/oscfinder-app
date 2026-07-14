@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount } from '@/lib/auth';
 import { checkLimit } from '@/lib/usage';
 import { getSender, getSentToday, getRemainingCeiling, hasAcknowledgmentForToday } from '@/lib/senders';
+import { getRecipientCounts } from '@/lib/campaignRecipients';
 
 // Actual sending happens in app/api/campaigns/process/route.ts, via the company's own
 // SMTP mailbox — this route only validates, gates, and enqueues campaign_recipients.
@@ -25,7 +26,29 @@ export async function GET() {
   const { data, error: dbError } = await query;
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });
 
-  return NextResponse.json(data ?? []);
+  const campaigns = (data ?? []) as any[];
+  const counts = await getRecipientCounts(campaigns.map(c => c.id));
+
+  // Admin views span every company — computing resumes_tomorrow correctly there would
+  // mean one sender lookup per distinct company. Admin isn't the one composing/sending
+  // campaigns, so this is skipped for admin requests rather than added; recipient
+  // counts (keyed by campaign id, not company) are unaffected either way.
+  let remainingCeiling: number | null = null;
+  if (user.role !== 'admin' && user.company_id) {
+    const sender = await getSender(user.company_id);
+    if (sender) remainingCeiling = await getRemainingCeiling(sender);
+  }
+
+  const enriched = campaigns.map(c => {
+    const recipientCounts = counts.get(c.id) ?? { queued: 0, sent: 0, failed: 0 };
+    return {
+      ...c,
+      recipient_counts:  recipientCounts,
+      resumes_tomorrow:  recipientCounts.queued > 0 && remainingCeiling !== null && remainingCeiling <= 0,
+    };
+  });
+
+  return NextResponse.json(enriched);
 }
 
 // ── POST /api/email/campaigns ────────────────────────────────────

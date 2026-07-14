@@ -270,3 +270,28 @@
   409, so included for consistency).
 - `/settings/sender` now shows `{sent_today} sent today · advisory limit {daily_limit}
   · provider ceiling {technical_ceiling}`.
+
+---
+
+## 2026-07-15
+
+### Campaign stats UI — real metrics only
+- SMTP campaigns have no delivery webhook, so `opened_count`/`clicked_count`/
+  `bounced_count` on `email_campaigns` never move off 0 — the UI showing "Open Rate" /
+  "Click Rate" read as broken. Separately, `sent_count` itself is stale mid-drain: the
+  worker only writes it back once a campaign fully completes, so an in-progress
+  campaign's real send count only ever existed in `campaign_recipients` row statuses.
+- New `lib/campaignRecipients.ts` — `getRecipientCounts(campaignIds)`, one aggregate
+  query (not per-campaign) returning queued/sent/failed counts per campaign.
+- `app/api/email/campaigns` (list) and `.../[id]` (detail): both now attach
+  `recipient_counts` and a `resumes_tomorrow` flag (derived from `getRemainingCeiling`
+  — skipped for admin's cross-company view, which isn't the primary send-management
+  surface) to each campaign.
+- `app/(dashboard)/email/page.tsx`: replaced Open Rate/Click Rate stat cards with "In
+  Queue"/"Failed"; replaced the Recipients/Sent/Open Rate table columns with one
+  Progress column ("{sent} of {total} sent", failed count, queued/"Resumes tomorrow");
+  replaced the campaign detail's Open Rate/Click Rate stats and Opened/Clicked/Bounced
+  line with Queued/Failed stats and a "Replies go directly to your reply-to inbox"
+  note; fixed the event-log empty-state copy which referenced Resend.
+- `opened_count`/`clicked_count`/`bounced_count` columns, `email_events`, and its
+  webhook receiver route are untouched — left dormant for possible future tracking.

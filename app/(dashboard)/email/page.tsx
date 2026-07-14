@@ -346,9 +346,8 @@ function DetailModal({ campaignId, onClose }: { campaignId: string; onClose: () 
     queryFn:  () => fetch(`/api/email/campaigns/${campaignId}`).then(r => r.json()),
   });
 
-  const c = data?.campaign;
-  const openRate  = c && c.sent_count > 0 ? Math.round((c.opened_count  / c.sent_count) * 100) : 0;
-  const clickRate = c && c.sent_count > 0 ? Math.round((c.clicked_count / c.sent_count) * 100) : 0;
+  const c  = data?.campaign;
+  const rc = c?.recipient_counts ?? { queued: 0, sent: 0, failed: 0 };
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -358,12 +357,17 @@ function DetailModal({ campaignId, onClose }: { campaignId: string; onClose: () 
           <div>
             <h2 className="text-[17px] font-bold text-[#0A1628]">{c?.name ?? 'Campaign'}</h2>
             {c && (
-              <span className={cn(
-                'inline-block mt-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full capitalize',
-                STATUS_BADGE[c.status as CampaignStatus]
-              )}>
-                {c.status}
-              </span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={cn(
+                  'inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full capitalize',
+                  STATUS_BADGE[c.status as CampaignStatus]
+                )}>
+                  {c.status}
+                </span>
+                {c.resumes_tomorrow && (
+                  <span className="text-[11px] text-[#888888]">Resumes tomorrow</span>
+                )}
+              </div>
             )}
           </div>
           <button onClick={onClose} className="text-[#888888] hover:text-[#0A1628] transition-colors">
@@ -378,9 +382,9 @@ function DetailModal({ campaignId, onClose }: { campaignId: string; onClose: () 
             <div className="grid grid-cols-4 gap-3 px-6 pt-5">
               {[
                 { label: 'Recipients', value: c?.total_recipients ?? 0, color: 'text-[#0A1628]' },
-                { label: 'Sent',       value: c?.sent_count       ?? 0, color: 'text-[#006285]' },
-                { label: 'Open Rate',  value: `${openRate}%`,           color: 'text-[#00A86B]' },
-                { label: 'Click Rate', value: `${clickRate}%`,          color: 'text-[#0099CC]' },
+                { label: 'Sent',       value: rc.sent,                  color: 'text-[#006285]' },
+                { label: 'Queued',     value: rc.queued,                color: 'text-[#e67e22]' },
+                { label: 'Failed',     value: rc.failed,                color: 'text-[#e74c3c]' },
               ].map(s => (
                 <div key={s.label} className="bg-[#F8FAFC] rounded-lg p-3.5 border border-[#E5E7EB] text-center">
                   <p className="text-[11px] text-[#888888] font-medium">{s.label}</p>
@@ -389,11 +393,9 @@ function DetailModal({ campaignId, onClose }: { campaignId: string; onClose: () 
               ))}
             </div>
 
-            <div className="flex gap-4 px-6 mt-2.5 text-[12px] text-[#888888]">
-              <span>Opened: <strong className="text-[#0A1628]">{c?.opened_count ?? 0}</strong></span>
-              <span>Clicked: <strong className="text-[#0A1628]">{c?.clicked_count ?? 0}</strong></span>
-              <span>Bounced: <strong className="text-[#0A1628]">{c?.bounced_count ?? 0}</strong></span>
-            </div>
+            <p className="px-6 mt-2.5 text-[11.5px] text-[#888888]">
+              Replies go directly to your reply-to inbox.
+            </p>
 
             <div className="mx-6 mt-4 mb-5 rounded-xl border border-[#E5E7EB] overflow-hidden">
               <div className="px-4 py-3 bg-[#F8FAFC] border-b border-[#E5E7EB]">
@@ -414,7 +416,7 @@ function DetailModal({ campaignId, onClose }: { campaignId: string; onClose: () 
                     {(data?.events ?? []).length === 0 ? (
                       <tr>
                         <td colSpan={3} className="text-center py-8 text-[13px] text-[#888888]">
-                          No events yet. Events appear as Resend delivers and tracks emails.
+                          No events yet. Events appear as this campaign sends.
                         </td>
                       </tr>
                     ) : (
@@ -484,11 +486,9 @@ export default function EmailPage() {
     queryFn:  () => fetch('/api/usage/limits').then(r => r.json()),
   });
 
-  const totalSent    = campaigns.reduce((s, c) => s + c.sent_count,    0);
-  const totalOpened  = campaigns.reduce((s, c) => s + c.opened_count,  0);
-  const totalClicked = campaigns.reduce((s, c) => s + c.clicked_count, 0);
-  const openRate     = totalSent > 0 ? Math.round((totalOpened  / totalSent) * 100) : 0;
-  const clickRate    = totalSent > 0 ? Math.round((totalClicked / totalSent) * 100) : 0;
+  const totalSent    = campaigns.reduce((s, c) => s + (c.recipient_counts?.sent   ?? 0), 0);
+  const totalQueued  = campaigns.reduce((s, c) => s + (c.recipient_counts?.queued ?? 0), 0);
+  const totalFailed  = campaigns.reduce((s, c) => s + (c.recipient_counts?.failed ?? 0), 0);
   const completedCount = campaigns.filter(c => c.status === 'completed').length;
 
   const filtered = campaigns.filter(c => {
@@ -524,10 +524,10 @@ export default function EmailPage() {
 
       {/* 4 Stat Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Campaigns Run"  value={completedCount}             sub="completed campaigns"       iconBg="bg-[#dff2f9]" />
-        <StatCard label="Total Sent"     value={totalSent.toLocaleString()} sub="across all campaigns"      iconBg="bg-[#dff7ee]" />
-        <StatCard label="Open Rate"      value={`${openRate}%`}             sub={`${totalOpened} opens`}    iconBg="bg-[#e0faf4]" />
-        <StatCard label="Click Rate"     value={`${clickRate}%`}            sub={`${totalClicked} clicks`}  iconBg="bg-[#e8edf4]" />
+        <StatCard label="Campaigns Run"  value={completedCount}               sub="completed campaigns"  iconBg="bg-[#dff2f9]" />
+        <StatCard label="Total Sent"     value={totalSent.toLocaleString()}   sub="across all campaigns" iconBg="bg-[#dff7ee]" />
+        <StatCard label="In Queue"       value={totalQueued.toLocaleString()} sub="awaiting send"        iconBg="bg-[#fff3e0]" />
+        <StatCard label="Failed"         value={totalFailed.toLocaleString()} sub="delivery failures"    iconBg="bg-[#ffeaea]" />
       </div>
 
       {/* Filter bar */}
@@ -572,7 +572,7 @@ export default function EmailPage() {
           <table className="w-full">
             <thead>
               <tr className="bg-[#F8FAFC]">
-                {['#', 'Campaign Name', 'Template', 'Status', 'Recipients', 'Sent', 'Open Rate', 'Date', 'Actions'].map(h => (
+                {['#', 'Campaign Name', 'Template', 'Status', 'Progress', 'Date', 'Actions'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-bold tracking-[0.8px] uppercase text-[#888888] border-b border-[#E5E7EB] whitespace-nowrap">
                     {h}
                   </th>
@@ -582,11 +582,11 @@ export default function EmailPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-[13px] text-[#888888]">Loading campaigns...</td>
+                  <td colSpan={7} className="text-center py-12 text-[13px] text-[#888888]">Loading campaigns...</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-14 text-[13px] text-[#888888]">
+                  <td colSpan={7} className="text-center py-14 text-[13px] text-[#888888]">
                     {campaigns.length === 0
                       ? 'No campaigns yet. Click "+ New Campaign" to start.'
                       : 'No campaigns match the current filters.'}
@@ -594,7 +594,7 @@ export default function EmailPage() {
                 </tr>
               ) : (
                 filtered.map((c, i) => {
-                  const rate = c.sent_count > 0 ? Math.round((c.opened_count / c.sent_count) * 100) : 0;
+                  const rc = c.recipient_counts ?? { queued: 0, sent: 0, failed: 0 };
                   return (
                     <tr key={c.id} className="hover:bg-[#fafbfc] border-b border-[#f3f4f6] last:border-0">
                       <td className="px-4 py-3 text-[12px] text-[#888888]">{i + 1}</td>
@@ -610,12 +610,24 @@ export default function EmailPage() {
                           {c.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-mono text-[13px] text-[#0A1628]">{c.total_recipients}</td>
-                      <td className="px-4 py-3 font-mono text-[13px] text-[#0A1628]">{c.sent_count}</td>
-                      <td className="px-4 py-3 font-mono text-[13px]">
-                        <span className={rate >= 30 ? 'text-[#00A86B]' : rate >= 15 ? 'text-[#006285]' : 'text-[#888888]'}>
-                          {rate}%
-                        </span>
+                      <td className="px-4 py-3">
+                        {c.status === 'draft' ? (
+                          <span className="text-[13px] text-[#888888]">—</span>
+                        ) : (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-mono text-[13px] text-[#0A1628]">
+                              {rc.sent} of {c.total_recipients} sent
+                            </span>
+                            {rc.failed > 0 && (
+                              <span className="text-[11px] text-[#e74c3c]">{rc.failed} failed</span>
+                            )}
+                            {rc.queued > 0 && (
+                              <span className="text-[11px] text-[#888888]">
+                                {c.resumes_tomorrow ? 'Resumes tomorrow' : `${rc.queued} queued`}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-[13px] text-[#888888] whitespace-nowrap">
                         {new Date(c.created_at).toLocaleDateString('en-GB', {

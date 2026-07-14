@@ -228,6 +228,11 @@ export interface EmailCampaign {
     subject: string;
     tag:     string;
   };
+  // Derived from campaign_recipients — the real, live source of send progress.
+  // sent_count above only updates once a campaign fully completes; while a campaign
+  // is queued/sending, this is the only accurate progress data.
+  recipient_counts?: { queued: number; sent: number; failed: number };
+  resumes_tomorrow?: boolean;
 }
 
 export type EmailEventType = 'sent' | 'delivered' | 'opened' | 'clicked' | 'bounced' | 'spam';
