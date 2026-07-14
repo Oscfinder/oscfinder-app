@@ -205,3 +205,15 @@
 - The source spec (`doc/EMAIL_MIGRATION_PROMPT.md`) had asserted this table already existed — verified live that it didn't (only ever described in `doc/TECHNICAL_ARCHITECTURE.md`, never actually created in Supabase).
 - Fixed the migration to `create table if not exists email_senders (...)` before the `alter table` block adding SMTP columns. `domain_id` kept as a plain nullable `uuid`, no FK — no `email_domains` table exists anywhere in this project and nothing reads/writes `domain_id`.
 - See `doc/13_EMAIL_SMTP_SENDERS.md` for the full corrected migration notes.
+
+---
+
+## 2026-07-14
+
+### Final email-address pass — real mailboxes vs. send-only domain
+- Clarified the actual mail setup: `mail.oscfinder.com` (Resend) is **send-only** — no inbox exists there. The one real receiving mailbox is `support@oscfinder.com` (cPanel), with forwarders for `billing@`, `info@`, `hello@`, and `osime@` all landing in it.
+- `lib/usage-alerts.ts`: added `replyTo: 'billing@oscfinder.com'` to both Resend sends (company alert + admin alert) so replies land somewhere real; changed the admin 100%-threshold alert's `to:` from `billing@mail.oscfinder.com` (unreceivable) to `support@oscfinder.com`; fixed the email footer's "contact us" mailto from `billing@mail.oscfinder.com` to `billing@oscfinder.com`. `from:` addresses correctly stay on `mail.oscfinder.com` — only the verified subdomain can send via Resend.
+- `app/(dashboard)/billing/page.tsx`: "forward your receipt to..." now points at `billing@oscfinder.com` instead of the unreceivable `mail.` subdomain.
+- Confirmed `app/api/send-email/route.ts` and the campaign worker need no changes here — both use each client's own configured SMTP `reply_to`, which is unrelated to platform contact addresses.
+- Swept every live/actionable doc for the same stale `oscompanyfinder.com` domain and fixed: `doc/TESTING_PHASE.md` (test account email, two billing references), `doc/TECHNICAL_ARCHITECTURE.md` (app URL + a code sample's `from` address), `doc/CHECKS.md` (marked the Resend-domain and both pending-SQL rows resolved, since they're confirmed done), `doc/NEW_AUDIT_9_7_2026.md` (marked items 1–4 resolved, since RESEND_API_KEY/domain/both migrations were already confirmed live), and a stray value in the static design mockup `doc/OsCompanyFinder_Dashboard (1).html`.
+- Left `oscompanyfinder.com` untouched in `doc/UPDATES.md`, `doc/13_EMAIL_SMTP_SENDERS.md`, `doc/11_USAGE_ALERTS.md`, and `doc/9_Billing_System.md` — these are changelog/phase-implementation-snapshot entries describing what the code *used to say* at the time of a past bug; rewriting them would falsify the historical record rather than fix anything live.

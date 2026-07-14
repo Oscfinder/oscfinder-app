@@ -159,7 +159,7 @@ supporting clients
 2.2 CLIENT ONBOARDING FLOW
 Client Receives Login
   ↓
-Login to app.oscompanyfinder.com
+Login to app.oscfinder.com
   ↓
 Initial Setup Screen
   ↓
@@ -1869,7 +1869,7 @@ export async function POST(req: Request) {
 
  for (const lead of leads) {
    await resend.emails.send({
-     from: "OsCompanyFinder <hello@oscompanyfinder.com>",
+     from: "OsCompanyFinder <hello@mail.oscfinder.com>",
      to: lead.email,
      subject,
      html: body

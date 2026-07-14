@@ -240,7 +240,7 @@ CREATE INDEX IF NOT EXISTS idx_usage_alerts_lookup
 
 | Item | Where | Action needed |
 |---|---|---|
-| Run Phase 10 SQL | Supabase → SQL Editor | `ALTER TABLE users ADD COLUMN onboarding_complete...` + backfill UPDATE |
-| Run Phase 11 SQL | Supabase → SQL Editor | `CREATE TABLE usage_alerts_sent...` + index |
-| Verify Resend domain | Resend dashboard → Domains | `oscompanyfinder.com` must be verified for `billing@oscompanyfinder.com` to send |
+| ~~Run Phase 10 SQL~~ | Supabase → SQL Editor | ✅ Resolved — confirmed live 2026-07-11, `users.onboarding_complete` exists. |
+| ~~Run Phase 11 SQL~~ | Supabase → SQL Editor | ✅ Resolved — confirmed live 2026-07-11, `usage_alerts_sent` exists. |
+| ~~Verify Resend domain~~ | Resend dashboard → Domains | ✅ Resolved — `mail.oscfinder.com` is the registered, verified sending domain (confirmed live 2026-07-11); all `from` addresses use it. |
 | pg_cron jobs (optional) | Supabase → SQL Editor | Suspend expired demos, suspend expired plans, usage alert catch-up (see Phase 9 and 11 docs) |

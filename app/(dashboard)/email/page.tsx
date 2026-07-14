@@ -442,7 +442,7 @@ export default function EmailPage() {
     return (
       <LockedFeatureCard
         heading="Email campaigns require a verified sending mailbox"
-        description="Connect and verify your own mailbox (e.g. Zoho, Gmail) so campaign emails go out from your own domain instead of a shared platform address."
+        description="Connect and verify your own mailbox (e.g. Zoho) so campaign emails go out from your own domain instead of a shared platform address."
         ctaHref="/settings/sender"
         ctaLabel="Set Up Sender"
       />

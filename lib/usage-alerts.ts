@@ -130,16 +130,19 @@ async function sendAlertEmail(params: AlertEmailParams): Promise<void> {
   // Alert to company contact
   await resend.emails.send({
     from:    'OsCFinder <billing@mail.oscfinder.com>',
+    replyTo: 'billing@oscfinder.com',
     to:      companyEmail,
     subject,
     html,
   });
 
-  // 100% alerts also notify the admin
+  // 100% alerts also notify the admin — support@oscfinder.com is a real inbox
+  // (billing@mail.oscfinder.com is send-only; nothing there can receive mail)
   if (is100) {
     await resend.emails.send({
       from:    'OsCFinder Alerts <billing@mail.oscfinder.com>',
-      to:      'billing@mail.oscfinder.com',
+      replyTo: 'billing@oscfinder.com',
+      to:      'support@oscfinder.com',
       subject: `[Admin] ${companyName} hit their ${label} limit`,
       html: `<p><strong>${companyName}</strong> (${plan}) has used all ${limit.toLocaleString()} ${label} for ${monthFmt}.</p>
              <p>They may qualify for an overage invoice or a plan upgrade.</p>`,
@@ -242,7 +245,7 @@ function buildAlertEmail(p: {
             <p style="margin:0;font-size:11px;color:#888888;">
               You are receiving this because you have an active OsCFinder account.<br>
               Questions? Reply to this email or contact
-              <a href="mailto:billing@mail.oscfinder.com" style="color:#0099CC;">billing@mail.oscfinder.com</a>
+              <a href="mailto:billing@oscfinder.com" style="color:#0099CC;">billing@oscfinder.com</a>
             </p>
           </td>
         </tr>

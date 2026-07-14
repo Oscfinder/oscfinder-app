@@ -194,7 +194,7 @@ function PaymentInstructions({ invoice }: { invoice: Invoice }) {
       </div>
       <p className="text-[11px] text-[#888888] pt-1 border-t border-[#E5E7EB] mt-2">
         After payment, forward your receipt to{' '}
-        <strong className="text-[#0A1628]">billing@mail.oscfinder.com</strong> — we will activate
+        <strong className="text-[#0A1628]">billing@oscfinder.com</strong> — we will activate
         your account within 24 hours.
       </p>
     </div>

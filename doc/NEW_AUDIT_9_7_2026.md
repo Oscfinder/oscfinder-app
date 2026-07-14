@@ -13,25 +13,30 @@ This supersedes `doc/CHECKS.md` (2026-06-29), which only audited files touched i
 
 Everything fixable in code has been fixed (see [Status](#status) below). These four items need **your** access/decision — I cannot complete them:
 
-### 1. Add a real Resend API key
-The code no longer *crashes* without it, but no email will actually send (campaigns, single-lead sends, usage-alert emails) until it's set.
-- [ ] Create/find your Resend API key at resend.com
-- [ ] Add to `.env`:
+### 1. Add a real Resend API key — ✅ Resolved 2026-07-11 / 2026-07-13
+`RESEND_API_KEY` is set and `mail.oscfinder.com` is registered and verified in Resend.
+Note the domain used is `mail.oscfinder.com`, not `oscompanyfinder.com` as originally
+guessed below — campaign/single-lead sends have since also moved off Resend entirely
+onto per-client SMTP senders (see `doc/13_EMAIL_SMTP_SENDERS.md`); Resend is now
+platform-only (usage alerts). Left the original text below for the record:
+- [x] Create/find your Resend API key at resend.com
+- [x] Add to `.env`:
   ```
   RESEND_API_KEY=re_your_real_key
-  RESEND_FROM=OsCompanyFinder <billing@oscompanyfinder.com>
+  RESEND_FROM=OsCFinder <hello@mail.oscfinder.com>
   ```
-- [ ] Verify the sending domain (`oscompanyfinder.com`) in the Resend dashboard → Domains — required before `billing@oscompanyfinder.com` can send
+- [x] Verify the sending domain (`mail.oscfinder.com`) in the Resend dashboard → Domains
 
-### 2. Run two pending SQL migrations in Supabase
-Confirmed absent from `supabase/schema.sql`. Without these, the onboarding wizard is fully broken and usage tracking throws errors on every call.
-- [ ] Open Supabase → SQL Editor → run:
+### 2. Run two pending SQL migrations in Supabase — ✅ Resolved
+Confirmed absent from `supabase/schema.sql` at audit time, but confirmed live against
+Supabase on 2026-07-11 that both had since been applied. Left for the record:
+- [x] Open Supabase → SQL Editor → run:
   ```sql
   ALTER TABLE users
     ADD COLUMN IF NOT EXISTS onboarding_complete boolean NOT NULL DEFAULT false;
   UPDATE users SET onboarding_complete = true WHERE created_at < now() - interval '1 minute';
   ```
-- [ ] Then run:
+- [x] Then run:
   ```sql
   CREATE TABLE IF NOT EXISTS usage_alerts_sent (
     id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -63,9 +68,9 @@ Confirmed absent from `supabase/schema.sql`. Without these, the onboarding wizar
 | # | Item | Severity | Status |
 |---|---|---|---|
 | 1 | Production build crashes (missing Resend fallback) | 🔴 Blocking | ✅ Fixed |
-| 2 | `RESEND_API_KEY` / `RESEND_FROM` missing from `.env` | 🔴 Blocking | ⚠️ **Action required — item 1 above** |
-| 3 | Pending SQL: `users.onboarding_complete` column | 🔴 Blocking | ⚠️ **Action required — item 2 above** |
-| 4 | Pending SQL: `usage_alerts_sent` table | 🔴 Blocking | ⚠️ **Action required — item 2 above** |
+| 2 | `RESEND_API_KEY` / `RESEND_FROM` missing from `.env` | 🔴 Blocking | ✅ Resolved 2026-07-11 — see item 1 above |
+| 3 | Pending SQL: `users.onboarding_complete` column | 🔴 Blocking | ✅ Resolved — confirmed live 2026-07-11 |
+| 4 | Pending SQL: `usage_alerts_sent` table | 🔴 Blocking | ✅ Resolved — confirmed live 2026-07-11 |
 | 5 | Leads page: Edit action doesn't persist | 🔴 Blocking | ✅ Fixed |
 | 6 | Leads page: single Send Email is fake | 🔴 Blocking | ✅ Fixed |
 | 7 | Leads page: Bulk Send is fake | 🔴 Blocking | ✅ Fixed |

@@ -175,7 +175,10 @@ within the request rather than queuing through `campaign_recipients`, since it's
 a single email per request (or a client-side loop of single sends for bulk, not a
 server-side batch), so the campaign worker's batching/resume design doesn't apply here.
 
-**Separately flagged, not fixed here:** `lib/usage-alerts.ts` sends from
-`billing@oscompanyfinder.com`, a domain that isn't the one verified in Resend
-(`mail.oscfinder.com`) — usage-alert emails currently fail to send. Out of scope for
-this phase; noted so it isn't lost.
+**Update 2026-07-13 — fixed:** `lib/usage-alerts.ts` was sending from
+`billing@oscompanyfinder.com`, a domain that wasn't the one verified in Resend
+(`mail.oscfinder.com`), so usage-alert emails were silently failing. Confirmed
+`mail.oscfinder.com` is the registered, verified domain and updated every
+`oscompanyfinder.com` reference (`lib/usage-alerts.ts`, `.env`'s `RESEND_FROM`,
+`app/api/send-email/route.ts`'s fallback, `app/(dashboard)/billing/page.tsx`) to
+`mail.oscfinder.com`. See `doc/UPDATES.md` (2026-07-13) for the full list.

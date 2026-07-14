@@ -19,7 +19,7 @@ You need two accounts in Supabase before testing:
 
 | Account | Role | Purpose |
 |---|---|---|
-| `admin@oscompanyfinder.com` | `admin` | Tests admin panel, billing management, demo creation |
+| `admin@oscfinder.com` | `admin` | Tests admin panel, billing management, demo creation |
 | `client@testcompany.com` | `company_admin` | Tests onboarding, scraping, billing page, usage alerts |
 
 Create the client company via the admin panel (Test 8.1) before testing client-side features.
@@ -380,7 +380,7 @@ Manually set `email_count` to plan limit → try to send → **Expected:** 403
    - Bank: Zenith Bank
    - Account Name: OsCompanyFinder Ltd
    - Narration format: `RENEWAL-XXXXXXXX`
-   - Email: `billing@oscompanyfinder.com`
+   - Email: `billing@oscfinder.com`
 
 ### 10.7 — Admin user cannot access `/billing`
 1. Log in as admin → navigate to `http://localhost:3000/billing`
@@ -411,7 +411,7 @@ Manually set `email_count` to plan limit → try to send → **Expected:** 403
 3. **Verify in Supabase:** `usage_alerts_sent` has a row for `threshold = '100%'`
 4. **Verify emails:**
    - Company email receives "You've reached your lead scrapes limit" email
-   - `billing@oscompanyfinder.com` receives `[Admin] {company} hit their lead scrapes limit`
+   - `support@oscfinder.com` receives `[Admin] {company} hit their lead scrapes limit`
 
 ### 11.3 — Alerts reset next month
 1. Check current `usage_alerts_sent` rows for this month
