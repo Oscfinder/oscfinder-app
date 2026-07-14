@@ -189,3 +189,19 @@
 - Created `app/api/campaigns/process/route.ts` — cron-triggered worker (`CRON_SECRET`-protected) that sends queued recipients via each company's own SMTP mailbox, respecting `daily_limit` and a randomized delay between sends.
 - Created `vercel.json` — daily cron trigger for the worker (Vercel Hobby only allows once-daily cron; see `doc/13_EMAIL_SMTP_SENDERS.md` for why the original 5-minute/30–90s-delay spec was adapted).
 - Resend, `lib/usage-alerts.ts`, and everything else outside this feature left untouched per the spec.
+
+---
+
+## 2026-07-13
+
+### Resend domain fix
+- User confirmed `mail.oscfinder.com` is the registered, verified Resend domain (matches what was found live during the 07-11 audit).
+- Updated `.env` `RESEND_FROM` and `app/api/send-email/route.ts`'s fallback to `OsCFinder <hello@mail.oscfinder.com>`.
+- Updated `lib/usage-alerts.ts` — all `billing@oscompanyfinder.com` references → `billing@mail.oscfinder.com`; the billing-page CTA link now reads `NEXT_PUBLIC_APP_URL` instead of a hardcoded domain.
+- Updated `app/(dashboard)/billing/page.tsx`'s "forward your receipt to..." text to match.
+
+### Phase 13 migration bug — `email_senders` didn't exist
+- Running `supabase/migrations/013_email_smtp_senders.sql` failed: `relation "email_senders" does not exist`.
+- The source spec (`doc/EMAIL_MIGRATION_PROMPT.md`) had asserted this table already existed — verified live that it didn't (only ever described in `doc/TECHNICAL_ARCHITECTURE.md`, never actually created in Supabase).
+- Fixed the migration to `create table if not exists email_senders (...)` before the `alter table` block adding SMTP columns. `domain_id` kept as a plain nullable `uuid`, no FK — no `email_domains` table exists anywhere in this project and nothing reads/writes `domain_id`.
+- See `doc/13_EMAIL_SMTP_SENDERS.md` for the full corrected migration notes.

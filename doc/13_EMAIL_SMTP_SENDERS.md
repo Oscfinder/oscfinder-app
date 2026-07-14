@@ -8,7 +8,7 @@
 > `verified`. Resend is untouched everywhere else (usage alerts, admin notifications,
 > Supabase auth emails).
 
-Source spec: `doc/EMAIL_MIGRATION_PROMPT.md`. Two adjustments were made from a literal
+Source spec: `doc/EMAIL_MIGRATION_PROMPT.md`. Four adjustments were made from a literal
 reading of that spec, based on this project's actual infra:
 
 1. **Cron cadence: once daily, not every 5 minutes.** This project runs on Vercel
@@ -22,7 +22,17 @@ reading of that spec, based on this project's actual infra:
    only let ~1 email/company/day out — a 30-recipient campaign would take a month.
    3–8s lets a full day's `daily_limit` go out in one run while still avoiding a
    zero-delay blast to the recipient's mailbox provider.
-3. **New table not in the original spec: `campaign_recipients`.** The spec says the
+3. **`email_senders` didn't actually exist.** The source spec stated "The `email_senders`
+   table already exists with columns: `id`, `company_id`, `domain_id`, `email`,
+   `is_default`, `created_at`, and a unique index on `company_id`." This was verified
+   live against Supabase on 2026-07-13 (running the migration failed with
+   `relation "email_senders" does not exist"`) — it was a documentation claim, not
+   reality (the table is only ever described in `doc/TECHNICAL_ARCHITECTURE.md`, never
+   actually created). The migration now creates the base table first. `domain_id` is
+   kept as a plain nullable `uuid` with no foreign key — no `email_domains` table
+   exists anywhere in this project, and this implementation never reads or writes
+   `domain_id`; it's carried only for compatibility with the original schema sketch.
+4. **New table not in the original spec: `campaign_recipients`.** The spec says the
    send route should create "recipient rows with status queued" but never says where
    they live. `email_events` is a post-hoc engagement log (webhook opens/clicks +
    send-time `sent` rows) — reusing it as a mutable pre-send queue would mix log and
