@@ -257,11 +257,38 @@ export interface EmailSender {
   smtp_username:     string | null;
   // smtp_password intentionally omitted — never returned by the API
   reply_to:          string | null;
-  daily_limit:       number;
+  daily_limit:       number;        // advisory/soft limit — overridable with an acknowledgment
+  technical_ceiling: number;        // hard, never-crossable mailbox-provider limit
+  sent_today?:       number;        // API-computed, not a DB column
   status:            SenderStatus;
   last_verified_at:  string | null;
   last_error:        string | null;
   created_at:        string;
+}
+
+// ── Send Limit Acknowledgment (soft daily_limit override, logged for disputes) ───
+export interface SendLimitAcknowledgment {
+  id:           string;
+  company_id:   string;
+  user_id:      string;
+  sender_id:    string;
+  campaign_id:  string | null;
+  day:          string;
+  sent_at_time: number;
+  created_at:   string;
+}
+
+// Shape of the 409 response from /api/email/campaigns and /api/send-email when a
+// batch would cross a sender's advisory daily_limit and no acknowledgment exists yet.
+export interface RequiresAcknowledgment {
+  requires_acknowledgment:    true;
+  sender_id:                  string;
+  sender_email:               string;
+  sent_today:                 number;
+  daily_limit:                number;
+  sending_today_if_confirmed: number;
+  deferred_if_confirmed:      number;
+  error:                      string;
 }
 
 export type CampaignRecipientStatus = 'queued' | 'sent' | 'failed';

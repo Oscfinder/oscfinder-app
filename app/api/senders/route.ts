@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount } from '@/lib/auth';
 import { encrypt } from '@/lib/crypto';
+import { getSentToday } from '@/lib/senders';
 
 const SELECT_FIELDS =
   'id, company_id, domain_id, email, is_default, display_name, smtp_host, smtp_port, ' +
-  'smtp_username, reply_to, daily_limit, status, last_verified_at, last_error, created_at';
+  'smtp_username, reply_to, daily_limit, technical_ceiling, status, last_verified_at, last_error, created_at';
 // smtp_password intentionally excluded — never returned by this route.
 
 // ── GET /api/senders ──────────────────────────────────────────────
@@ -29,8 +30,12 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
 
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });
+  if (!data) return NextResponse.json(null);
 
-  return NextResponse.json(data ?? null);
+  const sender = data as any;
+  const sentToday = await getSentToday(sender.id);
+
+  return NextResponse.json({ ...sender, sent_today: sentToday });
 }
 
 // ── POST /api/senders ─────────────────────────────────────────────

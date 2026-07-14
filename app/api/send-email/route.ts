@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount } from '@/lib/auth';
 import { checkLimit, logUsage } from '@/lib/usage';
 import { decrypt } from '@/lib/crypto';
-import { getSender, getRemainingDailyQuota, incrementDailyUsage } from '@/lib/senders';
+import { getSender, getSentToday, getRemainingCeiling, hasAcknowledgmentForToday, incrementDailyUsage } from '@/lib/senders';
 
 // Direct lead outreach (single-send + bulk-send from the Leads page) — must go through
 // the company's own verified SMTP mailbox, same as campaigns. Client outreach must
@@ -31,10 +31,35 @@ export async function POST(req: NextRequest) {
   if (!allowed)
     return NextResponse.json({ error: 'Email limit reached for this month' }, { status: 403 });
 
-  const remainingToday = await getRemainingDailyQuota(sender);
-  if (remainingToday <= 0)
+  // Soft daily_limit / hard technical_ceiling — this route sends synchronously with
+  // no queue behind it, so there's no "defer to tomorrow" here: either it sends now
+  // (past the soft limit only with an acknowledgment) or it's a flat rejection once
+  // the technical ceiling is genuinely exhausted for the day.
+  const recipientCount   = Array.isArray(to) ? to.length : 1;
+  const sentToday        = await getSentToday(sender.id);
+  const remainingCeiling = await getRemainingCeiling(sender);
+
+  if (sentToday + recipientCount > sender.daily_limit) {
+    const acked = await hasAcknowledgmentForToday(sender.id);
+    if (!acked)
+      return NextResponse.json(
+        {
+          requires_acknowledgment:    true,
+          sender_id:                  sender.id,
+          sender_email:               sender.email,
+          sent_today:                 sentToday,
+          daily_limit:                sender.daily_limit,
+          sending_today_if_confirmed: Math.min(recipientCount, remainingCeiling),
+          deferred_if_confirmed:      recipientCount - Math.min(recipientCount, remainingCeiling),
+          error:                      'Daily sending limit reached',
+        },
+        { status: 409 }
+      );
+  }
+
+  if (remainingCeiling < recipientCount)
     return NextResponse.json(
-      { error: 'Daily sending limit reached for your mailbox. Sends resume tomorrow.' },
+      { error: 'Provider sending ceiling reached for today. Sends resume tomorrow.' },
       { status: 429 }
     );
 
@@ -66,8 +91,6 @@ export async function POST(req: NextRequest) {
   }
 
   await incrementDailyUsage(sender.id);
-
-  const recipientCount = Array.isArray(to) ? to.length : 1;
   await logUsage(user.company_id!, 'email_sent', recipientCount);
 
   if (leadId) {

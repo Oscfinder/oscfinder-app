@@ -1,8 +1,9 @@
 'use client';
 import { useState } from 'react';
 import { X, Globe, Mail, Phone, MapPin, Briefcase, Trash2, Send, AlertTriangle, PlusCircle } from 'lucide-react';
-import { Lead } from '@/types';
+import { Lead, RequiresAcknowledgment } from '@/types';
 import { Button } from './Button';
+import { SendLimitConsentModal } from './SendLimitConsentModal';
 import { cn } from '@/lib/utils';
 
 // ─── shared backdrop + shell ───────────────────────────────────────────────
@@ -166,18 +167,48 @@ export function MessageModal({ lead, onSent, onClose }: MessageModalProps) {
   );
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
+  const [pendingAck, setPendingAck] = useState<RequiresAcknowledgment | null>(null);
+  const [acking, setAcking] = useState(false);
+
+  const doSend = () => fetch('/api/send-email', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ leadId: lead.id, to, subject, body }),
+  });
 
   const handleSend = async () => {
     setSending(true);
     setSendError('');
     try {
-      const res = await fetch('/api/send-email', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ leadId: lead.id, to, subject, body }),
-      });
+      const res = await doSend();
+      const data = await res.json();
+      if (res.status === 409 && data.requires_acknowledgment) { setSending(false); setPendingAck(data); return; }
+      if (!res.ok) { setSendError(data.error ?? 'Failed to send email'); setSending(false); return; }
+      setSending(false);
+      onSent();
+    } catch {
+      setSendError('Failed to send email');
+      setSending(false);
+    }
+  };
+
+  const handleAckConfirm = async () => {
+    if (!pendingAck) return;
+    setAcking(true);
+    await fetch('/api/senders/acknowledge-limit', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ sender_id: pendingAck.sender_id }),
+    });
+    setAcking(false);
+    setPendingAck(null);
+
+    setSending(true);
+    try {
+      const res = await doSend();
       const data = await res.json();
       if (!res.ok) { setSendError(data.error ?? 'Failed to send email'); setSending(false); return; }
+      setSending(false);
       onSent();
     } catch {
       setSendError('Failed to send email');
@@ -218,6 +249,16 @@ export function MessageModal({ lead, onSent, onClose }: MessageModalProps) {
           {!sending && <Send size={14} />} {sending ? 'Sending...' : 'Send Email'}
         </Button>
       </div>
+      {pendingAck && (
+        <SendLimitConsentModal
+          senderEmail={pendingAck.sender_email}
+          dailyLimit={pendingAck.daily_limit}
+          sentToday={pendingAck.sent_today}
+          confirming={acking}
+          onConfirm={handleAckConfirm}
+          onCancel={() => setPendingAck(null)}
+        />
+      )}
     </Modal>
   );
 }

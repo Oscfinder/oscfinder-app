@@ -41,3 +41,32 @@ export async function checkLimit(companyId: string, action: Action): Promise<boo
   if (action === 'export')       return limits?.export_limit == null || (summary?.export_count ?? 0) < limits.export_limit;
   return true;
 }
+
+// Numeric remaining monthly email quota — checkLimit() only returns a boolean, but the
+// campaign worker needs an actual count to cap how many it can send for a company in
+// one run without exceeding the plan's monthly email_limit.
+export async function getRemainingMonthlyEmailQuota(companyId: string): Promise<number> {
+  const month = new Date().toISOString().slice(0, 7);
+
+  const [{ data: summary }, { data: company }] = await Promise.all([
+    supabaseAdmin
+      .from('usage_monthly_summary')
+      .select('email_count')
+      .eq('company_id', companyId)
+      .eq('month', month)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('companies')
+      .select('plan')
+      .eq('id', companyId)
+      .single(),
+  ]);
+
+  const { data: limits } = await supabaseAdmin
+    .from('plan_limits')
+    .select('email_limit')
+    .eq('plan', company?.plan)
+    .single();
+
+  return Math.max(0, (limits?.email_limit ?? 0) - (summary?.email_count ?? 0));
+}

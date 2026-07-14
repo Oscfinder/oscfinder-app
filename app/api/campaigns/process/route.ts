@@ -2,19 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { decrypt } from '@/lib/crypto';
-import { getSender, getRemainingDailyQuota, incrementDailyUsage } from '@/lib/senders';
-import { logUsage } from '@/lib/usage';
+import { getSender, getRemainingCeiling, isPastSoftLimit, hasAcknowledgmentForToday, incrementDailyUsage } from '@/lib/senders';
+import { logUsage, getRemainingMonthlyEmailQuota } from '@/lib/usage';
 import { personalize } from '@/app/api/email/campaigns/route';
 
-// Cron-triggered worker (see vercel.json) that sends queued campaign_recipients through
-// each company's own verified SMTP mailbox. Runs once/day on Vercel Hobby, so it
-// processes as much of the backlog as fits in one invocation rather than draining
-// everything at once — see doc/13_EMAIL_SMTP_SENDERS.md for why.
+// Cron-triggered worker (see vercel.json + the external cPanel cron — both hit this
+// route; see doc/13_EMAIL_SMTP_SENDERS.md). Deliberately sends only a handful of
+// emails per invocation (EMAIL_MAX_SENDS_PER_RUN) rather than draining as much of the
+// backlog as fits in the time budget — with the cPanel cron firing every 5 minutes,
+// a small per-run cap spreads a day's quota across natural-looking activity instead
+// of bursting it all at once, and keeps each invocation nowhere near its own timeout.
 export const maxDuration = 60;
 
-// Stop picking up new sends once this much wall-clock time has elapsed, so the
-// response always returns comfortably before Vercel kills the function.
+// Defensive backstop only — EMAIL_MAX_SENDS_PER_RUN is what actually bounds a run in
+// practice (a handful of sends can't come close to this even with the send delay).
 const TIME_BUDGET_MS = 50_000;
+
+function maxSendsPerRun(): number {
+  return Number(process.env.EMAIL_MAX_SENDS_PER_RUN ?? 3);
+}
 
 function randomDelayMs(): number {
   const min = Number(process.env.EMAIL_SEND_DELAY_MIN_MS ?? 3000);
@@ -34,6 +40,7 @@ export async function GET(req: NextRequest) {
 
   const start = Date.now();
   const stats = { sent: 0, failed: 0 };
+  const sendCap = maxSendsPerRun();
 
   const { data: pending, error } = await supabaseAdmin
     .from('campaign_recipients')
@@ -54,14 +61,25 @@ export async function GET(req: NextRequest) {
   const templateCache     = new Map<string, { subject: string; body: string }>();
   const visitedCampaignIds = new Set<string>();
 
+  let capReached = false;
+
   for (const [companyId, rows] of byCompany) {
+    if (capReached) break;
     if (Date.now() - start > TIME_BUDGET_MS) break;
 
     const sender = await getSender(companyId);
     if (!sender || sender.status !== 'verified' || !sender.smtp_password) continue; // leave queued
 
-    let remaining = await getRemainingDailyQuota(sender);
-    if (remaining <= 0) continue; // resumes tomorrow
+    let remaining = await getRemainingCeiling(sender);
+    if (remaining <= 0) continue; // hard technical ceiling reached — resumes tomorrow
+
+    if (await isPastSoftLimit(sender)) {
+      const acked = await hasAcknowledgmentForToday(sender.id);
+      if (!acked) continue; // waiting on consent (or tomorrow) — leave queued
+    }
+
+    let planRemaining = await getRemainingMonthlyEmailQuota(companyId);
+    if (planRemaining <= 0) continue; // monthly plan email quota exhausted — leave queued
 
     let password: string;
     try {
@@ -79,7 +97,9 @@ export async function GET(req: NextRequest) {
     });
 
     for (const row of rows as any[]) {
+      if (capReached) break;
       if (remaining <= 0) break;
+      if (planRemaining <= 0) break;
       if (Date.now() - start > TIME_BUDGET_MS) break;
 
       let campaignInfo = campaignInfoCache.get(row.campaign_id);
@@ -116,6 +136,9 @@ export async function GET(req: NextRequest) {
         `<a href="mailto:${sender.reply_to}">${sender.reply_to}</a>.</p>`;
       const html = personalize(template.body, lead) + unsubscribeLine;
 
+      // Everything below happens immediately after the send attempt, per recipient —
+      // never batched until the end of the run — so a mid-run kill (timeout, deploy,
+      // crash) can never lose more state than the single send that was in flight.
       try {
         await transporter.sendMail({
           from:    `"${sender.display_name || sender.email}" <${sender.email}>`,
@@ -147,6 +170,7 @@ export async function GET(req: NextRequest) {
         await logUsage(companyId, 'email_sent', 1, { campaign_id: row.campaign_id });
 
         remaining--;
+        planRemaining--;
         stats.sent++;
       } catch (err: any) {
         await supabaseAdmin
@@ -163,6 +187,11 @@ export async function GET(req: NextRequest) {
 
         stats.failed++;
       }
+
+      // Cap counts every attempt (sent + failed) — a run's "activity" is bounded
+      // either way, so a failing sender can't burn through its whole batch at once.
+      capReached = (stats.sent + stats.failed) >= sendCap;
+      if (capReached) break; // no point sleeping — nothing left to send this run
 
       await sleep(randomDelayMs());
     }

@@ -20,13 +20,19 @@ reading of that spec, based on this project's actual infra:
    actually achievable despite the Hobby plan's cron limits. The worker
    (`app/api/campaigns/process/route.ts`) itself is idempotent and cheap to no-op
    (returns `{ ok: true, sent: 0, failed: 0 }` immediately if nothing is queued), so
-   being hit every 5 minutes by the external trigger is safe and expected — it just
-   processes as much of the backlog as fits in one invocation (~50s budget,
-   `maxDuration = 60`) each time it's called, whichever trigger fired it.
-2. **Per-email delay: 3–8s, not 30–90s.** At once-daily cadence, a 30–90s delay would
-   only let ~1 email/company/day out — a 30-recipient campaign would take a month.
-   3–8s lets a full day's `daily_limit` go out in one run while still avoiding a
-   zero-delay blast to the recipient's mailbox provider.
+   being hit every 5 minutes by the external trigger is safe and expected.
+2. **Pacing: capped by send-count per run (`EMAIL_MAX_SENDS_PER_RUN`), not by how much
+   fits in the time budget, and the per-email delay stays short (3–8s).** The original
+   design (before this revision) tried to drain as much of the backlog as fit in one
+   invocation's ~50s budget — which meant the delay length had to trade off against
+   cadence (long delay + once-daily cadence ≈ 1 email/day; short delay + draining the
+   whole backlog ≈ bursty, unnatural-looking activity). Capping each run to a small
+   fixed number of sends (default 3) decouples the two: with the cPanel cron firing
+   every 5 minutes, 3 sends/run × 5-min cadence spreads a 30-email `daily_limit` across
+   roughly an hour of organic-looking activity, the 3–8s delay only has to space out
+   the handful of sends *within* one run (not stretch to cover a whole day), and no
+   invocation ever comes close to its own timeout regardless of backlog size. The
+   `TIME_BUDGET_MS` wall-clock check remains as a defensive backstop only.
 3. **`email_senders` didn't actually exist.** The source spec stated "The `email_senders`
    table already exists with columns: `id`, `company_id`, `domain_id`, `email`,
    `is_default`, `created_at`, and a unique index on `company_id`." This was verified
@@ -62,7 +68,7 @@ reading of that spec, based on this project's actual infra:
 | Sidebar | New "Sender Settings" item under Account, alongside Billing (non-admin only) |
 | Campaign gating | UI: locked card on `/email` unless sender is `verified`. API: `app/api/email/campaigns/route.ts` returns 403 without a verified sender, 429 if today's `daily_limit` is already used |
 | Rewired send path | `POST /api/email/campaigns` (send-now) no longer calls Resend — it inserts the campaign as `status: 'queued'` plus one `campaign_recipients` row per lead, and returns immediately |
-| `app/api/campaigns/process/route.ts` | Cron worker: per verified sender, builds one nodemailer transport, sends up to the day's remaining quota with a randomized delay between each, updates `campaign_recipients`/`email_events`/lead status/`sender_daily_usage`/usage logs exactly as the old synchronous loop did, and marks the campaign `completed` once drained |
+| `app/api/campaigns/process/route.ts` | Cron worker: per verified sender, builds one nodemailer transport, sends up to `EMAIL_MAX_SENDS_PER_RUN` total per invocation (across all companies) with a randomized delay between each, updates `campaign_recipients`/`email_events`/lead status/`sender_daily_usage`/usage logs immediately after each individual send (never batched), and marks the campaign `completed` once its queue is drained |
 | `vercel.json` | `{ "crons": [{ "path": "/api/campaigns/process", "schedule": "0 6 * * *" }] }` — Hobby-plan fallback trigger, once daily |
 | Namecheap cPanel cron | Primary trigger — see "Worker triggers" below |
 
@@ -100,6 +106,7 @@ SENDER_ENCRYPTION_KEY=<32-byte base64 key>   # generated during implementation, 
 CRON_SECRET=<random hex>                      # generated during implementation, in .env
 EMAIL_SEND_DELAY_MIN_MS=3000
 EMAIL_SEND_DELAY_MAX_MS=8000
+EMAIL_MAX_SENDS_PER_RUN=3                     # added 2026-07-14 — see adjustment #2 above
 ```
 
 **These must also be added in Vercel → Project → Settings → Environment Variables** —

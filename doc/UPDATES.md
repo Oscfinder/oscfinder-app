@@ -217,3 +217,56 @@
 - Confirmed `app/api/send-email/route.ts` and the campaign worker need no changes here — both use each client's own configured SMTP `reply_to`, which is unrelated to platform contact addresses.
 - Swept every live/actionable doc for the same stale `oscompanyfinder.com` domain and fixed: `doc/TESTING_PHASE.md` (test account email, two billing references), `doc/TECHNICAL_ARCHITECTURE.md` (app URL + a code sample's `from` address), `doc/CHECKS.md` (marked the Resend-domain and both pending-SQL rows resolved, since they're confirmed done), `doc/NEW_AUDIT_9_7_2026.md` (marked items 1–4 resolved, since RESEND_API_KEY/domain/both migrations were already confirmed live), and a stray value in the static design mockup `doc/OsCompanyFinder_Dashboard (1).html`.
 - Left `oscompanyfinder.com` untouched in `doc/UPDATES.md`, `doc/13_EMAIL_SMTP_SENDERS.md`, `doc/11_USAGE_ALERTS.md`, and `doc/9_Billing_System.md` — these are changelog/phase-implementation-snapshot entries describing what the code *used to say* at the time of a past bug; rewriting them would falsify the historical record rather than fix anything live.
+
+### Campaign worker — pace by send-count cap, not time budget
+- Replaced "drain as much of the backlog as fits in the ~50s time budget" with a hard
+  per-invocation cap: `EMAIL_MAX_SENDS_PER_RUN` (default 3, counts both successes and
+  failures). With the cPanel cron firing every 5 minutes, this yields a natural rhythm
+  of a few emails per tick — a 30-email `daily_limit` trickles out over roughly an
+  hour instead of either bursting in one run or (at the old 30–90s delay) taking a
+  month. `EMAIL_SEND_DELAY_MIN_MS`/`MAX_MS` (3–8s) now only space out the handful of
+  sends *within* one run rather than trying to stretch across a whole day.
+  `TIME_BUDGET_MS` stays as a defensive backstop only — the send cap alone keeps every
+  run nowhere near the 60s `maxDuration`.
+- Confirmed per-recipient bookkeeping (`campaign_recipients` status, `email_events`,
+  lead status, `sender_daily_usage`, `logUsage`) already happened immediately after
+  each send attempt, not batched — added a comment making that explicit. Only the
+  campaign-level finalization (marking `email_campaigns` `completed`/`sending`) runs
+  once at the end of a batch, which is safe since it's idempotent and re-derives state
+  from `campaign_recipients` on every run regardless of where a previous run stopped.
+- New env var: `EMAIL_MAX_SENDS_PER_RUN=3`.
+
+---
+
+## 2026-07-14 (cont'd)
+
+### Phase 15 — Soft daily limit + hard technical ceiling
+- `email_senders.daily_limit` (30) becomes advisory/soft — clients may exceed it after
+  explicitly acknowledging the spam-flagging risk, logged to a new
+  `send_limit_acknowledgments` table for dispute protection. New
+  `email_senders.technical_ceiling` (default 150) is the real, never-crossable
+  mailbox-provider limit.
+- Migration: `supabase/migrations/015_soft_limit_and_ceiling.sql`. Notes:
+  `doc/15_SOFT_LIMIT_AND_CEILING.md`.
+- `lib/senders.ts`: added `getSentToday()`, `getRemainingCeiling()`,
+  `isPastSoftLimit()`, `hasAcknowledgmentForToday()`.
+- `lib/usage.ts`: added `getRemainingMonthlyEmailQuota(companyId)`.
+- New `POST /api/senders/acknowledge-limit`.
+- `app/api/email/campaigns` (send-now): recipient list now built before the limit
+  decision; under `daily_limit` behaves exactly as before; over it without an
+  acknowledgment returns 409 `requires_acknowledgment` (nothing created yet); with an
+  acknowledgment, queues everything and reports an honest `sending_today`/`deferred`
+  split based on `technical_ceiling`.
+- `app/api/send-email`: same soft-limit/acknowledgment gate, but — since this route
+  sends synchronously with no queue behind it — no "defer" concept; a 429 past the
+  ceiling is a flat, honest rejection instead.
+- `app/api/campaigns/process` (worker): hard-stops each sender at `technical_ceiling`
+  instead of `daily_limit`; skips a sender for the run if past `daily_limit` with no
+  acknowledgment today; also caps each company's per-run sends at its remaining
+  monthly plan quota (`getRemainingMonthlyEmailQuota`), evaluated fresh every run.
+- New shared `app/_components/SendLimitConsentModal.tsx`, wired into
+  `NewCampaignModal`, `BulkSendModal` (as a resumable loop pausing on the first 409),
+  and `MessageModal` (the last one wasn't explicitly requested but hits the identical
+  409, so included for consistency).
+- `/settings/sender` now shows `{sent_today} sent today · advisory limit {daily_limit}
+  · provider ceiling {technical_ceiling}`.

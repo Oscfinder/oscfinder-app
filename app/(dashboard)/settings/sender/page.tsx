@@ -138,6 +138,14 @@ export default function SenderSettingsPage() {
           )}
         </div>
 
+        {sender && (
+          <div className="px-6 py-3 bg-[#F8FAFC] border-b border-[#E5E7EB] text-[12px] text-[#888888]">
+            <strong className="text-[#0A1628]">{sender.sent_today ?? 0}</strong> sent today
+            {' · '}advisory limit <strong className="text-[#0A1628]">{sender.daily_limit}</strong>
+            {' · '}provider ceiling <strong className="text-[#0A1628]">{sender.technical_ceiling}</strong>
+          </div>
+        )}
+
         <div className="px-6 py-5 space-y-4">
           {status === 'failed' && sender?.last_error && (
             <div className="bg-[#ffeaea] border border-[#ffd6d6] rounded-lg px-4 py-3 text-[12.5px] text-[#e74c3c]">

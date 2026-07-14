@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount } from '@/lib/auth';
 import { checkLimit } from '@/lib/usage';
-import { getSender, getRemainingDailyQuota } from '@/lib/senders';
+import { getSender, getSentToday, getRemainingCeiling, hasAcknowledgmentForToday } from '@/lib/senders';
 
 // Actual sending happens in app/api/campaigns/process/route.ts, via the company's own
 // SMTP mailbox — this route only validates, gates, and enqueues campaign_recipients.
@@ -89,15 +89,8 @@ export async function POST(req: NextRequest) {
   if (!allowed)
     return NextResponse.json({ error: 'Email limit reached for this month' }, { status: 403 });
 
-  // 4. Sender's own daily cap — if already exhausted today, don't even queue yet
-  const remainingToday = await getRemainingDailyQuota(sender);
-  if (remainingToday <= 0)
-    return NextResponse.json(
-      { error: 'Daily sending limit reached for your mailbox. Sends resume tomorrow.' },
-      { status: 429 }
-    );
-
-  // 5. Build recipient list
+  // 4. Build recipient list — needed up front now, since the soft-limit/ceiling
+  // decision below depends on the batch size (N)
   let leadQuery = supabaseAdmin
     .from('leads')
     .select('id, name, emails, category, state, local_govt, website')
@@ -119,6 +112,35 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
 
+  // 5. Soft daily_limit / hard technical_ceiling decision
+  const sentToday        = await getSentToday(sender.id);
+  const remainingCeiling = await getRemainingCeiling(sender);
+  const n                = recipients.length;
+
+  if (sentToday + n > sender.daily_limit) {
+    const acked = await hasAcknowledgmentForToday(sender.id);
+    if (!acked) {
+      // Nothing created yet — the UI shows a consent modal and retries after
+      // POSTing /api/senders/acknowledge-limit.
+      return NextResponse.json(
+        {
+          requires_acknowledgment:     true,
+          sender_id:                   sender.id,
+          sender_email:                sender.email,
+          sent_today:                  sentToday,
+          daily_limit:                 sender.daily_limit,
+          sending_today_if_confirmed:  Math.min(n, remainingCeiling),
+          deferred_if_confirmed:       n - Math.min(n, remainingCeiling),
+          error:                       'Daily sending limit reached',
+        },
+        { status: 409 }
+      );
+    }
+  }
+
+  const sendingToday = Math.min(n, remainingCeiling);
+  const deferred      = n - sendingToday;
+
   // 6. Create campaign record (status: queued) — the worker takes it from here
   const { data: campaign, error: campaignError } = await supabaseAdmin
     .from('email_campaigns')
@@ -135,7 +157,9 @@ export async function POST(req: NextRequest) {
   if (campaignError)
     return NextResponse.json({ error: campaignError.message }, { status: 500 });
 
-  // 7. Enqueue one campaign_recipients row per lead
+  // 7. Enqueue one campaign_recipients row per lead — all N rows queue regardless of
+  // today/tomorrow; the worker naturally drains up to technical_ceiling per day and
+  // leaves the rest queued, so the split above is an honest estimate, not a commitment
   const { error: recipientsError } = await supabaseAdmin
     .from('campaign_recipients')
     .insert(
@@ -152,8 +176,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: recipientsError.message }, { status: 500 });
 
   return NextResponse.json({
-    campaign_id: campaign.id,
-    queued:      recipients.length,
+    campaign_id:   campaign.id,
+    queued:        recipients.length,
+    sending_today: sendingToday,
+    deferred,
   });
 }
 

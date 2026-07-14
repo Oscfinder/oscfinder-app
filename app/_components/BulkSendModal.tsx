@@ -1,8 +1,9 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Send, CheckCheck, ChevronDown, MailOpen, Users } from 'lucide-react';
-import { Lead, MailTemplate } from '@/types';
+import { Lead, MailTemplate, RequiresAcknowledgment } from '@/types';
 import { Button } from './Button';
+import { SendLimitConsentModal } from './SendLimitConsentModal';
 import { cn } from '@/lib/utils';
 
 interface BulkSendModalProps {
@@ -20,6 +21,12 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
   const [sending, setSending]       = useState(false);
   const [done, setDone]             = useState(false);
   const [error, setError]           = useState('');
+  const [pendingAck, setPendingAck] = useState<{ payload: RequiresAcknowledgment; resumeIndex: number } | null>(null);
+  const [acking, setAcking]         = useState(false);
+
+  // Accumulates across a paused/resumed send — a ref so it survives the pause
+  // without depending on stale state closures inside the loop.
+  const sentIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     fetch('/api/templates')
@@ -33,13 +40,26 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
   const recipients = selected.filter(l => l.emails?.[0]);
   const skipped = selected.length - recipients.length;
 
-  const handleSend = async () => {
+  const finalize = async () => {
+    setSending(false);
+    if (sentIdsRef.current.length > 0) {
+      setDone(true);
+      await new Promise(r => setTimeout(r, 700));
+      onSent(sentIdsRef.current);
+    } else if (!error) {
+      setError('Failed to send to any recipient');
+    }
+  };
+
+  // Resumable — pauses (returns without finalizing) on a 409 requires_acknowledgment,
+  // so handleAckConfirm can retry from the same index after logging the acknowledgment.
+  const sendFrom = async (startIndex: number) => {
     if (!chosen) return;
     setSending(true);
     setError('');
 
-    const sentIds: string[] = [];
-    for (const lead of recipients) {
+    for (let i = startIndex; i < recipients.length; i++) {
+      const lead = recipients[i];
       try {
         const res = await fetch('/api/send-email', {
           method:  'POST',
@@ -51,21 +71,51 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
             body:    fillTemplate(chosen.body, lead),
           }),
         });
-        if (res.ok) sentIds.push(lead.id);
-        else if (res.status === 403 || res.status === 429) { setError((await res.json()).error ?? 'Sending stopped'); break; }
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok) {
+          sentIdsRef.current.push(lead.id);
+        } else if (res.status === 409 && data.requires_acknowledgment) {
+          setSending(false);
+          setPendingAck({ payload: data, resumeIndex: i });
+          return; // pause — handleAckConfirm/handleAckCancel takes it from here
+        } else if (res.status === 429) {
+          setError(`${sentIdsRef.current.length} sent — provider ceiling reached for today, resume tomorrow.`);
+          break;
+        } else if (res.status === 403) {
+          setError(data.error ?? 'Sending stopped');
+          break;
+        }
       } catch {
         // skip this recipient, continue with the rest
       }
     }
 
-    setSending(false);
-    if (sentIds.length > 0) {
-      setDone(true);
-      await new Promise(r => setTimeout(r, 700));
-      onSent(sentIds);
-    } else if (!error) {
-      setError('Failed to send to any recipient');
-    }
+    await finalize();
+  };
+
+  const handleSend = () => {
+    sentIdsRef.current = [];
+    sendFrom(0);
+  };
+
+  const handleAckConfirm = async () => {
+    if (!pendingAck) return;
+    setAcking(true);
+    await fetch('/api/senders/acknowledge-limit', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ sender_id: pendingAck.payload.sender_id }),
+    });
+    const resumeIndex = pendingAck.resumeIndex;
+    setAcking(false);
+    setPendingAck(null);
+    await sendFrom(resumeIndex);
+  };
+
+  const handleAckCancel = async () => {
+    setPendingAck(null);
+    await finalize();
   };
 
   return (
@@ -173,6 +223,17 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
         </div>
 
       </div>
+
+      {pendingAck && (
+        <SendLimitConsentModal
+          senderEmail={pendingAck.payload.sender_email}
+          dailyLimit={pendingAck.payload.daily_limit}
+          sentToday={pendingAck.payload.sent_today}
+          confirming={acking}
+          onConfirm={handleAckConfirm}
+          onCancel={handleAckCancel}
+        />
+      )}
     </div>
   );
 }

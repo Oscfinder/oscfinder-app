@@ -2,10 +2,11 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Send, Trash2, Eye, X, ChevronDown, Search } from 'lucide-react';
-import { EmailCampaign, MailTemplate, EmailSender } from '@/types';
+import { EmailCampaign, MailTemplate, EmailSender, RequiresAcknowledgment } from '@/types';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { cn } from '@/lib/utils';
 import { LockedFeatureCard } from '@/app/_components/LockedFeatureCard';
+import { SendLimitConsentModal } from '@/app/_components/SendLimitConsentModal';
 
 // ── Local types ───────────────────────────────────────────────────
 type CampaignStatus = 'draft' | 'queued' | 'sending' | 'completed' | 'failed';
@@ -70,6 +71,9 @@ function NewCampaignModal({
   const [showPreview, setShowPreview] = useState(false);
   const [isSending,   setIsSending]   = useState(false);
   const [formError,   setFormError]   = useState('');
+  const [pendingAck,  setPendingAck]  = useState<RequiresAcknowledgment | null>(null);
+  const [acking,      setAcking]      = useState(false);
+  const [successInfo, setSuccessInfo] = useState<{ sendingToday: number; deferred: number } | null>(null);
 
   const { data: leads = [] } = useQuery<any[]>({
     queryKey: ['leads-all'],
@@ -91,6 +95,17 @@ function NewCampaignModal({
   const emailsUsed  = usageSummary?.email_count  ?? 0;
   const emailsLimit = usageLimits?.email_limit   ?? null;
 
+  const postCampaign = (sendNow: boolean) => fetch('/api/email/campaigns', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name:        name.trim(),
+      template_id: templateId || null,
+      filters:     { category: catFilter, state: stateFilter, status: statFilter },
+      send_now:    sendNow,
+    }),
+  });
+
   const submit = async (sendNow: boolean) => {
     if (!name.trim())                          { setFormError('Campaign name is required');           return; }
     if (sendNow && !templateId)                { setFormError('Select a template before sending');   return; }
@@ -99,27 +114,71 @@ function NewCampaignModal({
     setFormError('');
     setIsSending(true);
 
-    const res = await fetch('/api/email/campaigns', {
+    const res  = await postCampaign(sendNow);
+    const data = await res.json();
+    setIsSending(false);
+
+    if (res.status === 409 && data.requires_acknowledgment) { setPendingAck(data); return; }
+    if (!res.ok) { setFormError(data.error ?? 'Something went wrong'); return; }
+
+    if (sendNow && data.deferred > 0) {
+      onCreated();
+      setSuccessInfo({ sendingToday: data.sending_today, deferred: data.deferred });
+      return;
+    }
+
+    onCreated();
+    onClose();
+  };
+
+  const handleAckConfirm = async () => {
+    if (!pendingAck) return;
+    setAcking(true);
+    await fetch('/api/senders/acknowledge-limit', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name:        name.trim(),
-        template_id: templateId || null,
-        filters:     { category: catFilter, state: stateFilter, status: statFilter },
-        send_now:    sendNow,
-      }),
+      body:    JSON.stringify({ sender_id: pendingAck.sender_id }),
     });
+    setPendingAck(null);
+    setAcking(false);
 
+    setIsSending(true);
+    const res  = await postCampaign(true);
     const data = await res.json();
     setIsSending(false);
 
     if (!res.ok) { setFormError(data.error ?? 'Something went wrong'); return; }
 
     onCreated();
-    onClose();
+    if (data.deferred > 0) setSuccessInfo({ sendingToday: data.sending_today, deferred: data.deferred });
+    else onClose();
   };
 
   const selectCls = 'h-9 pl-3 pr-8 w-full rounded-lg border border-[#E5E7EB] bg-white text-[13px] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] text-[#0A1628]';
+
+  if (successInfo) {
+    return (
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[440px] px-6 py-8 flex flex-col items-center text-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-[#dff2f9] flex items-center justify-center">
+            <Send size={20} className="text-[#0099CC]" />
+          </div>
+          <h2 className="text-[16px] font-bold text-[#0A1628]">Campaign queued</h2>
+          <p className="text-[13px] text-[#1A3A5C] leading-relaxed">
+            <strong>{successInfo.sendingToday}</strong> emails will send today;{' '}
+            <strong>{successInfo.deferred}</strong> will continue tomorrow (your mailbox
+            provider limits daily sending).
+          </p>
+          <button
+            onClick={onClose}
+            className="mt-2 h-10 px-5 rounded-lg bg-[#0099CC] hover:bg-[#006285] text-white text-[13px] font-bold transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -265,6 +324,17 @@ function NewCampaignModal({
           </button>
         </div>
       </div>
+
+      {pendingAck && (
+        <SendLimitConsentModal
+          senderEmail={pendingAck.sender_email}
+          dailyLimit={pendingAck.daily_limit}
+          sentToday={pendingAck.sent_today}
+          confirming={acking}
+          onConfirm={handleAckConfirm}
+          onCancel={() => setPendingAck(null)}
+        />
+      )}
     </div>
   );
 }
