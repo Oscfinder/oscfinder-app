@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Building2, Zap,
   Mail, FileText, Download, BarChart2,
-  ShieldCheck, Users, LogOut, CreditCard, Settings,
+  ShieldCheck, Users, LogOut, CreditCard, Settings, Code2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -33,6 +33,7 @@ const billingNav = [
 const adminNav = [
   { href: '/admin',       label: 'Admin Panel',   icon: ShieldCheck },
   { href: '/admin/demos', label: 'Demo Accounts', icon: Users },
+  { href: '/api-docs',    label: 'API Docs',      icon: Code2 },
 ];
 
 function NavGroup({ label, items, collapsed, pathname }: {

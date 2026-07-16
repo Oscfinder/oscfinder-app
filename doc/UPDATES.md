@@ -295,3 +295,43 @@
   note; fixed the event-log empty-state copy which referenced Resend.
 - `opened_count`/`clicked_count`/`bounced_count` columns, `email_events`, and its
   webhook receiver route are untouched — left dormant for possible future tracking.
+
+---
+
+## 2026-07-16
+
+### Favicon
+- Added `app/icon.svg` — Next.js's automatic favicon file convention. No existing
+  logo image asset existed (`app/_components/Logo.tsx` turned out to be unused dead
+  code); used the sidebar's own collapsed-state mark instead (bold blue "O" on the
+  navy sidebar background) since that's the app's actual active brand shorthand.
+  Verified live: build generates `○ /icon.svg`, and the rendered `<head>` correctly
+  gets `<link rel="icon" href="/icon.svg?...">`.
+
+### OpenAPI / Swagger docs for all API routes
+- Read every `app/api/**/route.ts` (29 files) and generated `public/swagger.json`, a
+  full OpenAPI 3.0 spec covering every method, path/query param, request body, and
+  response status code actually present in the code (not guessed) — tagged by domain
+  (Leads, Scraping, Templates, Campaigns, Email, Senders, Export, Usage, Billing,
+  Onboarding, Admin, Cron).
+- Two security schemes documented separately: `cookieAuth` (the normal Supabase
+  session cookie every user-facing route relies on via `requireAuth()`/
+  `requireAdmin()`) and `cronSecret` (the `Authorization: Bearer $CRON_SECRET` header
+  the `/api/campaigns/process` worker checks — unrelated to user auth).
+- Flagged `/api/email/events` (the Resend webhook) as genuinely unauthenticated in
+  code (no `requireAuth()` call) with a `TODO: verify schema` note, since its payload
+  shape is defined by Resend, not this codebase.
+- New `app/api-docs/page.tsx` renders the spec via `swagger-ui-react` (client-only,
+  dynamic import, `ssr: false`). Added `Code2` "API Docs" sidebar link, admin-only
+  (`app/_components/Sidebar.tsx`'s `adminNav`).
+- `middleware.ts`: added `/api-docs` and `/swagger.json` as paths accessible
+  regardless of login state (split the old single `publicPaths` array into
+  `authOnlyPaths`, which still bounces logged-in users away from `/login` etc., and a
+  new `openPaths` list, since conflating the two would have redirected logged-in
+  admins away from the docs page instead of letting them view it).
+- `SwaggerUI`'s `requestInterceptor` sets `credentials: 'include'` on every "Try it
+  out" request, so a logged-in admin's existing session cookie is sent automatically
+  on same-origin test calls — no separate token entry. Logged-out visitors can still
+  read the docs; live test calls from them 401 exactly like hitting the real API
+  would.
+- No existing route logic changed.

@@ -1,0 +1,1016 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "OsCompanyFinder API",
+    "description": "Internal API for OsCompanyFinder, a B2B lead-generation SaaS. Generated directly from the route handlers under app/api/** — every schema here reflects what the code actually reads/returns, not a hand-written guess.",
+    "version": "1.0.0"
+  },
+  "servers": [{ "url": "/", "description": "Same origin as the web app" }],
+  "tags": [
+    { "name": "Leads", "description": "Lead CRUD, filtering, bulk operations" },
+    { "name": "Scraping", "description": "Google Places lead-generation pipeline" },
+    { "name": "Templates", "description": "Reusable email templates" },
+    { "name": "Campaigns", "description": "Bulk email campaigns sent via each company's own SMTP sender" },
+    { "name": "Email", "description": "Direct single/bulk lead outreach and the Resend transactional webhook" },
+    { "name": "Senders", "description": "Per-company SMTP sender configuration, verification, and soft-limit acknowledgments" },
+    { "name": "Export", "description": "Lead data export (CSV/XLSX) and export history" },
+    { "name": "Usage", "description": "Plan usage tracking (scrapes/emails/exports) and limits" },
+    { "name": "Billing", "description": "Company plan, invoices, and billing status (company_admin only)" },
+    { "name": "Onboarding", "description": "First-run company setup wizard" },
+    { "name": "Admin", "description": "Platform-admin-only: companies, invoices, demos, revenue" },
+    { "name": "Cron", "description": "Background worker triggered by an external cron, not by users" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "sb-access-token",
+        "description": "Session-based auth via Supabase Auth cookies set after logging in through the web app (see lib/auth.ts: getSession()/requireAuth()/requireAdmin()/requireActiveAccount()). There is no API key or bearer token to pass manually for these routes — they are only callable from an authenticated browser session."
+      },
+      "cronSecret": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Used ONLY by the /api/campaigns/process worker route. Requires header `Authorization: Bearer <CRON_SECRET>` matching the CRON_SECRET env var (see app/api/campaigns/process/route.ts). Entirely separate from user session auth above — a valid user cookie does not authorize this route, and this bearer token does not authorize any other route."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": { "error": { "type": "string" } },
+        "required": ["error"]
+      },
+      "Lead": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "company_id": { "type": "string", "format": "uuid" },
+          "job_id": { "type": "string", "format": "uuid", "nullable": true },
+          "name": { "type": "string" },
+          "address": { "type": "string" },
+          "state": { "type": "string" },
+          "local_govt": { "type": "string" },
+          "website": { "type": "string" },
+          "place_id": { "type": "string" },
+          "emails": { "type": "array", "items": { "type": "string" } },
+          "phones": { "type": "array", "items": { "type": "string" } },
+          "category": { "type": "string" },
+          "linkedin_url": { "type": "string", "nullable": true },
+          "source": { "type": "string", "description": "e.g. 'google_places' or 'manual'" },
+          "status": { "type": "string", "enum": ["new", "contacted", "qualified", "ignored"] },
+          "lead_score": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "mail_sent": { "type": "boolean" },
+          "enriched_at": { "type": "string", "format": "date-time", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ScrapeJob": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "company_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["pending", "running", "completed", "failed"] },
+          "category": { "type": "string" },
+          "location": { "type": "string" },
+          "total": { "type": "integer" },
+          "processed": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "EmailTemplate": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "company_id": { "type": "string", "format": "uuid" },
+          "title": { "type": "string" },
+          "subject": { "type": "string" },
+          "body": { "type": "string" },
+          "tag": { "type": "string", "enum": ["Outreach", "Follow-up", "Partnership", "Introduction", "Promotion", "General"] },
+          "use_count": { "type": "integer" },
+          "last_used": { "type": "string", "format": "date-time", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "RecipientCounts": {
+        "type": "object",
+        "properties": {
+          "queued": { "type": "integer" },
+          "sent": { "type": "integer" },
+          "failed": { "type": "integer" }
+        }
+      },
+      "EmailCampaign": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "company_id": { "type": "string", "format": "uuid" },
+          "template_id": { "type": "string", "format": "uuid", "nullable": true },
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["draft", "queued", "sending", "completed", "failed"] },
+          "total_recipients": { "type": "integer" },
+          "sent_count": { "type": "integer", "description": "Only updated once the campaign fully completes -- see recipient_counts for live progress" },
+          "opened_count": { "type": "integer", "description": "Always 0 for SMTP-sent campaigns -- no delivery webhook exists for plain SMTP" },
+          "clicked_count": { "type": "integer", "description": "Always 0 for SMTP-sent campaigns" },
+          "bounced_count": { "type": "integer", "description": "Always 0 for SMTP-sent campaigns" },
+          "scheduled_at": { "type": "string", "format": "date-time", "nullable": true },
+          "completed_at": { "type": "string", "format": "date-time", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" },
+          "template": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "title": { "type": "string" },
+              "subject": { "type": "string" },
+              "tag": { "type": "string" }
+            }
+          },
+          "recipient_counts": { "$ref": "#/components/schemas/RecipientCounts" },
+          "resumes_tomorrow": { "type": "boolean", "description": "True when recipients remain queued and the sender's technical_ceiling is exhausted for today. Omitted/false for admin's cross-company view." }
+        }
+      },
+      "EmailEvent": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "company_id": { "type": "string", "format": "uuid" },
+          "campaign_id": { "type": "string", "format": "uuid", "nullable": true },
+          "email": { "type": "string" },
+          "event": { "type": "string", "enum": ["sent", "delivered", "opened", "clicked", "bounced", "spam", "failed"] },
+          "metadata": { "type": "object", "additionalProperties": true, "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "EmailSender": {
+        "type": "object",
+        "description": "smtp_password is never included in any response.",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "company_id": { "type": "string", "format": "uuid" },
+          "domain_id": { "type": "string", "format": "uuid", "nullable": true, "description": "Unused -- carried only for schema-sketch compatibility, no email_domains table exists" },
+          "email": { "type": "string" },
+          "is_default": { "type": "boolean" },
+          "display_name": { "type": "string", "nullable": true },
+          "smtp_host": { "type": "string", "nullable": true },
+          "smtp_port": { "type": "integer", "nullable": true },
+          "smtp_username": { "type": "string", "nullable": true },
+          "reply_to": { "type": "string", "nullable": true },
+          "daily_limit": { "type": "integer", "description": "Advisory/soft limit -- overridable by the company after acknowledging the spam-flagging risk" },
+          "technical_ceiling": { "type": "integer", "description": "Hard, never-crossable mailbox-provider limit" },
+          "sent_today": { "type": "integer", "description": "Computed, not a DB column -- only present on GET /api/senders" },
+          "status": { "type": "string", "enum": ["pending", "verified", "failed"] },
+          "last_verified_at": { "type": "string", "format": "date-time", "nullable": true },
+          "last_error": { "type": "string", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "RequiresAcknowledgment": {
+        "type": "object",
+        "description": "409 response shape from /api/email/campaigns and /api/send-email when a batch would cross the sender's advisory daily_limit and no acknowledgment exists yet today.",
+        "properties": {
+          "requires_acknowledgment": { "type": "boolean", "enum": [true] },
+          "sender_id": { "type": "string", "format": "uuid" },
+          "sender_email": { "type": "string" },
+          "sent_today": { "type": "integer" },
+          "daily_limit": { "type": "integer" },
+          "sending_today_if_confirmed": { "type": "integer" },
+          "deferred_if_confirmed": { "type": "integer" },
+          "error": { "type": "string" }
+        }
+      },
+      "Company": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "email": { "type": "string" },
+          "industry": { "type": "string", "nullable": true },
+          "location": { "type": "string", "nullable": true },
+          "plan": { "type": "string", "enum": ["starter", "growth", "enterprise", "demo"] },
+          "status": { "type": "string", "enum": ["inactive", "active", "suspended", "churned"] },
+          "setup_fee_paid": { "type": "boolean" },
+          "renewal_fee_paid": { "type": "boolean" },
+          "plan_start_date": { "type": "string", "format": "date-time" },
+          "plan_end_date": { "type": "string", "format": "date-time" },
+          "is_demo": { "type": "boolean" },
+          "demo_expires_at": { "type": "string", "format": "date-time", "nullable": true },
+          "demo_converted": { "type": "boolean" },
+          "demo_notes": { "type": "string", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Invoice": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "company_id": { "type": "string", "format": "uuid" },
+          "invoice_type": { "type": "string", "enum": ["setup", "renewal", "overage"] },
+          "amount": { "type": "number" },
+          "currency": { "type": "string", "example": "NGN" },
+          "status": { "type": "string", "enum": ["pending", "paid", "overdue", "cancelled"] },
+          "due_date": { "type": "string", "format": "date", "nullable": true },
+          "paid_date": { "type": "string", "format": "date", "nullable": true },
+          "payment_method": { "type": "string", "nullable": true },
+          "reference": { "type": "string", "nullable": true },
+          "notes": { "type": "string", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" },
+          "company": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "name": { "type": "string" },
+              "email": { "type": "string" },
+              "plan": { "type": "string" }
+            }
+          }
+        }
+      },
+      "UsageLog": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "enum": ["google_search", "email_sent", "export"] },
+          "units": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "metadata": { "type": "object", "additionalProperties": true, "nullable": true }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/leads": {
+      "get": {
+        "tags": ["Leads"],
+        "summary": "List leads for the caller's company (all companies for admin), optionally filtered by status.",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["new", "contacted", "qualified", "ignored"] } }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Lead" } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/leads/{id}": {
+      "patch": {
+        "tags": ["Leads"],
+        "summary": "Update editable fields on a single lead (scoped to the caller's company).",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Any subset of these fields",
+                "properties": {
+                  "name": { "type": "string" },
+                  "address": { "type": "string" },
+                  "website": { "type": "string" },
+                  "emails": { "type": "array", "items": { "type": "string" } },
+                  "phones": { "type": "array", "items": { "type": "string" } },
+                  "category": { "type": "string" },
+                  "state": { "type": "string" },
+                  "local_govt": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Updated lead", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Lead" } } } },
+          "400": { "description": "No editable fields provided", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "delete": {
+        "tags": ["Leads"],
+        "summary": "Delete a single lead (scoped to the caller's company).",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" } } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/leads/all": {
+      "get": {
+        "tags": ["Leads"],
+        "summary": "List all leads for the caller's company (all companies for admin), unpaginated.",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Lead" } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "delete": {
+        "tags": ["Leads"],
+        "summary": "Bulk-delete leads by id (scoped to the caller's company).",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["ids"], "properties": { "ids": { "type": "array", "items": { "type": "string", "format": "uuid" } } } } } }
+        },
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" } } } } } },
+          "400": { "description": "ids array required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/scrape": {
+      "post": {
+        "tags": ["Scraping"],
+        "summary": "Start a Google Places lead-generation job for a category+location. Runs in the background via next/server's after(); poll GET /api/scrape/{jobId} for progress.",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["category", "location"], "properties": { "category": { "type": "string" }, "location": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Job created", "content": { "application/json": { "schema": { "type": "object", "properties": { "jobId": { "type": "string", "format": "uuid" } } } } } },
+          "400": { "description": "category and location are required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Scrape limit reached for this month, or account suspended/expired", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/scrape/{jobId}": {
+      "get": {
+        "tags": ["Scraping"],
+        "summary": "Get a scrape job's status/progress.",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [{ "name": "jobId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ScrapeJob" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Job not found or server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/scrape/active-count": {
+      "get": {
+        "tags": ["Scraping"],
+        "summary": "Count of the caller's company's scrape jobs currently pending or running.",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "count": { "type": "integer" } } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/templates": {
+      "get": {
+        "tags": ["Templates"],
+        "summary": "List email templates for the caller's company (all companies for admin).",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/EmailTemplate" } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "post": {
+        "tags": ["Templates"],
+        "summary": "Create an email template.",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["title", "subject", "body", "tag"], "properties": { "title": { "type": "string" }, "subject": { "type": "string" }, "body": { "type": "string" }, "tag": { "type": "string", "enum": ["Outreach", "Follow-up", "Partnership", "Introduction", "Promotion", "General"] } } } } }
+        },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmailTemplate" } } } },
+          "400": { "description": "Missing required fields", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "patch": {
+        "tags": ["Templates"],
+        "summary": "Update a template (fields other than id are applied as-is).",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "format": "uuid" }, "title": { "type": "string" }, "subject": { "type": "string" }, "body": { "type": "string" }, "tag": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Updated template", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmailTemplate" } } } },
+          "400": { "description": "id is required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "delete": {
+        "tags": ["Templates"],
+        "summary": "Delete a template by id.",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [{ "name": "id", "in": "query", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" } } } } } },
+          "400": { "description": "id is required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/email/campaigns": {
+      "get": {
+        "tags": ["Campaigns"],
+        "summary": "List campaigns for the caller's company (all companies for admin), each enriched with live recipient_counts and resumes_tomorrow.",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/EmailCampaign" } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "post": {
+        "tags": ["Campaigns"],
+        "summary": "Save a campaign as a draft, or queue it for immediate sending through the company's verified SMTP sender.",
+        "description": "When send_now is true: requires a verified sender (403 otherwise), checks the plan's monthly email limit (403), then if the batch would cross the sender's advisory daily_limit and no acknowledgment exists yet today, returns 409 requires_acknowledgment instead of queuing anything. Sending is asynchronous -- this route only enqueues campaign_recipients rows; app/api/campaigns/process actually sends them.",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "template_id": { "type": "string", "format": "uuid", "nullable": true },
+                  "filters": {
+                    "type": "object",
+                    "properties": {
+                      "category": { "type": "string" },
+                      "state": { "type": "string" },
+                      "status": { "type": "string" }
+                    }
+                  },
+                  "send_now": { "type": "boolean", "default": false }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Draft saved, or campaign queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    { "type": "object", "properties": { "campaign": { "$ref": "#/components/schemas/EmailCampaign" }, "sent": { "type": "integer" }, "skipped": { "type": "integer" } } },
+                    { "type": "object", "properties": { "campaign_id": { "type": "string", "format": "uuid" }, "queued": { "type": "integer" }, "sending_today": { "type": "integer" }, "deferred": { "type": "integer" } } }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "description": "Campaign name required / no template selected / no matching leads with an email", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "No verified sending mailbox configured, or plan email limit reached", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Template not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "409": { "description": "Batch would cross the sender's advisory daily limit -- caller must POST /api/senders/acknowledge-limit then retry", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RequiresAcknowledgment" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/email/campaigns/{id}": {
+      "get": {
+        "tags": ["Campaigns"],
+        "summary": "Get a single campaign plus its last 100 email_events, recipient_counts, and resumes_tomorrow.",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "campaign": { "$ref": "#/components/schemas/EmailCampaign" }, "events": { "type": "array", "items": { "$ref": "#/components/schemas/EmailEvent" } } } } } }
+          },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Campaign not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "delete": {
+        "tags": ["Campaigns"],
+        "summary": "Delete a campaign. Only allowed while status is 'draft'.",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" } } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error (also returned if the campaign isn't a draft, since the delete simply matches 0 rows)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/send-email": {
+      "post": {
+        "tags": ["Email"],
+        "summary": "Send a single direct outreach email (or a small array of recipients) through the company's verified SMTP sender, synchronously.",
+        "description": "Unlike campaigns, this route has no queue behind it -- it sends immediately inside the request. Past the sender's advisory daily_limit it requires an acknowledgment (409); once the sender's technical_ceiling is genuinely exhausted for the day it's a flat 429, since there is nothing to defer to tomorrow.",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["to", "subject", "body"],
+                "properties": {
+                  "leadId": { "type": "string", "format": "uuid", "description": "If provided, marks this lead mail_sent=true and status=contacted" },
+                  "to": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+                  "subject": { "type": "string" },
+                  "body": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Sent", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" } } } } } },
+          "400": { "description": "to, subject and body are required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "No verified sending mailbox configured, or plan email limit reached", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "409": { "description": "Would cross the sender's advisory daily limit -- POST /api/senders/acknowledge-limit then retry", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RequiresAcknowledgment" } } } },
+          "429": { "description": "Sender's technical_ceiling reached for today", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Send failed or credentials could not be decrypted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/email/events": {
+      "post": {
+        "tags": ["Email"],
+        "summary": "Resend transactional-email webhook receiver (delivered/opened/clicked/bounced/complained). Not used by SMTP campaign sends.",
+        "description": "TODO: verify schema -- exact payload shape is defined by Resend's webhook format, not this codebase; documented here from how the handler reads it (type, data.tags[], data.to). No authentication is enforced on this route in code (no requireAuth() call) -- it is a public endpoint that trusts the payload shape.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string", "enum": ["email.delivered", "email.opened", "email.clicked", "email.bounced", "email.complained"] },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "to": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+                      "tags": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "value": { "type": "string" } } } }
+                    },
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Always returns { ok: true }, including for payloads it silently ignores (unmapped event type, missing company_id/email)", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } } } } }
+        }
+      }
+    },
+    "/api/senders": {
+      "get": {
+        "tags": ["Senders"],
+        "summary": "Get the caller's company's SMTP sender (admin may pass ?company_id= to view any company's).",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [{ "name": "company_id", "in": "query", "schema": { "type": "string", "format": "uuid" }, "description": "Admin only" }],
+        "responses": {
+          "200": { "description": "OK (null if no sender configured yet)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmailSender" } } } },
+          "400": { "description": "company_id is required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "post": {
+        "tags": ["Senders"],
+        "summary": "Create or update the company's SMTP sender. Always resets status to 'pending' -- call /api/senders/verify afterward.",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "smtp_host", "smtp_username", "smtp_password", "reply_to"],
+                "properties": {
+                  "display_name": { "type": "string" },
+                  "email": { "type": "string" },
+                  "smtp_host": { "type": "string" },
+                  "smtp_port": { "type": "integer", "default": 465 },
+                  "smtp_username": { "type": "string" },
+                  "smtp_password": { "type": "string", "description": "Plaintext in the request; encrypted at rest server-side and never returned by any route" },
+                  "reply_to": { "type": "string" },
+                  "company_id": { "type": "string", "format": "uuid", "description": "Admin only" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmailSender" } } } },
+          "400": { "description": "Missing required fields, or company_id is required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/senders/verify": {
+      "post": {
+        "tags": ["Senders"],
+        "summary": "Verify the company's SMTP sender by connecting and sending one real test email to its reply_to address.",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": false,
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "company_id": { "type": "string", "format": "uuid", "description": "Admin only" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Verified", "content": { "application/json": { "schema": { "type": "object", "properties": { "id": { "type": "string" }, "status": { "type": "string", "enum": ["verified"] }, "last_verified_at": { "type": "string", "format": "date-time" }, "last_error": { "type": "string", "nullable": true } } } } } },
+          "400": { "description": "SMTP verification failed", "content": { "application/json": { "schema": { "type": "object", "properties": { "error": { "type": "string" }, "status": { "type": "string", "enum": ["failed"] } } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "No sender configured yet", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error / credentials could not be decrypted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/senders/acknowledge-limit": {
+      "post": {
+        "tags": ["Senders"],
+        "summary": "Log that the caller accepted the risk of sending past the sender's advisory daily_limit today. Called right after the user clicks 'Proceed at my own risk'; the caller then retries the original send/queue request.",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["sender_id"], "properties": { "sender_id": { "type": "string", "format": "uuid" }, "campaign_id": { "type": "string", "format": "uuid", "nullable": true } } } } }
+        },
+        "responses": {
+          "200": { "description": "Acknowledgment logged", "content": { "application/json": { "schema": { "type": "object", "properties": { "id": { "type": "string", "format": "uuid" }, "company_id": { "type": "string", "format": "uuid" }, "user_id": { "type": "string", "format": "uuid" }, "sender_id": { "type": "string", "format": "uuid" }, "campaign_id": { "type": "string", "format": "uuid", "nullable": true }, "day": { "type": "string", "format": "date" }, "sent_at_time": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" } } } } } },
+          "400": { "description": "sender_id is required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Sender belongs to a different company", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Sender not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/campaigns/process": {
+      "get": {
+        "tags": ["Cron"],
+        "summary": "Send a small batch of queued campaign_recipients through each verified, under-quota sender. Triggered every ~5 minutes by an external cPanel cron, with a once-daily Vercel cron as fallback.",
+        "description": "Not callable by end users. Caps total sends per invocation at EMAIL_MAX_SENDS_PER_RUN, hard-stops each sender at technical_ceiling, and skips any sender that's past its advisory daily_limit without today's acknowledgment.",
+        "security": [{ "cronSecret": [] }],
+        "responses": {
+          "200": { "description": "OK -- always returns ok:true even when nothing was queued to send", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "sent": { "type": "integer" }, "failed": { "type": "integer" } } } } } },
+          "401": { "description": "Missing or wrong Authorization bearer token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/export": {
+      "get": {
+        "tags": ["Export"],
+        "summary": "Export the caller's company's leads as a CSV or XLSX file, with optional filters.",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [
+          { "name": "format", "in": "query", "schema": { "type": "string", "enum": ["csv", "xlsx"], "default": "xlsx" } },
+          { "name": "category", "in": "query", "schema": { "type": "string" } },
+          { "name": "state", "in": "query", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "jobId", "in": "query", "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "File download", "content": { "text/csv": { "schema": { "type": "string", "format": "binary" } }, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { "schema": { "type": "string", "format": "binary" } } } },
+          "403": { "description": "Export limit reached for this month, or account suspended/expired", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/export/history": {
+      "get": {
+        "tags": ["Export"],
+        "summary": "Last 50 export actions for the caller's company, derived from usage_logs.",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object", "properties": { "created_at": { "type": "string", "format": "date-time" }, "lead_count": { "type": "integer" }, "format": { "type": "string" }, "filters": { "type": "object", "nullable": true, "additionalProperties": true } } } } } }
+          },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/usage/summary": {
+      "get": {
+        "tags": ["Usage"],
+        "summary": "Current calendar month's scrape/email/export counts for the caller's company.",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "scrape_count": { "type": "integer" }, "email_count": { "type": "integer" }, "export_count": { "type": "integer" } } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/usage/limits": {
+      "get": {
+        "tags": ["Usage"],
+        "summary": "The caller's plan's scrape/email/export limits (nulls for admin, meaning unlimited).",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "plan": { "type": "string" }, "scrape_limit": { "type": "integer", "nullable": true }, "email_limit": { "type": "integer", "nullable": true }, "export_limit": { "type": "integer", "nullable": true } } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/usage/logs": {
+      "get": {
+        "tags": ["Usage"],
+        "summary": "Last 200 usage_logs rows for the caller's company (all companies for admin).",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/UsageLog" } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/usage/recent": {
+      "get": {
+        "tags": ["Usage"],
+        "summary": "Last 10 usage_logs rows for the caller's company (all companies for admin).",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/UsageLog" } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/billing": {
+      "get": {
+        "tags": ["Billing"],
+        "summary": "The caller's company's plan, current-month usage/limits, and last 20 invoices. Company users only, not admins.",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "company": { "$ref": "#/components/schemas/Company" },
+                    "usage": { "type": "object", "properties": { "scrapes_used": { "type": "integer" }, "emails_used": { "type": "integer" }, "exports_used": { "type": "integer" } } },
+                    "limits": { "type": "object", "properties": { "scrape_limit": { "type": "integer" }, "email_limit": { "type": "integer" }, "export_limit": { "type": "integer", "nullable": true } } },
+                    "invoices": { "type": "array", "items": { "$ref": "#/components/schemas/Invoice" } }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "No company associated with this account", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Company not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/onboarding/company": {
+      "get": {
+        "tags": ["Onboarding"],
+        "summary": "The caller's company's name/industry/location, for pre-filling the onboarding wizard.",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "industry": { "type": "string" }, "location": { "type": "string" } } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "patch": {
+        "tags": ["Onboarding"],
+        "summary": "Save the company's chosen industry and/or location during onboarding.",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "industry": { "type": "string" }, "location": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" } } } } } },
+          "400": { "description": "No company associated with account, or no fields to update", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/onboarding/complete": {
+      "post": {
+        "tags": ["Onboarding"],
+        "summary": "Mark the caller's user record as onboarding_complete = true.",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" } } } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/admin/companies": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "List every company with this-month usage, from the admin_company_overview view.",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object", "additionalProperties": true } } } } },
+          "403": { "description": "Forbidden -- not an admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Create a company, its Supabase Auth user, and its users table record.",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "password"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "email": { "type": "string" },
+                  "plan": { "type": "string", "enum": ["starter", "growth", "enterprise"], "default": "starter" },
+                  "password": { "type": "string" },
+                  "full_name": { "type": "string" },
+                  "industry": { "type": "string" },
+                  "location": { "type": "string" },
+                  "setup_fee_paid": { "type": "boolean", "default": false },
+                  "plan_start_date": { "type": "string", "format": "date-time" },
+                  "plan_end_date": { "type": "string", "format": "date-time" },
+                  "notes": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Created", "content": { "application/json": { "schema": { "type": "object", "properties": { "company": { "$ref": "#/components/schemas/Company" }, "user_id": { "type": "string", "format": "uuid" } } } } } },
+          "400": { "description": "Missing required fields, or invalid plan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Forbidden -- not an admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/admin/companies/{id}": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Get a company plus its users.",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "company": { "$ref": "#/components/schemas/Company" }, "users": { "type": "array", "items": { "type": "object", "additionalProperties": true } } } } } } },
+          "403": { "description": "Forbidden -- not an admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Company not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "patch": {
+        "tags": ["Admin"],
+        "summary": "Update allowlisted fields on a company (status, plan, fee flags, dates, notes, sales rep, industry, location).",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Any subset of these fields; unlisted fields are ignored",
+                "properties": {
+                  "status": { "type": "string", "enum": ["inactive", "active", "suspended", "churned"] },
+                  "plan": { "type": "string", "enum": ["starter", "growth", "enterprise", "demo"] },
+                  "setup_fee_paid": { "type": "boolean" },
+                  "renewal_fee_paid": { "type": "boolean" },
+                  "plan_end_date": { "type": "string", "format": "date-time" },
+                  "plan_start_date": { "type": "string", "format": "date-time" },
+                  "notes": { "type": "string" },
+                  "assigned_sales_rep": { "type": "string" },
+                  "industry": { "type": "string" },
+                  "location": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Updated company", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Company" } } } },
+          "400": { "description": "No valid fields to update", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Forbidden -- not an admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/admin/demos": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "List every demo company from the admin_demo_overview view.",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object", "additionalProperties": true } } } } },
+          "403": { "description": "Forbidden -- not an admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Create, convert, extend, or suspend a demo company, keyed by the `action` field.",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  { "type": "object", "required": ["action", "name", "email", "password"], "properties": { "action": { "type": "string", "enum": ["create"] }, "name": { "type": "string" }, "email": { "type": "string" }, "duration": { "type": "integer", "default": 7, "description": "days" }, "password": { "type": "string" }, "notes": { "type": "string" } } },
+                  { "type": "object", "required": ["action", "company_id", "plan"], "properties": { "action": { "type": "string", "enum": ["convert"] }, "company_id": { "type": "string", "format": "uuid" }, "plan": { "type": "string" } } },
+                  { "type": "object", "required": ["action", "company_id"], "properties": { "action": { "type": "string", "enum": ["extend"] }, "company_id": { "type": "string", "format": "uuid" }, "days": { "type": "integer", "default": 7 } } },
+                  { "type": "object", "required": ["action", "company_id"], "properties": { "action": { "type": "string", "enum": ["suspend"] }, "company_id": { "type": "string", "format": "uuid" } } }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK -- response shape depends on action (create returns company_id+user_id, extend returns new_expiry, convert/suspend return {success:true})", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "400": { "description": "action is required / unknown action / missing action-specific fields", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Forbidden -- not an admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/admin/invoices": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "List all invoices with company name/email/plan, newest first, optionally filtered by status.",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [{ "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "paid", "overdue", "cancelled"] } }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Invoice" } } } } },
+          "403": { "description": "Forbidden -- not an admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Create an invoice for a company.",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["company_id", "invoice_type", "amount"],
+                "properties": {
+                  "company_id": { "type": "string", "format": "uuid" },
+                  "invoice_type": { "type": "string", "enum": ["setup", "renewal", "overage"] },
+                  "amount": { "type": "number" },
+                  "due_date": { "type": "string", "format": "date", "description": "Defaults to 7 days from today" },
+                  "reference": { "type": "string" },
+                  "payment_method": { "type": "string" },
+                  "notes": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Created invoice", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Invoice" } } } },
+          "400": { "description": "Missing required fields, or invalid invoice_type", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Forbidden -- not an admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/admin/invoices/{id}": {
+      "patch": {
+        "tags": ["Admin"],
+        "summary": "Mark an invoice paid (activates the company / extends plan_end_date by a year depending on invoice_type) or cancel it.",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["action"], "properties": { "action": { "type": "string", "enum": ["mark_paid", "cancel"] }, "payment_method": { "type": "string" }, "reference": { "type": "string" }, "paid_date": { "type": "string", "format": "date-time" } } } } }
+        },
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" } } } } } },
+          "400": { "description": "Invalid action, or invoice already paid", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Forbidden -- not an admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Invoice not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/admin/revenue": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Aggregate revenue stats from the revenue_summary view.",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "403": { "description": "Forbidden -- not an admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    }
+  }
+}

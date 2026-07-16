@@ -26,15 +26,17 @@ export async function middleware(req: NextRequest) {
 
   const { pathname } = req.nextUrl;
 
-  const publicPaths = ['/login', '/forgot-password', '/reset-password'];
+  const authOnlyPaths = ['/login', '/forgot-password', '/reset-password'];
+  // Accessible regardless of login state -- no redirect either direction.
+  const openPaths = ['/api-docs', '/swagger.json'];
 
   // If logged in and visiting an auth page → send to dashboard
-  if (user && publicPaths.includes(pathname)) {
+  if (user && authOnlyPaths.includes(pathname)) {
     return NextResponse.redirect(new URL('/', req.url));
   }
 
   // If NOT logged in and visiting a protected page → send to /login
-  if (!user && !publicPaths.includes(pathname)) {
+  if (!user && !authOnlyPaths.includes(pathname) && !openPaths.includes(pathname)) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 

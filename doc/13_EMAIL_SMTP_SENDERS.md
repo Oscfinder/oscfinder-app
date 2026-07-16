@@ -124,7 +124,8 @@ See `supabase/migrations/013_email_smtp_senders.sql` — copy/paste into the Sup
 Editor. This project has no linked Supabase CLI project, so every prior phase's schema
 change was applied this same way (see `doc/1_DATABASE_MIGRATION.md`).
 
-**Also run `supabase/migrations/014_atomic_sender_daily_usage.sql`** — adds the
+**Also run `supabase/migrations/014_atomic_sender_daily_usage.sql`** (full writeup in
+`doc/14_ATOMIC_SENDER_DAILY_USAGE.md`) — adds the
 `increment_sender_daily_usage(sender_id, day)` Postgres function that
 `lib/senders.ts`'s `incrementDailyUsage()` now calls instead of doing a JS-side
 read-then-write. The old approach raced under concurrent access: if the cron worker
