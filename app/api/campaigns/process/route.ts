@@ -141,7 +141,10 @@ export async function GET(req: NextRequest) {
       // crash) can never lose more state than the single send that was in flight.
       try {
         await transporter.sendMail({
-          from:    `"${sender.display_name || sender.email}" <${sender.email}>`,
+          from: {
+            name: sender.display_name || "",
+            address: sender.email
+          },
           replyTo: sender.reply_to ?? sender.email,
           to:      row.email,
           subject,

@@ -50,7 +50,10 @@ export async function POST(req: NextRequest) {
     await transporter.verify();
 
     await transporter.sendMail({
-      from:    `"${sender.display_name || sender.email}" <${sender.email}>`,
+      from: {
+        name: sender.display_name || "",
+        address: sender.email
+      },
       to:      sender.reply_to ?? sender.email,
       subject: 'OsCompanyFinder sender verification',
       html:    '<p>This mailbox is now verified for sending OsCompanyFinder campaign emails.</p>',

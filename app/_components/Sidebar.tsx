@@ -1,13 +1,15 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Building2, Zap,
   Mail, FileText, Download, BarChart2,
-  ShieldCheck, Users, LogOut, CreditCard, Settings, Code2,
+  ShieldCheck, Users, LogOut, CreditCard, Settings, Code2, AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { Button } from './Button';
 
 const mainNav = [
   { href: '/',       label: 'Dashboard',      icon: LayoutDashboard },
@@ -86,8 +88,11 @@ export function Sidebar({
 }) {
   const router   = useRouter();
   const pathname = usePathname();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [loggingOut, setLoggingOut]   = useState(false);
 
   const handleLogout = async () => {
+    setLoggingOut(true);
     await supabase.auth.signOut();
     router.push('/login');
     router.refresh();
@@ -154,7 +159,7 @@ export function Sidebar({
               </span>
             </div>
             <button
-              onClick={handleLogout}
+              onClick={() => setConfirmOpen(true)}
               className="text-white/35 hover:text-red-400 transition-colors"
               title="Sign out"
             >
@@ -164,7 +169,7 @@ export function Sidebar({
         ) : (
           <div className="py-4 flex justify-center">
             <button
-              onClick={handleLogout}
+              onClick={() => setConfirmOpen(true)}
               className="text-white/35 hover:text-red-400 transition-colors"
               title="Sign out"
             >
@@ -173,6 +178,40 @@ export function Sidebar({
           </div>
         )}
       </div>
+
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => !loggingOut && setConfirmOpen(false)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col">
+            <div className="px-6 py-6 flex flex-col items-center text-center gap-4">
+              <div className="flex items-center justify-center w-14 h-14 rounded-full bg-red-50">
+                <AlertTriangle size={28} className="text-red-500" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-gray-800">Log out?</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  You'll need to sign in again to access your dashboard.
+                </p>
+              </div>
+              <div className="flex gap-3 w-full">
+                <Button variant="outline" className="flex-1" onClick={() => setConfirmOpen(false)} disabled={loggingOut}>
+                  Cancel
+                </Button>
+                <Button
+                  isLoading={loggingOut}
+                  onClick={handleLogout}
+                  className="flex-1 bg-red-500 hover:bg-red-600"
+                >
+                  {loggingOut ? 'Logging out...' : 'Log Out'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
