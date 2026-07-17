@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAdmin, logAdminAction } from '@/lib/auth';
+import { seedDefaultTemplates } from '@/lib/seedTemplates';
 
 // ── GET /api/admin/demos ─────────────────────────────────────────
 // Returns all demo companies from admin_demo_overview view.
@@ -76,6 +77,8 @@ export async function POST(req: NextRequest) {
       role:       'company_admin',
       is_active:  true,
     });
+
+    await seedDefaultTemplates(companyId);
 
     await logAdminAction(admin.id, 'create_demo', companyId, { name, email, duration });
 

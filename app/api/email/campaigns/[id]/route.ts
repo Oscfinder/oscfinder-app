@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, requireActiveAccount } from '@/lib/auth';
 import { getSender, getRemainingCeiling } from '@/lib/senders';
 import { getRecipientCounts } from '@/lib/campaignRecipients';
+import { queueCampaignSend } from '@/app/api/email/campaigns/route';
 
 // ── GET /api/email/campaigns/[id] ────────────────────────────────
 export async function GET(
@@ -50,6 +51,57 @@ export async function GET(
       resumes_tomorrow: recipientCounts.queued > 0 && remainingCeiling !== null && remainingCeiling <= 0,
     },
     events,
+  });
+}
+
+// ── PATCH /api/email/campaigns/[id] ──────────────────────────────
+// Only works on a campaign currently in 'draft' status — used to either update a
+// draft's name/template (send_now: false) or finally send it (send_now: true), so a
+// draft saved earlier can actually be completed later rather than only ever being
+// deletable.
+// Body: { name, template_id, filters?, send_now }
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const { user, error } = await requireAuth();
+  if (error) return error;
+
+  if (user.role !== 'admin') {
+    const accountError = await requireActiveAccount(user.company_id!);
+    if (accountError) return accountError;
+  }
+
+  const body = await req.json();
+  const { name, template_id, filters = {}, send_now = false } = body;
+
+  if (!name?.trim())
+    return NextResponse.json({ error: 'Campaign name is required' }, { status: 400 });
+
+  if (!send_now) {
+    const { data: campaign, error: updateError } = await supabaseAdmin
+      .from('email_campaigns')
+      .update({ name: name.trim(), template_id: template_id ?? null })
+      .eq('id', id)
+      .eq('company_id', user.company_id!)
+      .eq('status', 'draft')
+      .select()
+      .single();
+
+    if (updateError)
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
+    if (!campaign)
+      return NextResponse.json({ error: 'Draft not found' }, { status: 404 });
+
+    return NextResponse.json({ campaign });
+  }
+
+  return queueCampaignSend(user, {
+    name: name.trim(),
+    template_id,
+    filters,
+    existingCampaignId: id,
   });
 }
 

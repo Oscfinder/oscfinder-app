@@ -5,6 +5,7 @@ import { requireAuth, requireActiveAccount } from '@/lib/auth';
 import { checkLimit, logUsage } from '@/lib/usage';
 import { decrypt } from '@/lib/crypto';
 import { getSender, getSentToday, getRemainingCeiling, hasAcknowledgmentForToday, incrementDailyUsage } from '@/lib/senders';
+import { buildEmailHtml } from '@/lib/emailHtml';
 
 // Direct lead outreach (single-send + bulk-send from the Leads page) — must go through
 // the company's own verified SMTP mailbox, same as campaigns. Client outreach must
@@ -85,6 +86,7 @@ export async function POST(req: NextRequest) {
       to,
       subject,
       text:    body,
+      html:    buildEmailHtml(body, sender.reply_to ?? sender.email),
     });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Failed to send email' }, { status: 500 });

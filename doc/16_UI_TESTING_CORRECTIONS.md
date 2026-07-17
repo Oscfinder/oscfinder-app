@@ -203,3 +203,234 @@ District/Town stay free text.
   fields.
 - Scoped to Add Lead only, per what was asked — the scrape form's City/LGA/Area
   fields (item 11) and the Edit Lead modal are unchanged.
+
+## 15. Draft campaign delete had no confirmation
+
+**Reported:** clicking delete on a draft campaign deleted it immediately — every
+delete button should show a confirmation popup first.
+
+**Fix:** `app/(dashboard)/email/page.tsx` — the trash icon on a draft row now sets
+`deleteConfirm` (the campaign) instead of calling delete directly; a new
+confirmation modal (name of the draft, Cancel/Delete buttons) renders when
+`deleteConfirm` is set, and only the Delete button actually calls
+`DELETE /api/email/campaigns/[id]`.
+
+## 16. Drafts couldn't actually be sent
+
+**Reported:** a saved draft campaign could only be viewed or deleted — there was
+no way to go back and send it.
+
+**Fix:**
+- `app/api/email/campaigns/route.ts` — extracted the shared send/queue logic
+  (template load, sender verification, plan-limit check, recipient building,
+  soft daily-limit / hard technical-ceiling decision, `campaign_recipients`
+  enqueue) out of `POST` into an exported `queueCampaignSend(user, opts)` helper
+  that can either insert a new campaign or update an existing draft row in place.
+- `app/api/email/campaigns/[id]/route.ts` — new `PATCH` handler: with
+  `send_now: false` it just updates the draft's name/template; with
+  `send_now: true` it calls `queueCampaignSend` with the existing draft's id,
+  gated on `.eq('status', 'draft')` so a campaign can't be re-sent twice.
+- `app/(dashboard)/email/page.tsx` — draft rows now show a "Send draft" action
+  button (next to delete) that opens `NewCampaignModal` pre-filled with the
+  draft's name/template (`editDraft` prop), submitting via `PATCH` instead of
+  `POST` when editing an existing draft.
+
+## 17. No starter email templates for new companies
+
+**Reported:** users should get some generic, professional email templates
+out of the box that they can edit or build on top of, instead of starting from
+zero.
+
+**Fix:** new `lib/seedTemplates.ts` — `DEFAULT_EMAIL_TEMPLATES` (7 templates:
+Initial Outreach, Follow-Up After No Response, Partnership Proposal, Company
+Introduction, Special Offer / Promotion, Checking In / Relationship Building,
+Website / Service Feedback Request), all using the existing
+`{{company_name}}`/`{{category}}`/`{{state}}`/`{{website}}` placeholders and
+tagged across the existing `TemplateTag` values. `seedDefaultTemplates(companyId)`
+inserts only the titles a company doesn't already have (safe to re-run).
+Wired into both company-creation paths: `app/api/admin/companies/route.ts` POST
+(paid company) and `app/api/admin/demos/route.ts` POST `action: 'create'` (demo
+company). A one-time backfill script was run against the live database to seed
+these 7 templates for every pre-existing company as well.
+
+**Follow-up fix:** the "Company Introduction" template shipped with a broken
+line — `"My name is representing our company"` — a leftover placeholder that
+was never filled in. Fixed the wording in `lib/seedTemplates.ts` to "I wanted
+to introduce our company", and corrected the row already seeded in the live
+database to match.
+
+## 18. Add Lead: Category should be a dropdown, not free text
+
+**Reported:** when adding a new lead, Category should be a dropdown like
+State/LGA, not a free-text field.
+
+**Fix:** `app/_components/RowActionModals.tsx` `AddModal` — Category is now a
+`<select>` populated from the existing `COMPANY_CATEGORIES` list (the same one
+already used by the scrape/leads/export pages), following the same pattern as
+the State dropdown. Removed from the free-text `topFields` list.
+
+## 19. No duplicate check by company name or by email
+
+**Reported:** two leads existed with the same company name ("Stephen Company"
+twice, different address/state) — there should be a check preventing this;
+then, in a follow-up, requested the same check for email addresses too.
+
+**Fix, in two passes:**
+- `app/api/leads/route.ts` `POST` — the original duplicate guard (item 10)
+  only blocked when both name **and** email matched, which is why two
+  same-named leads slipped through with different emails. Replaced with two
+  independent checks: (1) a lead with the same company name (case-insensitive)
+  already exists → 409, and (2) a lead sharing any email address already
+  exists → 409. Either one alone is now enough to block the insert.
+- `app/api/leads/[id]/route.ts` `PATCH` — the same two independent checks were
+  added here too (excluding the lead's own row via `.neq('id', id)`), so
+  editing/renaming a lead into a collision with another lead is blocked the
+  same way creating one is.
+- Both checks are scoped per company (admin bypasses scoping, same as every
+  other route here).
+
+## 20. Leads table pagination looked broken with few leads
+
+**Reported:** "the leads table is not paginated?"
+
+**Reality check:** pagination was already implemented server-side (item 8,
+`/api/leads/all?page=&perPage=`) — but with only a handful of leads on file,
+everything fit on one page, and `app/_components/Pagination.tsx` rendered
+`null` entirely whenever `totalPages <= 1`, giving zero visual confirmation
+that pagination was active at all.
+
+**Fix:** `Pagination.tsx` now only hides when `totalItems === 0`; the "Showing
+X–Y of Z results" line always renders once there's at least one result, and
+only the prev/next/page-number button cluster hides when there's a single
+page. Confirmed via `AskUserQuestion` before changing the behavior.
+
+**Also:** 18 dummy leads were seeded into the live `leads` table (grouping the
+4 `@dexcreedgroup.com` addresses into one "DexCreed Group" lead, skipping an
+email that already existed) so pagination had enough real rows to verify
+against.
+
+## 21. Pagination needs a "results per page" dropdown
+
+**Reported:** the pagination bar should have a dropdown to choose how many
+leads to show — 10, 20, 30, 40, 50, or 100.
+
+**Fix:** `Pagination.tsx` gained a `perPage`/`onPerPageChange` controlled
+"Show [N]" dropdown next to the results count (`PER_PAGE_OPTIONS = [10, 20,
+30, 40, 50, 100]`). `app/(dashboard)/leads/page.tsx` — `PER_PAGE` (a constant)
+became `perPage` (state, default 10), threaded into the `/api/leads/all`
+query params and the row-numbering calculation; changing the page size resets
+back to page 1 since the current page offset no longer applies.
+
+## 22. Queued campaign wasn't sending
+
+**Reported:** a campaign had been stuck in `queued` status with 0 sent for
+hours.
+
+**Diagnosis:** checked the data layer directly against the live database —
+sender verified, no daily/monthly limits hit, no pending consent
+acknowledgment needed, `campaign_recipients` all genuinely `queued`. So the
+worker (`app/api/campaigns/process/route.ts`) itself had nothing blocking it;
+manually curling the endpoint confirmed it processes and sends fine
+(`{"ok":true,"sent":3,"failed":0}`). The real problem was that nothing had
+been *triggering* it — the campaign sat untouched from creation until it was
+triggered by hand.
+
+**Root cause found:** the Namecheap cPanel cron job (meant to fire every 5
+minutes per `doc/13_EMAIL_SMTP_SENDERS.md`) was sending its `Authorization`
+header **without the required `Bearer ` prefix** — the route checks for an
+exact match against `` `Bearer ${CRON_SECRET}` ``, so every single cron run
+was silently failing with `401 Unauthorized`. Silent because the cron command
+redirects all output to `/dev/null 2>&1`, so the failure was invisible. The
+Vercel fallback cron only runs once daily (Hobby plan limit), so with the
+primary trigger permanently failing, a campaign could sit queued for up to 24
+hours before the fallback ever picked it up.
+
+**Fix:** user corrected the cPanel cron command to include `Bearer ` before
+the token:
+```
+curl -s -X GET -H "Authorization: Bearer $CRON_SECRET" https://app.oscfinder.com/api/campaigns/process > /dev/null 2>&1
+```
+No application code changed — this was purely an infrastructure
+misconfiguration outside the repo. The stuck test campaign (18 recipients)
+was manually drained to `completed` by repeatedly triggering the worker while
+diagnosing, confirming the send pipeline itself works end-to-end once
+actually triggered.
+
+## 23. A network hiccup during delete could silently "succeed" or hang forever
+
+**Reported:** a template `DELETE` request came back `401` after a slow/dropped
+network connection — the template still ended up deleted, but flagged that
+there should be a safety net so a network error can't leave the UI in a
+broken state.
+
+**Investigation:** every delete/save action in the app shared the same gap —
+a bare `await fetch(...)` with no `try/catch` and no check of `res.ok`. Three
+concrete failure modes:
+- A dropped connection makes `fetch` throw — with no `catch`, the loading
+  state (`saving`/`deleting`) never resets, so the button spins forever.
+- A non-2xx response (401, 500, etc.) was never checked, so the code plowed
+  ahead and called the success callback anyway — closing the modal and
+  invalidating queries as if the action had worked, even though nothing
+  happened server-side.
+- `app/(dashboard)/leads/page.tsx`'s single-lead delete closed the confirm
+  modal *before* the request even started, so there was never a chance to
+  show a result either way.
+
+**Fix — same pattern applied everywhere this existed:**
+- `app/(dashboard)/templates/page.tsx` — `TemplateFormModal.handleSave` and
+  `DeleteModal.handle`.
+- `app/_components/RowActionModals.tsx` — `DeleteModal` (lead delete) now
+  performs the fetch itself (it previously just faked an 800ms delay and
+  always reported success); `app/(dashboard)/leads/page.tsx`'s `handleDelete`
+  simplified to the post-success cleanup only, now called as `onConfirm` after
+  a real successful delete instead of racing ahead of it.
+- `app/(dashboard)/leads/page.tsx` — `handleBulkDelete` (multi-select delete).
+- `app/(dashboard)/email/page.tsx` — `handleDelete` (campaign draft delete);
+  the confirm modal also no longer disappears immediately on click — it stays
+  open showing "Deleting..." and only closes on confirmed success.
+
+Every one of these now: wraps the request in `try/catch`, checks `res.ok` and
+surfaces the server's `error` message on failure, shows "Network error — check
+your connection and try again." if `fetch` itself throws, and always resets
+the loading state in a `finally` block so a failure never leaves a button
+stuck spinning or a modal in limbo.
+
+## 24. Outgoing emails looked like a boring wall of plain text
+
+**Reported:** could the emails sent to leads (campaigns + direct send) get
+some actual styling instead of looking so plain?
+
+**Fix:** new `lib/emailHtml.ts` — `buildEmailHtml(bodyText, replyTo)` wraps
+whatever plain text a template/message contains in a lightweight, table-based
+HTML shell: a centered white card (600px max width) with a thin brand-color
+accent bar at the top, proper paragraph spacing/line-height instead of one
+dense block, and a cleaner divider before the unsubscribe line (previously
+just a stray gray paragraph tacked on the end). Deliberately has no
+per-company branding baked in, since these are the client's own outreach
+emails sent under their own display name/reply-to, not OsCFinder-branded mail.
+
+Wired into every place mail actually gets sent:
+- `app/api/campaigns/process/route.ts` — the campaign worker (replaces the old
+  hand-concatenated `unsubscribeLine` string).
+- `app/api/send-email/route.ts` — single "Message" send and bulk-send from the
+  Leads page (previously sent as plain `text` only, no `html` at all).
+
+A rendered preview (using the "Initial Outreach" template as sample content)
+was shared as an Artifact for visual sign-off before shipping.
+
+## 25. Clarified: the unsubscribe reply-to address is per-company, not hardcoded
+
+**Reported:** noticed outgoing mail's unsubscribe line pointed to
+`support@oscfinder.com` and asked whether every client's leads get that same
+address.
+
+**Answer, not a bug:** confirmed by reading the code — every send path uses
+`sender.reply_to ?? sender.email` (`app/api/campaigns/process/route.ts`,
+`app/api/send-email/route.ts`), pulled from that specific company's own
+`email_senders` row, which every client sets themselves when they configure
+their sending mailbox (`reply_to` is a required field in
+`app/api/senders/route.ts`). Nowhere in the code is `support@oscfinder.com`
+hardcoded. What was seen is specific to the AnchorHMO test company's own
+sender record, which happens to be configured with
+`email: simon@mail.oscfinder.com` / `reply_to: support@oscfinder.com` — every
+other client's mail shows their own configured reply-to instead.

@@ -5,6 +5,7 @@ import { decrypt } from '@/lib/crypto';
 import { getSender, getRemainingCeiling, isPastSoftLimit, hasAcknowledgmentForToday, incrementDailyUsage } from '@/lib/senders';
 import { logUsage, getRemainingMonthlyEmailQuota } from '@/lib/usage';
 import { personalize } from '@/app/api/email/campaigns/route';
+import { buildEmailHtml } from '@/lib/emailHtml';
 
 // Cron-triggered worker (see vercel.json + the external cPanel cron — both hit this
 // route; see doc/13_EMAIL_SMTP_SENDERS.md). Deliberately sends only a handful of
@@ -130,11 +131,7 @@ export async function GET(req: NextRequest) {
 
       const lead = row.lead ?? { name: '', category: '', state: '', website: '' };
       const subject = personalize(template.subject, lead);
-      const unsubscribeLine =
-        `<p style="font-size:11px;color:#888888;margin-top:24px;">` +
-        `If you'd rather not receive these emails, reply with "unsubscribe" to ` +
-        `<a href="mailto:${sender.reply_to}">${sender.reply_to}</a>.</p>`;
-      const html = personalize(template.body, lead) + unsubscribeLine;
+      const html = buildEmailHtml(personalize(template.body, lead), sender.reply_to ?? sender.email);
 
       // Everything below happens immediately after the send attempt, per recipient —
       // never batched until the end of the run — so a mid-run kill (timeout, deploy,

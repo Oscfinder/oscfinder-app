@@ -27,6 +27,45 @@ export async function PATCH(
   if (Object.keys(fields).length === 0)
     return NextResponse.json({ error: 'No editable fields provided' }, { status: 400 });
 
+  // Same name-uniqueness guard as creating a lead — renaming into a collision with
+  // another lead isn't allowed either.
+  if (typeof fields.name === 'string' && fields.name.trim()) {
+    let dupeQuery = supabaseAdmin
+      .from('leads')
+      .select('id')
+      .ilike('name', fields.name.trim())
+      .neq('id', id)
+      .limit(1);
+
+    if (user.role !== 'admin') dupeQuery = dupeQuery.eq('company_id', user.company_id);
+
+    const { data: dupes, error: dupeError } = await dupeQuery;
+    if (dupeError) return NextResponse.json({ error: dupeError.message }, { status: 500 });
+    if (dupes && dupes.length > 0)
+      return NextResponse.json({ error: 'A lead with this company name already exists' }, { status: 409 });
+  }
+
+  // Same email-uniqueness guard as creating a lead — editing emails into a
+  // collision with another lead isn't allowed either.
+  if (Array.isArray(fields.emails)) {
+    const cleanEmails = (fields.emails as unknown[]).filter(Boolean);
+    if (cleanEmails.length > 0) {
+      let emailDupeQuery = supabaseAdmin
+        .from('leads')
+        .select('id')
+        .overlaps('emails', cleanEmails)
+        .neq('id', id)
+        .limit(1);
+
+      if (user.role !== 'admin') emailDupeQuery = emailDupeQuery.eq('company_id', user.company_id);
+
+      const { data: emailDupes, error: emailDupeError } = await emailDupeQuery;
+      if (emailDupeError) return NextResponse.json({ error: emailDupeError.message }, { status: 500 });
+      if (emailDupes && emailDupes.length > 0)
+        return NextResponse.json({ error: 'A lead with this email address already exists' }, { status: 409 });
+    }
+  }
+
   let query = supabaseAdmin.from('leads').update(fields).eq('id', id);
 
   // Prevent updating another company's lead

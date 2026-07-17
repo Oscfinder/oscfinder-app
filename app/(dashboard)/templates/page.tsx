@@ -96,6 +96,7 @@ function TemplateFormModal({ initial, onSave, onClose }: {
   });
   const [errors, setErrors] = useState<Partial<typeof form>>({});
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const set = (k: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -113,13 +114,24 @@ function TemplateFormModal({ initial, onSave, onClose }: {
   const handleSave = async () => {
     if (!validate()) return;
     setSaving(true);
+    setSaveError('');
     const payload = { title: form.title.trim(), subject: form.subject.trim(), body: form.body.trim(), tag: form.tag };
-    if (isEdit) {
-      await fetch('/api/templates', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: initial!.id, ...payload }) });
-    } else {
-      await fetch('/api/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    try {
+      const res = isEdit
+        ? await fetch('/api/templates', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: initial!.id, ...payload }) })
+        : await fetch('/api/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSaveError(data.error ?? 'Failed to save template. Please try again.');
+        return;
+      }
+      onSave();
+    } catch {
+      setSaveError('Network error — check your connection and try again.');
+    } finally {
+      setSaving(false);
     }
-    onSave();
   };
 
   const inputCls = (err?: string) => cn(
@@ -172,6 +184,7 @@ function TemplateFormModal({ initial, onSave, onClose }: {
             className={cn(inputCls(errors.body), 'resize-none py-2.5 leading-relaxed')} />
           {errors.body && <p className="text-[12px] text-red-500 mt-1">{errors.body}</p>}
         </div>
+        {saveError && <p className="text-[13px] text-red-500 bg-red-50 rounded-lg px-3 py-2">{saveError}</p>}
       </div>
       <div className="px-6 py-3 border-t border-[#E5E7EB] flex justify-end gap-3 bg-[#F8FAFC] rounded-b-2xl">
         <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
@@ -186,11 +199,26 @@ function TemplateFormModal({ initial, onSave, onClose }: {
 
 function DeleteModal({ tpl, onConfirm, onClose }: { tpl: MailTemplate; onConfirm: () => void; onClose: () => void }) {
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
   const handle = async () => {
     setDeleting(true);
-    await fetch(`/api/templates?id=${tpl.id}`, { method: 'DELETE' });
-    onConfirm();
+    setDeleteError('');
+    try {
+      const res = await fetch(`/api/templates?id=${tpl.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.error ?? 'Failed to delete template. Please try again.');
+        return;
+      }
+      onConfirm();
+    } catch {
+      setDeleteError('Network error — check your connection and try again.');
+    } finally {
+      setDeleting(false);
+    }
   };
+
   return (
     <Modal onClose={onClose}>
       <div className="px-6 py-6 flex flex-col items-center text-center gap-4">
@@ -203,6 +231,9 @@ function DeleteModal({ tpl, onConfirm, onClose }: { tpl: MailTemplate; onConfirm
             <span className="font-semibold text-[#0A1628]">{tpl.title}</span> will be permanently deleted.
           </p>
         </div>
+        {deleteError && (
+          <p className="text-[13px] text-red-500 bg-red-50 rounded-lg px-3 py-2 w-full">{deleteError}</p>
+        )}
         <div className="flex gap-3 w-full">
           <Button variant="outline" className="flex-1" onClick={onClose} disabled={deleting}>Cancel</Button>
           <Button isLoading={deleting} onClick={handle} className="flex-1 bg-red-500 hover:bg-red-600">

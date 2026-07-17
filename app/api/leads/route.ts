@@ -44,25 +44,38 @@ export async function POST(req: NextRequest) {
   if (!name || !category || !state)
     return NextResponse.json({ error: 'name, category and state are required' }, { status: 400 });
 
-  const cleanEmails = Array.isArray(emails) ? emails.filter(Boolean) : [];
+  // Duplicate guard: same company name (case-insensitive) already on file for this
+  // company — a lead is identified by its name alone, regardless of address/state/
+  // email, so no two leads for the same company may share a name.
+  let dupeQuery = supabaseAdmin
+    .from('leads')
+    .select('id')
+    .ilike('name', name.trim())
+    .limit(1);
 
-  // Duplicate guard: same company name (case-insensitive) AND at least one shared
-  // email already on file for this company. Skipped when the new lead has no email
-  // at all, since there's nothing to compare against.
+  if (user.role !== 'admin') dupeQuery = dupeQuery.eq('company_id', user.company_id);
+
+  const { data: dupes, error: dupeError } = await dupeQuery;
+  if (dupeError) return NextResponse.json({ error: dupeError.message }, { status: 500 });
+  if (dupes && dupes.length > 0)
+    return NextResponse.json({ error: 'A lead with this company name already exists' }, { status: 409 });
+
+  // Duplicate guard: same email already on file for this company, on a different
+  // lead — an email address should only ever belong to one lead.
+  const cleanEmails = Array.isArray(emails) ? emails.filter(Boolean) : [];
   if (cleanEmails.length > 0) {
-    let dupeQuery = supabaseAdmin
+    let emailDupeQuery = supabaseAdmin
       .from('leads')
       .select('id')
-      .ilike('name', name.trim())
       .overlaps('emails', cleanEmails)
       .limit(1);
 
-    if (user.role !== 'admin') dupeQuery = dupeQuery.eq('company_id', user.company_id);
+    if (user.role !== 'admin') emailDupeQuery = emailDupeQuery.eq('company_id', user.company_id);
 
-    const { data: dupes, error: dupeError } = await dupeQuery;
-    if (dupeError) return NextResponse.json({ error: dupeError.message }, { status: 500 });
-    if (dupes && dupes.length > 0)
-      return NextResponse.json({ error: 'A lead with this name and email already exists' }, { status: 409 });
+    const { data: emailDupes, error: emailDupeError } = await emailDupeQuery;
+    if (emailDupeError) return NextResponse.json({ error: emailDupeError.message }, { status: 500 });
+    if (emailDupes && emailDupes.length > 0)
+      return NextResponse.json({ error: 'A lead with this email address already exists' }, { status: 409 });
   }
 
   const { data, error: dbError } = await supabaseAdmin

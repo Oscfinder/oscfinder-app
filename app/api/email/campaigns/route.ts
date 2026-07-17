@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth, requireActiveAccount } from '@/lib/auth';
+import { requireAuth, requireActiveAccount, SessionUser } from '@/lib/auth';
 import { checkLimit } from '@/lib/usage';
 import { getSender, getSentToday, getRemainingCeiling, hasAcknowledgmentForToday } from '@/lib/senders';
 import { getRecipientCounts } from '@/lib/campaignRecipients';
@@ -88,6 +88,24 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Send Now (queues for the campaign worker — see app/api/campaigns/process) ──
+  return queueCampaignSend(user, { name: name.trim(), template_id, filters });
+}
+
+// Shared by POST (new campaign) and PATCH /api/email/campaigns/[id] (sending an
+// existing draft) — everything from loading the template through enqueuing
+// campaign_recipients is identical either way; the only difference is whether a new
+// email_campaigns row is inserted or an existing draft row is updated in place.
+export async function queueCampaignSend(
+  user: SessionUser,
+  opts: {
+    name: string;
+    template_id: string | null;
+    filters: { category?: string; state?: string; status?: string };
+    existingCampaignId?: string;
+  }
+): Promise<NextResponse> {
+  const { name, template_id, filters, existingCampaignId } = opts;
+
   if (!template_id)
     return NextResponse.json({ error: 'Select a template before sending' }, { status: 400 });
 
@@ -143,7 +161,7 @@ export async function POST(req: NextRequest) {
   if (sentToday + n > sender.daily_limit) {
     const acked = await hasAcknowledgmentForToday(sender.id);
     if (!acked) {
-      // Nothing created yet — the UI shows a consent modal and retries after
+      // Nothing created/changed yet — the UI shows a consent modal and retries after
       // POSTing /api/senders/acknowledge-limit.
       return NextResponse.json(
         {
@@ -164,21 +182,40 @@ export async function POST(req: NextRequest) {
   const sendingToday = Math.min(n, remainingCeiling);
   const deferred      = n - sendingToday;
 
-  // 6. Create campaign record (status: queued) — the worker takes it from here
-  const { data: campaign, error: campaignError } = await supabaseAdmin
-    .from('email_campaigns')
-    .insert({
-      company_id:       user.company_id,
-      template_id,
-      name:             name.trim(),
-      status:           'queued',
-      total_recipients: recipients.length,
-    })
-    .select()
-    .single();
+  // 6. Create (or update an existing draft into) the campaign record — status:
+  // queued — the worker takes it from here
+  const campaignWrite = existingCampaignId
+    ? supabaseAdmin
+        .from('email_campaigns')
+        .update({
+          template_id,
+          name,
+          status:           'queued',
+          total_recipients: recipients.length,
+        })
+        .eq('id', existingCampaignId)
+        .eq('company_id', user.company_id!)
+        .eq('status', 'draft') // can't re-send something that isn't (still) a draft
+        .select()
+        .single()
+    : supabaseAdmin
+        .from('email_campaigns')
+        .insert({
+          company_id:       user.company_id,
+          template_id,
+          name,
+          status:           'queued',
+          total_recipients: recipients.length,
+        })
+        .select()
+        .single();
+
+  const { data: campaign, error: campaignError } = await campaignWrite;
 
   if (campaignError)
     return NextResponse.json({ error: campaignError.message }, { status: 500 });
+  if (!campaign)
+    return NextResponse.json({ error: 'Draft not found (it may have already been sent)' }, { status: 404 });
 
   // 7. Enqueue one campaign_recipients row per lead — all N rows queue regardless of
   // today/tomorrow; the worker naturally drains up to technical_ceiling per day and

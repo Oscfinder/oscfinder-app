@@ -1,7 +1,7 @@
 'use client';
 import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Send, Trash2, Eye, X, ChevronDown, Search } from 'lucide-react';
+import { Plus, Send, Trash2, Eye, X, ChevronDown, Search, AlertTriangle } from 'lucide-react';
 import { EmailCampaign, MailTemplate, EmailSender, RequiresAcknowledgment } from '@/types';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { cn } from '@/lib/utils';
@@ -54,17 +54,19 @@ function NewCampaignModal({
   templates,
   usageSummary,
   usageLimits,
+  editDraft,
   onClose,
   onCreated,
 }: {
   templates:    MailTemplate[];
   usageSummary: { email_count: number } | undefined;
   usageLimits:  { email_limit: number | null } | undefined;
+  editDraft?:   { id: string; name: string; template_id: string | null } | null;
   onClose:      () => void;
   onCreated:    () => void;
 }) {
-  const [name,        setName]        = useState('');
-  const [templateId,  setTemplateId]  = useState('');
+  const [name,        setName]        = useState(editDraft?.name ?? '');
+  const [templateId,  setTemplateId]  = useState(editDraft?.template_id ?? '');
   const [catFilter,   setCatFilter]   = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [statFilter,  setStatFilter]  = useState('');
@@ -95,16 +97,17 @@ function NewCampaignModal({
   const emailsUsed  = usageSummary?.email_count  ?? 0;
   const emailsLimit = usageLimits?.email_limit   ?? null;
 
-  const postCampaign = (sendNow: boolean) => fetch('/api/email/campaigns', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  const postCampaign = (sendNow: boolean) => {
+    const payload = JSON.stringify({
       name:        name.trim(),
       template_id: templateId || null,
       filters:     { category: catFilter, state: stateFilter, status: statFilter },
       send_now:    sendNow,
-    }),
-  });
+    });
+    return editDraft
+      ? fetch(`/api/email/campaigns/${editDraft.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: payload })
+      : fetch('/api/email/campaigns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
+  };
 
   const submit = async (sendNow: boolean) => {
     if (!name.trim())                          { setFormError('Campaign name is required');           return; }
@@ -186,8 +189,10 @@ function NewCampaignModal({
 
         <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E7EB]">
           <div>
-            <h2 className="text-[17px] font-bold text-[#0A1628]">New Campaign</h2>
-            <p className="text-[12px] text-[#888888] mt-0.5">Compose and send to matching leads</p>
+            <h2 className="text-[17px] font-bold text-[#0A1628]">{editDraft ? 'Send Draft' : 'New Campaign'}</h2>
+            <p className="text-[12px] text-[#888888] mt-0.5">
+              {editDraft ? 'Pick a template and audience, then send this draft' : 'Compose and send to matching leads'}
+            </p>
           </div>
           <button onClick={onClose} className="text-[#888888] hover:text-[#0A1628] transition-colors">
             <X size={18} />
@@ -459,6 +464,9 @@ export default function EmailPage() {
   const [search,       setSearch]       = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [deletingId,   setDeletingId]   = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<EmailCampaign | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [editDraft,    setEditDraft]    = useState<EmailCampaign | null>(null);
 
   const { data: sender, isLoading: senderLoading } = useQuery<EmailSender | null>({
     queryKey: ['sender'],
@@ -497,11 +505,25 @@ export default function EmailPage() {
     return true;
   });
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+    const id = deleteConfirm.id;
     setDeletingId(id);
-    await fetch(`/api/email/campaigns/${id}`, { method: 'DELETE' });
-    setDeletingId(null);
-    queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    setDeleteError('');
+    try {
+      const res = await fetch(`/api/email/campaigns/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.error ?? 'Failed to delete draft. Please try again.');
+        return;
+      }
+      setDeleteConfirm(null);
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    } catch {
+      setDeleteError('Network error — check your connection and try again.');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   if (senderLoading) {
@@ -644,14 +666,23 @@ export default function EmailPage() {
                             <Eye size={13} />
                           </button>
                           {c.status === 'draft' && (
-                            <button
-                              onClick={() => handleDelete(c.id)}
-                              disabled={deletingId === c.id}
-                              title="Delete draft"
-                              className="flex items-center justify-center w-7 h-7 rounded-lg text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            <>
+                              <button
+                                onClick={() => setEditDraft(c)}
+                                title="Send draft"
+                                className="flex items-center justify-center w-7 h-7 rounded-lg text-[#00A86B] hover:bg-[#dff7ee] transition-colors"
+                              >
+                                <Send size={13} />
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirm(c)}
+                                disabled={deletingId === c.id}
+                                title="Delete draft"
+                                className="flex items-center justify-center w-7 h-7 rounded-lg text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -664,12 +695,13 @@ export default function EmailPage() {
         </div>
       </div>
 
-      {showNew && (
+      {(showNew || editDraft) && (
         <NewCampaignModal
           templates={templates}
           usageSummary={usageSummary}
           usageLimits={usageLimits}
-          onClose={() => setShowNew(false)}
+          editDraft={editDraft ? { id: editDraft.id, name: editDraft.name, template_id: editDraft.template_id } : null}
+          onClose={() => { setShowNew(false); setEditDraft(null); }}
           onCreated={() => queryClient.invalidateQueries({ queryKey: ['campaigns'] })}
         />
       )}
@@ -679,6 +711,40 @@ export default function EmailPage() {
           campaignId={detailId}
           onClose={() => setDetailId(null)}
         />
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={20} className="text-red-500" />
+              </div>
+              <h3 className="text-[16px] font-bold text-[#0A1628]">Delete draft?</h3>
+            </div>
+            <p className="text-[13px] text-gray-600 mb-2">
+              This will permanently delete <span className="font-semibold">{deleteConfirm.name}</span>. This can&apos;t be undone.
+            </p>
+            {deleteError && (
+              <p className="text-[13px] text-red-500 bg-red-50 rounded-lg px-3 py-2 mb-3">{deleteError}</p>
+            )}
+            <div className="flex justify-end gap-2 mt-3">
+              <button
+                onClick={() => { setDeleteConfirm(null); setDeleteError(''); }}
+                className="px-4 py-2 text-[13px] font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deletingId === deleteConfirm.id}
+                className="px-4 py-2 text-[13px] font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-40"
+              >
+                {deletingId === deleteConfirm.id ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -13,8 +13,6 @@ import { ViewModal, EditModal, MessageModal, DeleteModal, AddModal } from '@/app
 
 type ModalType = 'view' | 'edit' | 'message' | 'delete' | 'add' | 'bulk-send' | null;
 
-const PER_PAGE = 10;
-
 const STATUS_OPTIONS = ['new', 'contacted', 'qualified', 'ignored'] as const;
 
 const STATUS_BADGE: Record<string, string> = {
@@ -49,6 +47,7 @@ export default function LeadsPage() {
   const [modal, setModal]                     = useState<ModalType>(null);
   const [active, setActive]                   = useState<Lead | null>(null);
   const [page, setPage]                       = useState(1);
+  const [perPage, setPerPage]                 = useState(10);
   const [selected, setSelected]               = useState<Set<string>>(new Set());
   const [selectedMap, setSelectedMap]         = useState<Map<string, Lead>>(new Map());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
@@ -60,14 +59,19 @@ export default function LeadsPage() {
   }, [search]);
 
   const queryParams = useMemo(() => {
-    const p = new URLSearchParams({ page: String(page), perPage: String(PER_PAGE) });
+    const p = new URLSearchParams({ page: String(page), perPage: String(perPage) });
     if (filterState)     p.set('state', filterState);
     if (filterLga)       p.set('local_govt', filterLga);
     if (filterCategory)  p.set('category', filterCategory);
     if (filterStatus)    p.set('status', filterStatus);
     if (debouncedSearch) p.set('search', debouncedSearch);
     return p.toString();
-  }, [page, filterState, filterLga, filterCategory, filterStatus, debouncedSearch]);
+  }, [page, perPage, filterState, filterLga, filterCategory, filterStatus, debouncedSearch]);
+
+  const handlePerPageChange = (n: number) => {
+    setPerPage(n);
+    setPage(1); // changing page size invalidates the current page offset
+  };
 
   // Server-side paginated — only the current page's rows ever come down the wire.
   const { data: pageData, isLoading } = useQuery<{ data: Lead[]; total: number }>({
@@ -78,7 +82,7 @@ export default function LeadsPage() {
 
   const leads      = pageData?.data ?? [];
   const total      = pageData?.total ?? 0;
-  const totalPages = Math.ceil(total / PER_PAGE);
+  const totalPages = Math.ceil(total / perPage);
 
   // Full unpaginated fetch used only to populate the LGA filter's dropdown options —
   // the table itself never holds the full list client-side anymore.
@@ -146,30 +150,43 @@ export default function LeadsPage() {
 
   const handleEdit = () => { invalidateLeads(); close(); };
 
-  const handleDelete = async () => {
+  // Called by DeleteModal's onConfirm — only after the delete request has already
+  // succeeded, so this is purely the local-state cleanup, not the network call.
+  const handleDelete = () => {
     if (!active) return;
     const id = active.id;
+    setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
+    setSelectedMap(prev => { const n = new Map(prev); n.delete(id); return n; });
+    invalidateLeads();
     close();
-    const res = await fetch(`/api/leads/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
-      setSelectedMap(prev => { const n = new Map(prev); n.delete(id); return n; });
-      invalidateLeads();
-    }
   };
   const handleMailSent = () => { invalidateLeads(); close(); };
 
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState('');
+
   const handleBulkDelete = async () => {
     const ids = [...selected];
-    setBulkDeleteConfirm(false);
-    const res = await fetch('/api/leads/all', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids }),
-    });
-    if (res.ok) {
+    setBulkDeleting(true);
+    setBulkDeleteError('');
+    try {
+      const res = await fetch('/api/leads/all', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setBulkDeleteError(data.error ?? 'Failed to delete selected leads. Please try again.');
+        return;
+      }
+      setBulkDeleteConfirm(false);
       clearAll();
       invalidateLeads();
+    } catch {
+      setBulkDeleteError('Network error — check your connection and try again.');
+    } finally {
+      setBulkDeleting(false);
     }
   };
   const handleBulkSent = () => {
@@ -330,9 +347,23 @@ export default function LeadsPage() {
               </button>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-[12px] text-white/80">Are you sure?</span>
-                <button onClick={handleBulkDelete} className="h-8 px-3 rounded-lg bg-red-500 text-white text-[12px] font-semibold hover:bg-red-600">Yes</button>
-                <button onClick={() => setBulkDeleteConfirm(false)} className="h-8 px-3 rounded-lg bg-white/20 text-white text-[12px] font-semibold hover:bg-white/30">Cancel</button>
+                {bulkDeleteError
+                  ? <span className="text-[12px] text-red-200">{bulkDeleteError}</span>
+                  : <span className="text-[12px] text-white/80">Are you sure?</span>}
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
+                  className="h-8 px-3 rounded-lg bg-red-500 text-white text-[12px] font-semibold hover:bg-red-600 disabled:opacity-60"
+                >
+                  {bulkDeleting ? 'Deleting...' : 'Yes'}
+                </button>
+                <button
+                  onClick={() => { setBulkDeleteConfirm(false); setBulkDeleteError(''); }}
+                  disabled={bulkDeleting}
+                  className="h-8 px-3 rounded-lg bg-white/20 text-white text-[12px] font-semibold hover:bg-white/30 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
               </div>
             )}
           </div>
@@ -395,7 +426,7 @@ export default function LeadsPage() {
                       />
                     </td>
                     <td className="px-3.5 py-3 text-[12px] text-[#888888]">
-                      {(page - 1) * PER_PAGE + i + 1}
+                      {(page - 1) * perPage + i + 1}
                     </td>
                     <td className="px-3.5 py-3 text-[13px] font-semibold text-[#0A1628] whitespace-nowrap">
                       {lead.name}
@@ -469,8 +500,9 @@ export default function LeadsPage() {
         page={page}
         totalPages={totalPages}
         totalItems={total}
-        perPage={PER_PAGE}
+        perPage={perPage}
         onPageChange={setPage}
+        onPerPageChange={handlePerPageChange}
       />
 
       {modal === 'add'       &&                 <AddModal     onSave={() => { invalidateLeads(); close(); }} onClose={close} />}

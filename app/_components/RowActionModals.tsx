@@ -5,7 +5,7 @@ import { Lead, RequiresAcknowledgment } from '@/types';
 import { Button } from './Button';
 import { SendLimitConsentModal } from './SendLimitConsentModal';
 import { cn } from '@/lib/utils';
-import { NIGERIAN_STATES } from '@/app/data/newCompaniesData';
+import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { NIGERIAN_LGAS_BY_STATE } from '@/app/data/nigeriaLgas';
 
 // ─── shared backdrop + shell ───────────────────────────────────────────────
@@ -285,11 +285,24 @@ interface DeleteModalProps { lead: Lead; onConfirm: () => void; onClose: () => v
 
 export function DeleteModal({ lead, onConfirm, onClose }: DeleteModalProps) {
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   const handleDelete = async () => {
     setDeleting(true);
-    await new Promise(r => setTimeout(r, 800));
-    onConfirm();
+    setDeleteError('');
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.error ?? 'Failed to delete lead. Please try again.');
+        return;
+      }
+      onConfirm();
+    } catch {
+      setDeleteError('Network error — check your connection and try again.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -305,6 +318,9 @@ export function DeleteModal({ lead, onConfirm, onClose }: DeleteModalProps) {
             This action cannot be undone.
           </p>
         </div>
+        {deleteError && (
+          <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2 w-full">{deleteError}</p>
+        )}
         <div className="flex gap-3 w-full">
           <Button variant="outline" className="flex-1" onClick={onClose} disabled={deleting}>Cancel</Button>
           <Button
@@ -387,7 +403,6 @@ export function AddModal({ onSave, onClose }: AddModalProps) {
     { key: 'website',  label: 'Website',      placeholder: 'e.g. https://www.example.com' },
     { key: 'emails',   label: 'Emails',       placeholder: 'Separate multiple with commas' },
     { key: 'phones',   label: 'Phone Numbers', placeholder: 'Separate multiple with commas' },
-    { key: 'category', label: 'Category',     placeholder: 'e.g. Technology Companies', required: true },
   ];
 
   const bottomFields: { key: keyof typeof EMPTY_FORM; label: string; placeholder: string }[] = [
@@ -418,6 +433,25 @@ export function AddModal({ onSave, onClose }: AddModalProps) {
       <ModalHeader title="Add New Company" subtitle="Manually add a company to your database" onClose={onClose} />
       <div className="px-6 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
         {topFields.map(textField)}
+
+        {/* Category — dropdown */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            Category <span className="text-red-400">*</span>
+          </label>
+          <div className="relative">
+            <select
+              value={form.category}
+              onChange={e => { setForm(p => ({ ...p, category: e.target.value })); setErrors(p => ({ ...p, category: '' })); }}
+              className={selectCls(!!errors.category)}
+            >
+              <option value="">Select category...</option>
+              {COMPANY_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
+          {errors.category && <p className="text-xs text-red-500 mt-1">{errors.category}</p>}
+        </div>
 
         {/* State — dropdown */}
         <div>

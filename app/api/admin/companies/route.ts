@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAdmin, logAdminAction } from '@/lib/auth';
+import { seedDefaultTemplates } from '@/lib/seedTemplates';
 
 // ── GET /api/admin/companies ─────────────────────────────────────
 // Returns all companies with this-month usage from admin_company_overview view.
@@ -95,6 +96,8 @@ export async function POST(req: NextRequest) {
     full_name:  full_name || null,
     is_active:  true,
   });
+
+  await seedDefaultTemplates(company.id);
 
   await logAdminAction(admin.id, 'create_company', company.id, { name, plan, setup_fee_paid });
 
