@@ -6,19 +6,21 @@ import { ScrapeProgress } from '@/app/_components/ScrapeProgress';
 import { Button } from '@/app/_components/Button';
 import { Lead } from '@/types';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
+import { NIGERIAN_LGAS_BY_STATE } from '@/app/data/nigeriaLgas';
 import { useScrapeJob } from '@/hooks/useScrapeJob';
 import { useLeads } from '@/hooks/useLeads';
 import { useQuery } from '@tanstack/react-query';
 
 const MAX_RESULTS_OPTIONS = ['50', '100', '200'];
 
-function SelectField({ label, value, onChange, options, placeholder, icon: Icon }: {
+function SelectField({ label, value, onChange, options, placeholder, icon: Icon, disabled }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: string[];
   placeholder: string;
   icon?: React.ElementType;
+  disabled?: boolean;
 }) {
   return (
     <div>
@@ -32,7 +34,8 @@ function SelectField({ label, value, onChange, options, placeholder, icon: Icon 
         <select
           value={value}
           onChange={e => onChange(e.target.value)}
-          className={`w-full h-11 ${Icon ? 'pl-9' : 'pl-3'} pr-9 rounded-lg border border-[#E5E7EB] bg-white text-[13px] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] ${!value ? 'text-[#888888]' : 'text-[#0A1628]'}`}
+          disabled={disabled}
+          className={`w-full h-11 ${Icon ? 'pl-9' : 'pl-3'} pr-9 rounded-lg border border-[#E5E7EB] bg-white text-[13px] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] ${!value ? 'text-[#888888]' : 'text-[#0A1628]'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <option value="">{placeholder}</option>
           {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -85,6 +88,13 @@ export default function ScrapePage() {
   const [showModal,  setShowModal]  = useState(false);
   const [savedLeads, setSavedLeads] = useState<Lead[]>([]);
   const [isAdding,   setIsAdding]   = useState(false);
+
+  const lgaOptions = state ? (NIGERIAN_LGAS_BY_STATE[state] ?? []) : [];
+
+  const handleStateChange = (v: string) => {
+    setState(v);
+    setLocalGovt(''); // reset — LGA options depend on the chosen state
+  };
 
   const { data: job }   = useScrapeJob(jobId);
   const { data: leads } = useLeads(jobId);
@@ -180,7 +190,7 @@ export default function ScrapePage() {
                   label="State *"
                   icon={MapPin}
                   value={state}
-                  onChange={setState}
+                  onChange={handleStateChange}
                   options={NIGERIAN_STATES}
                   placeholder="Select state..."
                 />
@@ -190,11 +200,13 @@ export default function ScrapePage() {
                   onChange={setCity}
                   placeholder="e.g. Lagos Mainland"
                 />
-                <TextField
+                <SelectField
                   label="Local Government Area *"
                   value={localGovt}
                   onChange={setLocalGovt}
-                  placeholder="e.g. Ikeja"
+                  options={lgaOptions}
+                  placeholder={state ? 'Select LGA...' : 'Select a state first'}
+                  disabled={!state}
                 />
                 <TextField
                   label="Area / District / Town *"

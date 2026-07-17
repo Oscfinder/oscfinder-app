@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, CheckCircle, XCircle, ChevronDown, X, RefreshCw } from 'lucide-react';
+import { Plus, CheckCircle, XCircle, ChevronDown, X, RefreshCw, AlertTriangle } from 'lucide-react';
 import {
   AdminCompanyOverview, Invoice, RevenueSummary,
   CompanyPlan, InvoiceType,
@@ -290,6 +290,7 @@ export default function AdminPage() {
   const [showNewCo,    setShowNewCo]  = useState(false);
   const [showNewInv,   setShowNewInv] = useState(false);
   const [updatingId,   setUpdatingId] = useState<string | null>(null);
+  const [suspendConfirm, setSuspendConfirm] = useState<AdminCompanyOverview | null>(null);
 
   const { data: companies = [], isLoading: coLoading } = useQuery<AdminCompanyOverview[]>({
     queryKey: ['admin-companies'],
@@ -322,6 +323,32 @@ export default function AdminPage() {
     });
     setUpdatingId(null);
     queryClient.invalidateQueries({ queryKey: ['admin-companies'] });
+  };
+
+  const [suspendError, setSuspendError] = useState('');
+
+  const handleSuspend = async () => {
+    if (!suspendConfirm) return;
+    const id = suspendConfirm.id;
+    setUpdatingId(id);
+    setSuspendError('');
+    try {
+      const res = await fetch(`/api/admin/companies/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body:   JSON.stringify({ status: 'suspended' }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSuspendError(data.error ?? 'Failed to suspend company. Please try again.');
+        return;
+      }
+      setSuspendConfirm(null);
+      queryClient.invalidateQueries({ queryKey: ['admin-companies'] });
+    } catch {
+      setSuspendError('Network error — check your connection and try again.');
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   const markInvoicePaid = async (id: string) => {
@@ -454,7 +481,7 @@ export default function AdminPage() {
                               </button>
                             ) : (
                               <button
-                                onClick={() => patchCompany(c.id, { status: 'suspended' })}
+                                onClick={() => setSuspendConfirm(c)}
                                 disabled={updatingId === c.id}
                                 className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#ffeaea] text-[#e74c3c] hover:bg-[#ffd6d6] disabled:opacity-50 transition-colors whitespace-nowrap"
                               >
@@ -640,6 +667,43 @@ export default function AdminPage() {
       {/* Modals */}
       {showNewCo  && <NewCompanyModal  onClose={() => setShowNewCo(false)}  onCreated={refreshAll} />}
       {showNewInv && <NewInvoiceModal  companies={companies} onClose={() => setShowNewInv(false)} onCreated={refreshAll} />}
+
+      {suspendConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={20} className="text-red-500" />
+              </div>
+              <h3 className="text-[16px] font-bold text-[#0A1628]">Suspend this company?</h3>
+            </div>
+            <p className="text-[13px] text-gray-600 mb-2">
+              Are you sure you want to suspend{' '}
+              <span className="font-semibold">{suspendConfirm.name}</span>? Their account
+              will become suspended immediately and users won&apos;t be able to use the
+              platform until reactivated.
+            </p>
+            {suspendError && (
+              <p className="text-[13px] text-red-500 bg-red-50 rounded-lg px-3 py-2 mb-3">{suspendError}</p>
+            )}
+            <div className="flex justify-end gap-2 mt-3">
+              <button
+                onClick={() => { setSuspendConfirm(null); setSuspendError(''); }}
+                className="px-4 py-2 text-[13px] font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSuspend}
+                disabled={updatingId === suspendConfirm.id}
+                className="px-4 py-2 text-[13px] font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-40"
+              >
+                {updatingId === suspendConfirm.id ? 'Suspending...' : 'Yes, Suspend'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

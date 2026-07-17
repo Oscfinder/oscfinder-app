@@ -474,3 +474,34 @@ once, with the real session-derived props). Deleted the old top-level
 `app/page.tsx`. Confirmed via `npx tsc --noEmit` and `npm run build` — `/` now
 correctly builds as a dynamic route (server-rendered per request, since it
 depends on the session) rather than a standalone client page.
+
+## 27. Suspend company had no confirmation
+
+**Reported:** the "Suspend" button on a company row in `/admin` should ask
+"are you sure you want to suspend this company?" before actually suspending —
+it currently fires immediately on click.
+
+**Fix:** `app/(dashboard)/admin/page.tsx` — the Suspend button now opens a
+confirmation modal (`suspendConfirm` state) naming the company and warning
+that its account becomes suspended immediately; only the modal's "Yes,
+Suspend" button actually calls `PATCH /api/admin/companies/[id]`. Also applied
+the same network-safety pattern established in item 23: wrapped in
+`try/catch`, checks `res.ok` and surfaces the server's error on failure, shows
+a network-error message if `fetch` itself throws, and the modal stays open on
+failure so it can be retried rather than silently closing either way. The
+"Activate" button (opposite action, not destructive) was left as a direct
+click, unchanged.
+
+## 28. Generate Leads: Local Government Area should be a dropdown
+
+**Reported:** on the "Generate Leads" (scrape) page, Local Govt Area should
+be a dropdown like it already is in the Add Lead modal, not free text.
+
+**Fix:** `app/(dashboard)/scrape/page.tsx` — Local Government Area is now a
+`SelectField` populated from `NIGERIAN_LGAS_BY_STATE[state]` (same dataset
+used for the Add Lead dropdown, item 14), disabled with a "Select a state
+first" placeholder until a state is chosen, and resets whenever the state
+changes (via a new `handleStateChange` wrapping `setState`). `SelectField`
+gained a `disabled` prop to support this. City and Area/District/Town remain
+free text, unchanged, for the same reason as item 14 — no fixed enumerable
+list exists for those in Nigeria.
