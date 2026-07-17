@@ -17,10 +17,10 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
 
 export function Header({
   collapsed,
-  setCollapsed,
+  onToggleNav,
 }: {
   collapsed: boolean;
-  setCollapsed: (v: boolean) => void;
+  onToggleNav: () => void;
 }) {
   const router   = useRouter();
   const pathname = usePathname();
@@ -30,35 +30,36 @@ export function Header({
   return (
     <header
       className={cn(
-        'fixed top-0 right-0 h-[64px] bg-white border-b border-[#E5E7EB] flex items-center justify-between px-6 z-30 transition-all duration-300',
-        collapsed ? 'left-[68px]' : 'left-[240px]'
+        'fixed top-0 left-0 right-0 h-[64px] bg-white border-b border-[#E5E7EB] flex items-center justify-between px-4 md:px-6 z-30 transition-all duration-300',
+        collapsed ? 'md:left-[68px]' : 'md:left-[240px]'
       )}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4 min-w-0">
         <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+          onClick={onToggleNav}
+          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
         >
           <Menu size={20} />
         </button>
-        <div>
-          <h1 className="text-[18px] font-bold text-[#0A1628] leading-tight">{meta.title}</h1>
+        <div className="min-w-0">
+          <h1 className="text-[16px] md:text-[18px] font-bold text-[#0A1628] leading-tight truncate">{meta.title}</h1>
           {meta.subtitle && (
-            <p className="text-[12px] text-[#888888]">{meta.subtitle}</p>
+            <p className="hidden sm:block text-[12px] text-[#888888] truncate">{meta.subtitle}</p>
           )}
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 md:gap-3 shrink-0">
         <button className="relative w-9 h-9 rounded-lg border border-[#E5E7EB] bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors">
           <Bell size={16} />
           <span className="absolute top-[6px] right-[6px] w-2 h-2 bg-[#00C48C] rounded-full border-2 border-white" />
         </button>
         <button
           onClick={() => router.push('/scrape')}
-          className="px-4 py-2 bg-[#00C48C] hover:bg-[#00A86B] text-white text-[13px] font-semibold rounded-lg transition-colors"
+          className="px-3 md:px-4 py-2 bg-[#00C48C] hover:bg-[#00A86B] text-white text-[13px] font-semibold rounded-lg transition-colors whitespace-nowrap"
         >
-          + Generate Leads
+          <span className="hidden sm:inline">+ Generate Leads</span>
+          <span className="sm:hidden">+ Leads</span>
         </button>
       </div>
     </header>

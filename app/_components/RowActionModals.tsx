@@ -1,10 +1,12 @@
 'use client';
 import { useState } from 'react';
-import { X, Globe, Mail, Phone, MapPin, Briefcase, Trash2, Send, AlertTriangle, PlusCircle } from 'lucide-react';
+import { X, Globe, Mail, Phone, MapPin, Briefcase, Trash2, Send, AlertTriangle, PlusCircle, CheckCheck, ChevronDown } from 'lucide-react';
 import { Lead, RequiresAcknowledgment } from '@/types';
 import { Button } from './Button';
 import { SendLimitConsentModal } from './SendLimitConsentModal';
 import { cn } from '@/lib/utils';
+import { NIGERIAN_STATES } from '@/app/data/newCompaniesData';
+import { NIGERIAN_LGAS_BY_STATE } from '@/app/data/nigeriaLgas';
 
 // ─── shared backdrop + shell ───────────────────────────────────────────────
 function Modal({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
@@ -166,6 +168,7 @@ export function MessageModal({ lead, onSent, onClose }: MessageModalProps) {
     `Dear ${lead.name} Team,\n\nWe would like to explore a potential partnership with your organization.\n\nKindly reach out to us at your earliest convenience.\n\nBest regards,\nThe companyFinder Team`
   );
   const [sending, setSending] = useState(false);
+  const [done, setDone] = useState(false);
   const [sendError, setSendError] = useState('');
   const [pendingAck, setPendingAck] = useState<RequiresAcknowledgment | null>(null);
   const [acking, setAcking] = useState(false);
@@ -185,6 +188,8 @@ export function MessageModal({ lead, onSent, onClose }: MessageModalProps) {
       if (res.status === 409 && data.requires_acknowledgment) { setSending(false); setPendingAck(data); return; }
       if (!res.ok) { setSendError(data.error ?? 'Failed to send email'); setSending(false); return; }
       setSending(false);
+      setDone(true);
+      await new Promise(r => setTimeout(r, 700));
       onSent();
     } catch {
       setSendError('Failed to send email');
@@ -209,6 +214,8 @@ export function MessageModal({ lead, onSent, onClose }: MessageModalProps) {
       const data = await res.json();
       if (!res.ok) { setSendError(data.error ?? 'Failed to send email'); setSending(false); return; }
       setSending(false);
+      setDone(true);
+      await new Promise(r => setTimeout(r, 700));
       onSent();
     } catch {
       setSendError('Failed to send email');
@@ -244,9 +251,19 @@ export function MessageModal({ lead, onSent, onClose }: MessageModalProps) {
         {sendError && <p className="text-xs text-red-500">{sendError}</p>}
       </div>
       <div className="px-6 py-3 border-t border-gray-100 flex justify-end gap-3">
-        <Button variant="outline" onClick={onClose} disabled={sending}>Cancel</Button>
-        <Button onClick={handleSend} isLoading={sending} disabled={!to} className="gap-2">
-          {!sending && <Send size={14} />} {sending ? 'Sending...' : 'Send Email'}
+        <Button variant="outline" onClick={onClose} disabled={sending || done}>Cancel</Button>
+        <Button
+          onClick={handleSend}
+          isLoading={sending}
+          disabled={!to || done}
+          className={cn('gap-2 min-w-[110px]', done && 'bg-emerald-600 hover:bg-emerald-600')}
+        >
+          {done
+            ? <><CheckCheck size={14} /> Sent!</>
+            : !sending
+              ? <><Send size={14} /> Send Email</>
+              : 'Sending...'
+          }
         </Button>
       </div>
       {pendingAck && (
@@ -306,13 +323,24 @@ export function DeleteModal({ lead, onConfirm, onClose }: DeleteModalProps) {
 // ─── ADD MODAL ─────────────────────────────────────────────────────────────
 interface AddModalProps { onSave: (lead: Lead) => void; onClose: () => void; }
 
-const EMPTY_FORM = { name: '', address: '', website: '', emails: '', phones: '', category: '', state: '', local_govt: '' };
+const EMPTY_FORM = {
+  name: '', address: '', website: '', emails: '', phones: '', category: '',
+  state: '', local_govt: '', city: '', area: '',
+};
+
+const selectCls = (hasError?: boolean) => cn(
+  'w-full h-10 pl-3 pr-8 rounded-lg border text-sm appearance-none cursor-pointer bg-white',
+  'focus:outline-none focus:ring-2 focus:ring-[#006285]/30 focus:border-[#006285]',
+  hasError ? 'border-red-400 bg-red-50' : 'border-gray-300'
+);
 
 export function AddModal({ onSave, onClose }: AddModalProps) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Partial<typeof EMPTY_FORM>>({});
   const [saveError, setSaveError] = useState('');
+
+  const lgaOptions = form.state ? (NIGERIAN_LGAS_BY_STATE[form.state] ?? []) : [];
 
   const validate = () => {
     const e: Partial<typeof EMPTY_FORM> = {};
@@ -340,6 +368,8 @@ export function AddModal({ onSave, onClose }: AddModalProps) {
           category:   form.category.trim(),
           state:      form.state.trim(),
           local_govt: form.local_govt.trim(),
+          city:       form.city.trim(),
+          area:       form.area.trim(),
         }),
       });
       const data = await res.json();
@@ -351,38 +381,83 @@ export function AddModal({ onSave, onClose }: AddModalProps) {
     }
   };
 
-  const fields: { key: keyof typeof EMPTY_FORM; label: string; placeholder: string; required?: boolean }[] = [
-    { key: 'name',     label: 'Company Name',      placeholder: 'e.g. Dangote Industries',         required: true },
-    { key: 'address',  label: 'Address',            placeholder: 'e.g. 1 Alfred Rewane Rd, Lagos'               },
-    { key: 'website',  label: 'Website',            placeholder: 'e.g. https://www.example.com'                  },
-    { key: 'emails',   label: 'Emails',             placeholder: 'Separate multiple with commas'                  },
-    { key: 'phones',   label: 'Phone Numbers',      placeholder: 'Separate multiple with commas'                  },
-    { key: 'category',   label: 'Category',  placeholder: 'e.g. Technology Companies', required: true },
-    { key: 'state',      label: 'State',     placeholder: 'e.g. Lagos',               required: true },
-    { key: 'local_govt', label: 'City / LGA', placeholder: 'e.g. Ikeja'                             },
+  const topFields: { key: keyof typeof EMPTY_FORM; label: string; placeholder: string; required?: boolean }[] = [
+    { key: 'name',     label: 'Company Name', placeholder: 'e.g. Dangote Industries', required: true },
+    { key: 'address',  label: 'Address',      placeholder: 'e.g. 1 Alfred Rewane Rd, Lagos' },
+    { key: 'website',  label: 'Website',      placeholder: 'e.g. https://www.example.com' },
+    { key: 'emails',   label: 'Emails',       placeholder: 'Separate multiple with commas' },
+    { key: 'phones',   label: 'Phone Numbers', placeholder: 'Separate multiple with commas' },
+    { key: 'category', label: 'Category',     placeholder: 'e.g. Technology Companies', required: true },
   ];
+
+  const bottomFields: { key: keyof typeof EMPTY_FORM; label: string; placeholder: string }[] = [
+    { key: 'city', label: 'City',                    placeholder: 'e.g. Lagos Mainland' },
+    { key: 'area', label: 'Area / District / Town',  placeholder: 'e.g. Allen Avenue' },
+  ];
+
+  const textField = ({ key, label, placeholder, required }: { key: keyof typeof EMPTY_FORM; label: string; placeholder: string; required?: boolean }) => (
+    <div key={key}>
+      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+        {label} {required && <span className="text-red-400">*</span>}
+      </label>
+      <input
+        value={form[key]}
+        onChange={e => { setForm(p => ({ ...p, [key]: e.target.value })); setErrors(p => ({ ...p, [key]: '' })); }}
+        placeholder={placeholder}
+        className={cn(
+          'w-full h-10 px-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-[#006285]/30 focus:border-[#006285]',
+          errors[key] ? 'border-red-400 bg-red-50' : 'border-gray-300'
+        )}
+      />
+      {errors[key] && <p className="text-xs text-red-500 mt-1">{errors[key]}</p>}
+    </div>
+  );
 
   return (
     <Modal onClose={onClose}>
       <ModalHeader title="Add New Company" subtitle="Manually add a company to your database" onClose={onClose} />
       <div className="px-6 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
-        {fields.map(({ key, label, placeholder, required }) => (
-          <div key={key}>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-              {label} {required && <span className="text-red-400">*</span>}
-            </label>
-            <input
-              value={form[key]}
-              onChange={e => { setForm(p => ({ ...p, [key]: e.target.value })); setErrors(p => ({ ...p, [key]: '' })); }}
-              placeholder={placeholder}
-              className={cn(
-                'w-full h-10 px-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-[#006285]/30 focus:border-[#006285]',
-                errors[key] ? 'border-red-400 bg-red-50' : 'border-gray-300'
-              )}
-            />
-            {errors[key] && <p className="text-xs text-red-500 mt-1">{errors[key]}</p>}
+        {topFields.map(textField)}
+
+        {/* State — dropdown */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            State <span className="text-red-400">*</span>
+          </label>
+          <div className="relative">
+            <select
+              value={form.state}
+              onChange={e => setForm(p => ({ ...p, state: e.target.value, local_govt: '' }))}
+              className={selectCls(!!errors.state)}
+            >
+              <option value="">Select state...</option>
+              {NIGERIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           </div>
-        ))}
+          {errors.state && <p className="text-xs text-red-500 mt-1">{errors.state}</p>}
+        </div>
+
+        {/* LGA — dropdown, populated from the chosen state */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            Local Government Area
+          </label>
+          <div className="relative">
+            <select
+              value={form.local_govt}
+              onChange={e => setForm(p => ({ ...p, local_govt: e.target.value }))}
+              disabled={!form.state}
+              className={cn(selectCls(), !form.state && 'opacity-50 cursor-not-allowed')}
+            >
+              <option value="">{form.state ? 'Select LGA...' : 'Select a state first'}</option>
+              {lgaOptions.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+            <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
+        </div>
+
+        {bottomFields.map(textField)}
         {saveError && <p className="text-xs text-red-500">{saveError}</p>}
       </div>
       <div className="px-6 py-3 border-t border-gray-100 flex justify-end gap-3 bg-gray-50 rounded-b-2xl">

@@ -39,10 +39,31 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, address, website, emails, phones, category, state, local_govt } = body;
+  const { name, address, website, emails, phones, category, state, local_govt, city, area } = body;
 
   if (!name || !category || !state)
     return NextResponse.json({ error: 'name, category and state are required' }, { status: 400 });
+
+  const cleanEmails = Array.isArray(emails) ? emails.filter(Boolean) : [];
+
+  // Duplicate guard: same company name (case-insensitive) AND at least one shared
+  // email already on file for this company. Skipped when the new lead has no email
+  // at all, since there's nothing to compare against.
+  if (cleanEmails.length > 0) {
+    let dupeQuery = supabaseAdmin
+      .from('leads')
+      .select('id')
+      .ilike('name', name.trim())
+      .overlaps('emails', cleanEmails)
+      .limit(1);
+
+    if (user.role !== 'admin') dupeQuery = dupeQuery.eq('company_id', user.company_id);
+
+    const { data: dupes, error: dupeError } = await dupeQuery;
+    if (dupeError) return NextResponse.json({ error: dupeError.message }, { status: 500 });
+    if (dupes && dupes.length > 0)
+      return NextResponse.json({ error: 'A lead with this name and email already exists' }, { status: 409 });
+  }
 
   const { data, error: dbError } = await supabaseAdmin
     .from('leads')
@@ -57,6 +78,8 @@ export async function POST(req: NextRequest) {
       category,
       state,
       local_govt:  local_govt ?? '',
+      city:        city ?? null,
+      area:        area ?? null,
       status:      'new',
       source:      'manual',
       lead_score:  0,

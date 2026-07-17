@@ -1,7 +1,8 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
-  Search, X, Send, Trash2, Eye, Pencil, Mail, ChevronDown, Plus, Download, ExternalLink,
+  Search, X, Send, Trash2, Eye, Pencil, Mail, ChevronDown, Plus, Download, ExternalLink, Linkedin,
 } from 'lucide-react';
 import { Pagination } from '@/app/_components/Pagination';
 import { BulkSendModal } from '@/app/_components/BulkSendModal';
@@ -38,95 +39,126 @@ function ActionBtn({ icon: Icon, label, color, onClick }: {
 }
 
 export default function LeadsPage() {
-  const [leads, setLeads]             = useState<Lead[]>([]);
-  const [isLoading, setIsLoading]     = useState(true);
-  const [search, setSearch]           = useState('');
-  const [filterState, setFilterState] = useState('');
-  const [filterLga, setFilterLga]     = useState('');
-  const [filterCategory, setFilterCategory] = useState('');
-  const [filterStatus, setFilterStatus]     = useState('');
-  const [modal, setModal]             = useState<ModalType>(null);
-  const [active, setActive]           = useState<Lead | null>(null);
-  const [page, setPage]               = useState(1);
-  const [selected, setSelected]       = useState<Set<string>>(new Set());
+  const queryClient = useQueryClient();
+  const [search, setSearch]                   = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filterState, setFilterState]         = useState('');
+  const [filterLga, setFilterLga]             = useState('');
+  const [filterCategory, setFilterCategory]   = useState('');
+  const [filterStatus, setFilterStatus]       = useState('');
+  const [modal, setModal]                     = useState<ModalType>(null);
+  const [active, setActive]                   = useState<Lead | null>(null);
+  const [page, setPage]                       = useState(1);
+  const [selected, setSelected]               = useState<Set<string>>(new Set());
+  const [selectedMap, setSelectedMap]         = useState<Map<string, Lead>>(new Map());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
+  // Debounce so every keystroke doesn't fire a server request.
   useEffect(() => {
-    fetch('/api/leads/all')
-      .then(r => r.json())
-      .then(data => { setLeads(Array.isArray(data) ? data : []); setIsLoading(false); })
-      .catch(() => setIsLoading(false));
-  }, []);
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  // Derive unique LGAs from loaded leads (for the filter dropdown)
+  const queryParams = useMemo(() => {
+    const p = new URLSearchParams({ page: String(page), perPage: String(PER_PAGE) });
+    if (filterState)     p.set('state', filterState);
+    if (filterLga)       p.set('local_govt', filterLga);
+    if (filterCategory)  p.set('category', filterCategory);
+    if (filterStatus)    p.set('status', filterStatus);
+    if (debouncedSearch) p.set('search', debouncedSearch);
+    return p.toString();
+  }, [page, filterState, filterLga, filterCategory, filterStatus, debouncedSearch]);
+
+  // Server-side paginated — only the current page's rows ever come down the wire.
+  const { data: pageData, isLoading } = useQuery<{ data: Lead[]; total: number }>({
+    queryKey:        ['leads-page', queryParams],
+    queryFn:         () => fetch(`/api/leads/all?${queryParams}`).then(r => r.json()),
+    placeholderData: keepPreviousData, // keep showing the current rows while the next page loads
+  });
+
+  const leads      = pageData?.data ?? [];
+  const total      = pageData?.total ?? 0;
+  const totalPages = Math.ceil(total / PER_PAGE);
+
+  // Full unpaginated fetch used only to populate the LGA filter's dropdown options —
+  // the table itself never holds the full list client-side anymore.
+  const { data: allLeadsForFacets = [] } = useQuery<Lead[]>({
+    queryKey: ['leads-all-facets'],
+    queryFn:  () => fetch('/api/leads/all').then(r => r.json()).then(d => Array.isArray(d) ? d : []),
+  });
+
   const uniqueLgas = useMemo(() => {
-    const lgas = leads
+    const lgas = allLeadsForFacets
       .filter(l => !filterState || l.state === filterState)
       .map(l => l.local_govt)
       .filter(Boolean);
     return [...new Set(lgas)].sort();
-  }, [leads, filterState]);
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    return leads.filter(l => {
-      if (filterState    && l.state      !== filterState)    return false;
-      if (filterLga      && l.local_govt !== filterLga)      return false;
-      if (filterCategory && l.category   !== filterCategory) return false;
-      if (filterStatus   && l.status     !== filterStatus)   return false;
-      if (q && !l.name.toLowerCase().includes(q) && !l.category.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [leads, filterState, filterLga, filterCategory, filterStatus, search]);
+  }, [allLeadsForFacets, filterState]);
 
   useEffect(() => {
     setPage(1);
-    setSelected(new Set());
-  }, [filterState, filterLga, filterCategory, filterStatus, search]);
+  }, [filterState, filterLga, filterCategory, filterStatus, debouncedSearch]);
 
-  const totalPages = Math.ceil(filtered.length / PER_PAGE);
-  const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
-
-  const pageIds        = paginated.map(l => l.id);
+  const pageIds        = leads.map(l => l.id);
   const allPageChecked = pageIds.length > 0 && pageIds.every(id => selected.has(id));
   const someChecked    = pageIds.some(id => selected.has(id)) && !allPageChecked;
 
-  const toggleOne  = (id: string) => setSelected(prev => {
-    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
-  });
-  const togglePage = () => setSelected(prev => {
-    const next = new Set(prev);
-    if (allPageChecked) pageIds.forEach(id => next.delete(id));
-    else                pageIds.forEach(id => next.add(id));
-    return next;
-  });
-  const clearAll  = () => setSelected(new Set());
-  const selectAll = () => setSelected(new Set(filtered.map(l => l.id)));
+  // Selection is tracked as both an id Set (fast lookup for checkbox state) and a
+  // Map of full Lead objects (needed by bulk actions) — a Map, not just the current
+  // page's rows, because selections must survive moving between pages.
+  const toggleOne = (lead: Lead) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(lead.id) ? next.delete(lead.id) : next.add(lead.id);
+      return next;
+    });
+    setSelectedMap(prev => {
+      const next = new Map(prev);
+      next.has(lead.id) ? next.delete(lead.id) : next.set(lead.id, lead);
+      return next;
+    });
+  };
+  const togglePage = () => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (allPageChecked) pageIds.forEach(id => next.delete(id));
+      else                pageIds.forEach(id => next.add(id));
+      return next;
+    });
+    setSelectedMap(prev => {
+      const next = new Map(prev);
+      if (allPageChecked) pageIds.forEach(id => next.delete(id));
+      else leads.forEach(l => next.set(l.id, l));
+      return next;
+    });
+  };
+  const clearAll = () => { setSelected(new Set()); setSelectedMap(new Map()); };
 
   const open  = (type: ModalType, lead: Lead) => { setModal(type); setActive(lead); };
   const close = () => { setModal(null); setActive(null); };
 
-  const selectedLeads = leads.filter(l => selected.has(l.id));
+  const selectedLeads = [...selectedMap.values()];
 
-  const handleEdit = (updated: Lead) => {
-    setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
-    close();
+  const invalidateLeads = () => {
+    queryClient.invalidateQueries({ queryKey: ['leads-page'] });
+    queryClient.invalidateQueries({ queryKey: ['leads-all-facets'] });
   };
+
+  const handleEdit = () => { invalidateLeads(); close(); };
+
   const handleDelete = async () => {
     if (!active) return;
     const id = active.id;
     close();
     const res = await fetch(`/api/leads/${id}`, { method: 'DELETE' });
     if (res.ok) {
-      setLeads(prev => prev.filter(l => l.id !== id));
       setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
+      setSelectedMap(prev => { const n = new Map(prev); n.delete(id); return n; });
+      invalidateLeads();
     }
   };
-  const handleMailSent = () => {
-    if (!active) return;
-    setLeads(prev => prev.map(l => l.id === active.id ? { ...l, mail_sent: true } : l));
-    close();
-  };
+  const handleMailSent = () => { invalidateLeads(); close(); };
+
   const handleBulkDelete = async () => {
     const ids = [...selected];
     setBulkDeleteConfirm(false);
@@ -136,13 +168,13 @@ export default function LeadsPage() {
       body: JSON.stringify({ ids }),
     });
     if (res.ok) {
-      setLeads(prev => prev.filter(l => !selected.has(l.id)));
-      setSelected(new Set());
+      clearAll();
+      invalidateLeads();
     }
   };
-  const handleBulkSent = (ids: string[]) => {
-    setLeads(prev => prev.map(l => ids.includes(l.id) ? { ...l, mail_sent: true } : l));
-    setSelected(new Set());
+  const handleBulkSent = () => {
+    clearAll();
+    invalidateLeads();
     close();
   };
 
@@ -150,6 +182,21 @@ export default function LeadsPage() {
 
   const clearFilters = () => {
     setFilterState(''); setFilterLga(''); setFilterCategory(''); setFilterStatus(''); setSearch('');
+  };
+
+  const handleExportSelected = () => {
+    if (selected.size > 0) {
+      sessionStorage.setItem('export_selected_ids', JSON.stringify([...selected]));
+      window.location.href = '/export';
+      return;
+    }
+    sessionStorage.removeItem('export_selected_ids');
+    const params = new URLSearchParams();
+    if (filterCategory) params.set('category', filterCategory);
+    if (filterState)    params.set('state',    filterState);
+    if (filterStatus)   params.set('status',   filterStatus);
+    const qs = params.toString();
+    window.location.href = `/export${qs ? `?${qs}` : ''}`;
   };
 
   return (
@@ -237,18 +284,10 @@ export default function LeadsPage() {
             </button>
           )}
 
-          <span className="ml-auto text-[12px] text-[#888888]">{filtered.length} results</span>
+          <span className="ml-auto text-[12px] text-[#888888]">{total} results</span>
 
           <button
-            onClick={() => {
-              const ids = [...selected];
-              const params = new URLSearchParams();
-              if (filterCategory) params.set('category', filterCategory);
-              if (filterState)    params.set('state',    filterState);
-              if (filterStatus)   params.set('status',   filterStatus);
-              const qs = params.toString();
-              window.location.href = `/export${qs ? `?${qs}` : ''}`;
-            }}
+            onClick={handleExportSelected}
             className="flex items-center gap-1.5 h-9 px-4 rounded-lg border border-[#0099CC] text-[#006285] text-[13px] font-semibold hover:bg-[#dff2f9] transition-colors"
           >
             <Download size={14} />
@@ -271,11 +310,6 @@ export default function LeadsPage() {
             <span className="text-[13px] font-semibold text-white">
               {selected.size} lead{selected.size !== 1 ? 's' : ''} selected
             </span>
-            {selected.size < filtered.length && (
-              <button onClick={selectAll} className="text-[12px] text-white/70 hover:text-white underline underline-offset-2">
-                Select all {filtered.length}
-              </button>
-            )}
             <button onClick={clearAll} className="text-[12px] text-white/70 hover:text-white underline underline-offset-2">
               Clear
             </button>
@@ -320,7 +354,7 @@ export default function LeadsPage() {
                     className="w-4 h-4 rounded accent-[#006285] cursor-pointer"
                   />
                 </th>
-                {['#', 'Company', 'Category', 'State', 'LGA', 'Email', 'Status', 'Score', 'LinkedIn', 'Actions'].map(h => (
+                {['#', 'Company', 'Address', 'Website', 'Category', 'State', 'LGA', 'Email', 'Status', 'Score', 'Actions'].map(h => (
                   <th key={h} className="px-3.5 py-2.5 text-left text-[11px] font-bold tracking-[0.8px] uppercase text-[#888888] border-b border-[#E5E7EB] whitespace-nowrap">
                     {h}
                   </th>
@@ -329,16 +363,16 @@ export default function LeadsPage() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={11} className="px-4 py-14 text-center text-[13px] text-[#888888]">
+                <tr><td colSpan={12} className="px-4 py-14 text-center text-[13px] text-[#888888]">
                   <div className="flex items-center justify-center gap-2">
                     <span className="spinner-mini" /> Loading leads...
                   </div>
                 </td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={11} className="px-4 py-12 text-center text-[13px] text-[#888888]">
+              ) : leads.length === 0 ? (
+                <tr><td colSpan={12} className="px-4 py-12 text-center text-[13px] text-[#888888]">
                   No leads match the selected filters.
                 </td></tr>
-              ) : paginated.map((lead, i) => {
+              ) : leads.map((lead, i) => {
                 const isChecked  = selected.has(lead.id);
                 const score      = lead.lead_score ?? 0;
                 const scoreColor =
@@ -356,7 +390,7 @@ export default function LeadsPage() {
                   >
                     <td className="px-3.5 py-3">
                       <input
-                        type="checkbox" checked={isChecked} onChange={() => toggleOne(lead.id)}
+                        type="checkbox" checked={isChecked} onChange={() => toggleOne(lead)}
                         className="w-4 h-4 rounded accent-[#006285] cursor-pointer"
                       />
                     </td>
@@ -365,6 +399,25 @@ export default function LeadsPage() {
                     </td>
                     <td className="px-3.5 py-3 text-[13px] font-semibold text-[#0A1628] whitespace-nowrap">
                       {lead.name}
+                    </td>
+                    <td className="px-3.5 py-3 text-[13px] text-[#0A1628] max-w-[180px] truncate" title={lead.address}>
+                      {lead.address || '—'}
+                    </td>
+                    <td className="px-3.5 py-3 text-[13px] max-w-[160px] truncate">
+                      {lead.website ? (
+                        <a
+                          href={lead.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-[#006285] hover:text-[#0099CC] transition-colors truncate"
+                          title={lead.website}
+                        >
+                          <ExternalLink size={11} className="shrink-0" />
+                          <span className="truncate">{lead.website.replace(/^https?:\/\//, '')}</span>
+                        </a>
+                      ) : (
+                        <span className="text-[#888888]">—</span>
+                      )}
                     </td>
                     <td className="px-3.5 py-3 text-[13px] text-[#0A1628] max-w-[140px] truncate">
                       {lead.category}
@@ -387,26 +440,21 @@ export default function LeadsPage() {
                       <span className={scoreColor}>{score}</span>
                     </td>
                     <td className="px-3.5 py-3">
-                      {lead.linkedin_url ? (
-                        <a
-                          href={lead.linkedin_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-[#006285] hover:text-[#0099CC] transition-colors"
-                          title={lead.linkedin_url}
-                        >
-                          <ExternalLink size={13} />
-                        </a>
-                      ) : (
-                        <span className="text-[#888888]">—</span>
-                      )}
-                    </td>
-                    <td className="px-3.5 py-3">
                       <div className="flex items-center gap-1">
-                        <ActionBtn icon={Eye}    label="View"    color="text-[#006285] hover:bg-[#dff2f9]" onClick={() => open('view', lead)}    />
-                        <ActionBtn icon={Pencil} label="Edit"    color="text-[#e67e22] hover:bg-[#fff3e0]" onClick={() => open('edit', lead)}    />
-                        <ActionBtn icon={Mail}   label="Message" color="text-[#00A86B] hover:bg-[#dff7ee]" onClick={() => open('message', lead)} />
-                        <ActionBtn icon={Trash2} label="Delete"  color="text-red-500 hover:bg-red-50"      onClick={() => open('delete', lead)}  />
+                        <ActionBtn icon={Eye}     label="View"    color="text-[#006285] hover:bg-[#dff2f9]" onClick={() => open('view', lead)}    />
+                        <ActionBtn icon={Pencil}  label="Edit"    color="text-[#e67e22] hover:bg-[#fff3e0]" onClick={() => open('edit', lead)}    />
+                        <ActionBtn icon={Mail}    label="Message" color="text-[#00A86B] hover:bg-[#dff7ee]" onClick={() => open('message', lead)} />
+                        <ActionBtn
+                          icon={Linkedin}
+                          label="Find on LinkedIn"
+                          color="text-[#0077b5] hover:bg-[#e8f4fa]"
+                          onClick={() => window.open(
+                            `https://www.google.com/search?q=${encodeURIComponent(`${lead.name} LinkedIn`)}`,
+                            '_blank',
+                            'noopener,noreferrer'
+                          )}
+                        />
+                        <ActionBtn icon={Trash2}  label="Delete"  color="text-red-500 hover:bg-red-50"      onClick={() => open('delete', lead)}  />
                       </div>
                     </td>
                   </tr>
@@ -420,12 +468,12 @@ export default function LeadsPage() {
       <Pagination
         page={page}
         totalPages={totalPages}
-        totalItems={filtered.length}
+        totalItems={total}
         perPage={PER_PAGE}
         onPageChange={setPage}
       />
 
-      {modal === 'add'       &&                 <AddModal     onSave={(c) => { setLeads(prev => [c, ...prev]); close(); }} onClose={close} />}
+      {modal === 'add'       &&                 <AddModal     onSave={() => { invalidateLeads(); close(); }} onClose={close} />}
       {modal === 'view'      && active        && <ViewModal    lead={active} onClose={close} />}
       {modal === 'edit'      && active        && <EditModal    lead={active} onSave={handleEdit} onClose={close} />}
       {modal === 'message'   && active        && <MessageModal lead={active} onSent={handleMailSent} onClose={close} />}

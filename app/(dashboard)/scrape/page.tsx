@@ -43,13 +43,43 @@ function SelectField({ label, value, onChange, options, placeholder, icon: Icon 
   );
 }
 
+function TextField({ label, value, onChange, placeholder, icon: Icon }: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  icon?: React.ElementType;
+}) {
+  return (
+    <div>
+      <label className="block text-[12px] font-semibold text-[#888888] uppercase tracking-[0.8px] mb-1.5">
+        {label}
+      </label>
+      <div className="relative">
+        {Icon && (
+          <Icon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#006285] pointer-events-none" />
+        )}
+        <input
+          type="text"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={`w-full h-11 ${Icon ? 'pl-9' : 'pl-3'} pr-3 rounded-lg border border-[#E5E7EB] bg-white text-[13px] text-[#0A1628] focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] placeholder:text-[#888888]`}
+        />
+      </div>
+    </div>
+  );
+}
+
 type UsageSummary = { scrape_count: number; email_count: number; export_count: number };
 type UsageLimits  = { scrape_limit: number | null; email_limit: number | null; export_limit: number | null };
 
 export default function ScrapePage() {
   const [category,   setCategory]   = useState('');
   const [state,      setState]      = useState('');
+  const [city,       setCity]       = useState('');
   const [localGovt,  setLocalGovt]  = useState('');
+  const [area,       setArea]       = useState('');
   const [maxResults, setMaxResults] = useState('100');
   const [jobId,      setJobId]      = useState<string | null>(null);
   const [showModal,  setShowModal]  = useState(false);
@@ -77,7 +107,9 @@ export default function ScrapePage() {
 
   const isRunning  = job?.status === 'running' || job?.status === 'pending';
   const isComplete = job?.status === 'completed';
-  const canSearch  = !!category && !!state;
+  // State, City, Local Govt, and Area/District/Town are all required — each narrows
+  // the Google Places search further and meaningfully improves result precision.
+  const canSearch  = !!category && !!state && !!city.trim() && !!localGovt.trim() && !!area.trim();
 
   const handleSearch = async () => {
     if (!canSearch) return;
@@ -86,9 +118,11 @@ export default function ScrapePage() {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
         category,
-        location:   state + (localGovt ? ` - ${localGovt}` : ''),
+        location:    `${area.trim()}, ${localGovt.trim()}, ${city.trim()}, ${state}`,
         state,
-        local_govt: localGovt,
+        city:        city.trim(),
+        local_govt:  localGovt.trim(),
+        area:        area.trim(),
         max_results: parseInt(maxResults),
       }),
     });
@@ -99,10 +133,13 @@ export default function ScrapePage() {
     }
   };
 
-  const handleAddToDatabase = async () => {
+  // Results are already persisted to `leads` during the scrape pipeline itself
+  // (real-time upsert per company as it's found) — this just acknowledges the
+  // review and closes the modal, it doesn't add anything.
+  const handleDoneReviewing = async () => {
     if (!leads?.length) return;
     setIsAdding(true);
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 300));
     setSavedLeads(prev => {
       const existingIds = new Set(prev.map(l => l.id));
       const fresh = leads.filter(l => !existingIds.has(l.id));
@@ -132,7 +169,7 @@ export default function ScrapePage() {
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <SelectField
-                  label="Industry / Category"
+                  label="Industry / Category *"
                   icon={Briefcase}
                   value={category}
                   onChange={setCategory}
@@ -140,19 +177,30 @@ export default function ScrapePage() {
                   placeholder="Select category..."
                 />
                 <SelectField
-                  label="State"
+                  label="State *"
                   icon={MapPin}
                   value={state}
-                  onChange={v => { setState(v); setLocalGovt(''); }}
+                  onChange={setState}
                   options={NIGERIAN_STATES}
                   placeholder="Select state..."
                 />
-                <SelectField
-                  label="Local Government Area"
+                <TextField
+                  label="City *"
+                  value={city}
+                  onChange={setCity}
+                  placeholder="e.g. Lagos Mainland"
+                />
+                <TextField
+                  label="Local Government Area *"
                   value={localGovt}
                   onChange={setLocalGovt}
-                  options={[]} // Populated dynamically when a state is chosen — free text fallback
-                  placeholder="Any LGA (optional)"
+                  placeholder="e.g. Ikeja"
+                />
+                <TextField
+                  label="Area / District / Town *"
+                  value={area}
+                  onChange={setArea}
+                  placeholder="e.g. Allen Avenue"
                 />
                 <SelectField
                   label="Max Results"
@@ -162,6 +210,10 @@ export default function ScrapePage() {
                   placeholder="100"
                 />
               </div>
+              <p className="text-[11px] text-[#888888]">
+                All fields except Max Results are required — the more specific the
+                location, the more precise the search.
+              </p>
 
               <Button
                 onClick={handleSearch}
@@ -287,7 +339,7 @@ export default function ScrapePage() {
         <ScrapedResultsModal
           results={leads}
           isAdding={isAdding}
-          onConfirm={handleAddToDatabase}
+          onConfirm={handleDoneReviewing}
           onClose={() => setShowModal(false)}
         />
       )}

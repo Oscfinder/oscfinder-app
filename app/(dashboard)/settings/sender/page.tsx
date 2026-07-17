@@ -52,6 +52,13 @@ export default function SenderSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [formError, setFormError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  useEffect(() => {
+    if (!successMsg) return;
+    const t = setTimeout(() => setSuccessMsg(''), 5000);
+    return () => clearTimeout(t);
+  }, [successMsg]);
 
   useEffect(() => {
     if (!sender) return;
@@ -101,11 +108,13 @@ export default function SenderSettingsPage() {
 
   const handleVerify = async () => {
     setFormError('');
+    setSuccessMsg('');
     setVerifying(true);
     try {
       const res = await fetch('/api/senders/verify', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) setFormError(data.error ?? 'Verification failed');
+      else setSuccessMsg('Mailbox verified! You can now send campaigns from this address.');
       queryClient.invalidateQueries({ queryKey: ['sender'] });
     } finally {
       setVerifying(false);
@@ -155,6 +164,11 @@ export default function SenderSettingsPage() {
           {formError && (
             <div className="bg-[#ffeaea] border border-[#ffd6d6] rounded-lg px-4 py-3 text-[12.5px] text-[#e74c3c]">
               {formError}
+            </div>
+          )}
+          {successMsg && (
+            <div className="flex items-center gap-2 bg-[#dff7ee] border border-[#b2f0d6] rounded-lg px-4 py-3 text-[12.5px] text-[#00A86B] font-medium">
+              <CheckCircle size={14} className="shrink-0" /> {successMsg}
             </div>
           )}
 

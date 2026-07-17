@@ -23,9 +23,9 @@ export function ScrapedResultsModal({ results, isAdding, onConfirm, onClose }: S
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
-            <h2 className="text-lg font-bold text-gray-800">Scraped Companies</h2>
+            <h2 className="text-lg font-bold text-gray-800">Scrape Results</h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              {results.length} new {results.length === 1 ? 'company' : 'companies'} found — review before adding to database
+              {results.length} {results.length === 1 ? 'company' : 'companies'} found and already saved to your Leads
             </p>
           </div>
           <button
@@ -93,11 +93,11 @@ export function ScrapedResultsModal({ results, isAdding, onConfirm, onClose }: S
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
           <p className="text-sm text-gray-500">
-            Adding <span className="font-semibold text-gray-800">{results.length}</span> companies to your database
+            <span className="font-semibold text-gray-800">{results.length}</span> {results.length === 1 ? 'company' : 'companies'} in your database — nothing left to add
           </p>
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={onClose} disabled={isAdding}>
-              Cancel
+              Keep Reviewing
             </Button>
             <Button
               onClick={onConfirm}
@@ -105,7 +105,7 @@ export function ScrapedResultsModal({ results, isAdding, onConfirm, onClose }: S
               className={cn('gap-2', !isAdding && 'bg-emerald-600 hover:bg-emerald-700')}
             >
               {!isAdding && <CheckCircle size={16} />}
-              {isAdding ? 'Adding...' : `Add ${results.length} Companies`}
+              {isAdding ? 'Closing...' : 'Done'}
             </Button>
           </div>
         </div>

@@ -1,9 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Lead } from '@/types';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 
 const FORMAT_OPTIONS = [
   { id: 'xlsx', label: 'Excel (.xlsx)', desc: 'Full data with all fields',    locked: false },
@@ -24,6 +24,21 @@ export default function ExportPage() {
   const [filterState,    setFilterState]    = useState('');
   const [filterStatus,   setFilterStatus]   = useState('');
   const [isDownloading,  setIsDownloading]  = useState(false);
+  const [selectedIds,    setSelectedIds]    = useState<string[] | null>(null);
+
+  // Picked up from the Leads table's "Export Selected" — set just before that
+  // navigation, read once here, then cleared so a later plain visit to /export
+  // doesn't accidentally reuse a stale selection.
+  useEffect(() => {
+    const raw = sessionStorage.getItem('export_selected_ids');
+    if (raw) {
+      try {
+        const ids = JSON.parse(raw);
+        if (Array.isArray(ids) && ids.length > 0) setSelectedIds(ids);
+      } catch { /* ignore malformed value */ }
+      sessionStorage.removeItem('export_selected_ids');
+    }
+  }, []);
 
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ['leads-all'],
@@ -38,21 +53,25 @@ export default function ExportPage() {
     queryFn:  () => fetch('/api/export/history').then(r => r.json()),
   });
 
-  const filtered = leads.filter(l =>
-    (!filterCategory || l.category === filterCategory) &&
-    (!filterState    || l.state    === filterState)    &&
-    (!filterStatus   || l.status   === filterStatus)
-  );
+  const filtered = selectedIds
+    ? leads.filter(l => selectedIds.includes(l.id))
+    : leads.filter(l =>
+        (!filterCategory || l.category === filterCategory) &&
+        (!filterState    || l.state    === filterState)    &&
+        (!filterStatus   || l.status   === filterStatus)
+      );
 
   const handleDownload = async () => {
     if (isDownloading) return;
     setIsDownloading(true);
-    const params = new URLSearchParams({
-      format:   selectedFormat,
-      category: filterCategory,
-      state:    filterState,
-      status:   filterStatus,
-    });
+    const params = selectedIds
+      ? new URLSearchParams({ format: selectedFormat, ids: selectedIds.join(',') })
+      : new URLSearchParams({
+          format:   selectedFormat,
+          category: filterCategory,
+          state:    filterState,
+          status:   filterStatus,
+        });
     const res = await fetch(`/api/export?${params}`);
     if (res.ok) {
       const blob = await res.blob();
@@ -75,12 +94,28 @@ export default function ExportPage() {
       <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
         <div className="px-5 py-4 border-b border-[#E5E7EB]">
           <h2 className="text-[14px] font-bold text-[#0A1628]">Export Leads</h2>
-          <p className="text-[12px] text-[#888888] mt-0.5">Choose a format, apply filters, then download</p>
+          <p className="text-[12px] text-[#888888] mt-0.5">
+            {selectedIds ? 'Exporting the leads you selected on the Leads page' : 'Choose a format, apply filters, then download'}
+          </p>
         </div>
         <div className="p-5 space-y-5">
 
+          {selectedIds && (
+            <div className="flex items-center justify-between bg-[#dff2f9] border border-[#b8e2f2] rounded-lg px-4 py-2.5">
+              <span className="text-[13px] text-[#006285] font-medium">
+                Exporting <strong>{selectedIds.length}</strong> selected lead{selectedIds.length !== 1 ? 's' : ''} — filters below are ignored
+              </span>
+              <button
+                onClick={() => setSelectedIds(null)}
+                className="flex items-center gap-1 text-[12px] text-[#006285] hover:text-[#0099CC] font-semibold"
+              >
+                <X size={12} /> Clear selection
+              </button>
+            </div>
+          )}
+
           {/* Filters */}
-          <div className="flex flex-wrap gap-2.5">
+          <div className={`flex flex-wrap gap-2.5 ${selectedIds ? 'opacity-40 pointer-events-none' : ''}`}>
             <div className="relative">
               <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={selectCls}>
                 <option value="">All Categories</option>

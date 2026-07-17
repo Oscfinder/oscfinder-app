@@ -10,6 +10,8 @@ export interface Lead {
   address:      string;
   state:        string;
   local_govt:   string;
+  city?:        string | null;
+  area?:        string | null;
   website:      string;
   place_id:     string;
   emails:       string[];

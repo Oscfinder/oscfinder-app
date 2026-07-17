@@ -4,7 +4,6 @@ import { requireAuth, requireActiveAccount }                        from '@/lib/
 import { checkLimit, logUsage }                                     from '@/lib/usage';
 import { getCompanies, getPlaceDetails, parseAddressComponents }    from '@/services/googlePlaces';
 import { scrapeContactData, calculateLeadScore }                    from '@/services/scraper';
-import { checkInternalDB }                                          from '@/services/internalApi';
 
 export async function POST(req: NextRequest) {
   const { user, error } = await requireAuth();
@@ -60,9 +59,6 @@ async function runPipeline(jobId: string, category: string, location: string, co
 
         if (!website || visited.has(website)) continue;
         visited.add(website);
-
-        const isExisting = await checkInternalDB(company.name);
-        if (isExisting) continue;
 
         // ── Enrichment ────────────────────────────────────────────
         const { emails, phones, linkedin_url } = await scrapeContactData(website);

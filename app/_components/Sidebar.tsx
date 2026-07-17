@@ -38,11 +38,12 @@ const adminNav = [
   { href: '/api-docs',    label: 'API Docs',      icon: Code2 },
 ];
 
-function NavGroup({ label, items, collapsed, pathname }: {
+function NavGroup({ label, items, collapsed, pathname, onNavigate }: {
   label: string;
   items: { href: string; label: string; icon: React.ElementType }[];
   collapsed: boolean;
   pathname: string;
+  onNavigate?: () => void;
 }) {
   return (
     <div className="mb-1">
@@ -59,6 +60,7 @@ function NavGroup({ label, items, collapsed, pathname }: {
           <Link
             key={href}
             href={href}
+            onClick={onNavigate}
             className={cn(
               'flex items-center gap-2.5 px-5 py-2.5 text-[13.5px] font-medium transition-all border-l-2',
               isActive
@@ -77,11 +79,15 @@ function NavGroup({ label, items, collapsed, pathname }: {
 
 export function Sidebar({
   collapsed,
+  mobileOpen = false,
+  onMobileClose,
   isAdmin,
   userName,
   userRole,
 }: {
   collapsed: boolean;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
   isAdmin?: boolean;
   userName?: string;
   userRole?: string;
@@ -106,12 +112,23 @@ export function Sidebar({
     .toUpperCase();
 
   return (
-    <aside
-      className={cn(
-        'fixed top-0 left-0 h-screen bg-[#0A1628] flex flex-col z-40 transition-all duration-300',
-        collapsed ? 'w-[68px]' : 'w-[240px]'
+    <>
+      {/* Mobile backdrop -- dims everything behind the off-canvas drawer, tap to close */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={onMobileClose}
+        />
       )}
-    >
+      <aside
+        className={cn(
+          'fixed top-0 left-0 h-screen bg-[#0A1628] flex flex-col z-50 w-[240px]',
+          'transition-transform duration-300 md:transition-[width] md:duration-300',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full',
+          'md:translate-x-0',
+          collapsed ? 'md:w-[68px]' : 'md:w-[240px]'
+        )}
+      >
       {/* Logo */}
       <div className="px-5 py-5 border-b border-white/[0.07] shrink-0 min-h-[64px] flex items-center">
         {!collapsed ? (
@@ -132,14 +149,14 @@ export function Sidebar({
 
       {/* Nav */}
       <nav className="flex-1 py-2 overflow-y-auto">
-        <NavGroup label="Main"     items={mainNav}     collapsed={collapsed} pathname={pathname} />
-        <NavGroup label="Outreach" items={outreachNav} collapsed={collapsed} pathname={pathname} />
-        <NavGroup label="Data"     items={dataNav}     collapsed={collapsed} pathname={pathname} />
+        <NavGroup label="Main"     items={mainNav}     collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
+        <NavGroup label="Outreach" items={outreachNav} collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
+        <NavGroup label="Data"     items={dataNav}     collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
         {!isAdmin && (
-          <NavGroup label="Account" items={billingNav} collapsed={collapsed} pathname={pathname} />
+          <NavGroup label="Account" items={billingNav} collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
         )}
         {isAdmin && (
-          <NavGroup label="Admin" items={adminNav} collapsed={collapsed} pathname={pathname} />
+          <NavGroup label="Admin" items={adminNav} collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
         )}
       </nav>
 
@@ -212,6 +229,7 @@ export function Sidebar({
           </div>
         </div>
       )}
-    </aside>
+      </aside>
+    </>
   );
 }

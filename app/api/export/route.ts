@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
   const state    = sp.get('state')    ?? '';
   const status   = sp.get('status')   ?? '';
   const jobId    = sp.get('jobId')    ?? '';
+  const idsParam = sp.get('ids')      ?? '';
+  const ids      = idsParam ? idsParam.split(',').filter(Boolean) : [];
 
   let query = supabaseAdmin.from('leads').select('*');
 
@@ -30,10 +32,16 @@ export async function GET(req: NextRequest) {
     query = query.eq('company_id', user.company_id);
   }
 
-  if (jobId)    query = query.eq('job_id',  jobId);
-  if (category) query = query.eq('category', category);
-  if (state)    query = query.eq('state',    state);
-  if (status)   query = query.eq('status',   status);
+  // An explicit id list (from the Leads table's "Export Selected") takes precedence
+  // over the filter dropdowns — exports exactly those rows, nothing else.
+  if (ids.length > 0) {
+    query = query.in('id', ids);
+  } else {
+    if (jobId)    query = query.eq('job_id',  jobId);
+    if (category) query = query.eq('category', category);
+    if (state)    query = query.eq('state',    state);
+    if (status)   query = query.eq('status',   status);
+  }
 
   const { data, error: dbError } = await query;
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });
@@ -52,7 +60,11 @@ export async function GET(req: NextRequest) {
     'Lead Score':   l.lead_score ?? 0,
   }));
 
-  await logUsage(user.company_id!, 'export', 1, { format, category, state, status, lead_count: rows.length });
+  await logUsage(user.company_id!, 'export', 1, {
+    format,
+    ...(ids.length > 0 ? { selected_ids: ids.length } : { category, state, status }),
+    lead_count: rows.length,
+  });
 
   if (format === 'csv') {
     const ws  = XLSX.utils.json_to_sheet(rows);

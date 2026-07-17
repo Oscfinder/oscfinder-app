@@ -23,23 +23,31 @@ function buildLeadGrowth(leads: Lead[]) {
 }
 
 export default function DashboardPage() {
-  const { data: leads = [] } = useQuery<Lead[]>({
+  const { data: leads = [], isLoading: leadsLoading } = useQuery<Lead[]>({
     queryKey: ['leads-all'],
     queryFn:  () => fetch('/api/leads/all').then(r => r.json()).then(d => Array.isArray(d) ? d : []),
   });
-  const { data: recentLogs = [] } = useQuery<UsageLog[]>({
+  const { data: recentLogs = [], isLoading: logsLoading } = useQuery<UsageLog[]>({
     queryKey: ['usage-recent'],
     queryFn:  () => fetch('/api/usage/recent').then(r => r.json()).then(d => Array.isArray(d) ? d : []),
   });
   const { data: activeJobs = 0 } = useQuery<number>({
     queryKey:       ['active-jobs-count'],
+    // Polls so a scrape started from another tab/device shows up here without a
+    // manual refresh -- cheap (COUNT-only query) and only matters while this page
+    // is open, so it's left running regardless of whether a job is active.
     queryFn:        () => fetch('/api/scrape/active-count').then(r => r.json()).then(d => d.count ?? 0),
     refetchInterval: 5000,
   });
-  const { data: usageSummary } = useQuery<{ export_count: number }>({
+  const { data: usageSummary, isLoading: usageLoading } = useQuery<{ export_count: number }>({
     queryKey: ['usage-summary'],
     queryFn:  () => fetch('/api/usage/summary').then(r => r.json()),
   });
+
+  // True only on the very first load (no cached data yet) -- background refetches
+  // (focus, the 5s job-count poll, manual invalidation) leave this false, so the
+  // dashboard keeps showing existing numbers instead of flashing back to a spinner.
+  const initialLoading = leadsLoading || logsLoading || usageLoading;
 
   const totalLeads  = leads.length;
   const emailsSent  = leads.filter(l => l.mail_sent).length;
@@ -61,7 +69,7 @@ export default function DashboardPage() {
       iconBg:    'bg-[#dff2f9]',
     },
     {
-      label:     'Emails Sent',
+      label:     'Companies Emailed',
       value:     emailsSent.toLocaleString(),
       sub:       `${openRate}% open rate`,
       subColor:  'text-[#00A86B]',
@@ -82,6 +90,16 @@ export default function DashboardPage() {
       iconBg:    'bg-[#e8edf4]',
     },
   ];
+
+  if (initialLoading) {
+    return (
+      <Shell>
+        <div className="max-w-screen-xl mx-auto flex items-center justify-center gap-2.5 py-24 text-[13px] text-[#888888]">
+          <span className="spinner-mini" /> Loading dashboard...
+        </div>
+      </Shell>
+    );
+  }
 
   return (
     <Shell>
