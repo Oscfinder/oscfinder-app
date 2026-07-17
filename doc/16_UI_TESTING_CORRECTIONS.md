@@ -434,3 +434,43 @@ hardcoded. What was seen is specific to the AnchorHMO test company's own
 sender record, which happens to be configured with
 `email: simon@mail.oscfinder.com` / `reply_to: support@oscfinder.com` — every
 other client's mail shows their own configured reply-to instead.
+
+## 26. Dashboard home page (`/`) never showed the Admin nav
+
+**Reported:** logged in as the superadmin account (`osimesimon@gmail.com`,
+confirmed `role: admin` directly in the database) but the sidebar on the
+dashboard home page never showed the Admin Panel / Demo Accounts / API Docs
+links — just the regular company_admin nav, with the sidebar footer showing
+the literal placeholder text "Admin" instead of the real name.
+
+**Investigation:** ruled out several false leads before finding the real
+cause — cross-checked the Supabase Auth user id against the `public.users`
+row directly (they matched exactly, `role: admin`), and separately found
+unrelated leftover `localStorage` entries (`userRole: agent`,
+`react-use-cart`, etc.) from a different project that had previously run on
+the same `localhost:3000` origin — confirmed harmless since nothing in this
+codebase reads `localStorage` for auth (the browser client uses
+`createBrowserClient` from `@supabase/ssr`, which stores the session in
+cookies specifically so server components can read it).
+
+**Root cause found:** `app/page.tsx` (the actual `/` route) was a `'use
+client'` component that rendered its own `<Shell>` wrapper directly, with
+**no props** — `<Shell>` instead of `<Shell isAdmin={...} userName={...}
+userRole={...}>`. Since `Shell`/`Sidebar`'s `isAdmin` prop defaults to
+`false`, the home page's sidebar *always* rendered as if the current user
+were a non-admin `company_admin`, regardless of who was actually logged in.
+Worse, there was no `app/(dashboard)/page.tsx` at all, so `/` sat completely
+outside the `(dashboard)` route group — it never passed through
+`(dashboard)/layout.tsx`, which is where `getSession()` actually resolves the
+real `role` and passes it down. Every other page (`/leads`, `/email`,
+`/templates`, etc.) lives inside `(dashboard)` and gets this correctly; `/`
+was the one exception, likely a leftover from before the `(dashboard)` route
+group + shared layout existed.
+
+**Fix:** moved `app/page.tsx` → `app/(dashboard)/page.tsx` and removed its
+self-contained `<Shell>` wrapper (matching every other dashboard page, which
+renders its content directly and lets the shared layout supply `<Shell>`
+once, with the real session-derived props). Deleted the old top-level
+`app/page.tsx`. Confirmed via `npx tsc --noEmit` and `npm run build` — `/` now
+correctly builds as a dynamic route (server-rendered per request, since it
+depends on the session) rather than a standalone client page.
