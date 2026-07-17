@@ -4,6 +4,7 @@ import { requireAuth, requireActiveAccount }                        from '@/lib/
 import { checkLimit, logUsage }                                     from '@/lib/usage';
 import { getCompanies, getPlaceDetails, parseAddressComponents }    from '@/services/googlePlaces';
 import { scrapeContactData, calculateLeadScore }                    from '@/services/scraper';
+import { createNotification }                                       from '@/lib/notifications';
 
 export async function POST(req: NextRequest) {
   const { user, error } = await requireAuth();
@@ -108,11 +109,25 @@ async function runPipeline(jobId: string, category: string, location: string, co
       .update({ status: 'completed' })
       .eq('id', jobId);
 
+    await createNotification({
+      company_id: companyId,
+      title:      'Scrape completed',
+      message:    `Found ${companies.length} companies — ${category}, ${location}`,
+      type:       'scrape',
+    });
+
   } catch {
     await supabaseAdmin
       .from('scrape_jobs')
       .update({ status: 'failed' })
       .eq('id', jobId);
+
+    await createNotification({
+      company_id: companyId,
+      title:      'Scrape failed',
+      message:    `Search for ${category} in ${location} failed — try again`,
+      type:       'scrape',
+    });
   }
 }
 

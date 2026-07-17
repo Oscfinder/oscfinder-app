@@ -74,6 +74,19 @@ export async function logAdminAction(
   });
 }
 
+// Used by the dashboard layout to block a suspended company's users from the whole
+// app (not just individual API calls) — see requireActiveAccount below for the API
+// route equivalent.
+export async function getCompanyStatus(companyId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('companies')
+    .select('status')
+    .eq('id', companyId)
+    .single();
+
+  return data?.status ?? null;
+}
+
 // Use this after requireAuth() on every protected route (skip for role = admin).
 // Returns a 403 NextResponse if the account is suspended or expired, null if healthy.
 export async function requireActiveAccount(companyId: string): Promise<NextResponse | null> {

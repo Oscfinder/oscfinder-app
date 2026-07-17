@@ -32,9 +32,9 @@ export async function GET(
 
 // ── PATCH /api/admin/companies/[id] ──────────────────────────────
 // Partial update — pass only the fields you want to change.
-// Allowed fields: status, plan, setup_fee_paid, renewal_fee_paid,
+// Allowed fields: name, status, plan, setup_fee_paid, renewal_fee_paid,
 //                 plan_end_date, plan_start_date, notes, assigned_sales_rep,
-//                 industry, location
+//                 industry, location, phone
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -46,9 +46,9 @@ export async function PATCH(
   const body = await req.json();
 
   const allowed = [
-    'status', 'plan', 'setup_fee_paid', 'renewal_fee_paid',
+    'name', 'status', 'plan', 'setup_fee_paid', 'renewal_fee_paid',
     'plan_end_date', 'plan_start_date', 'notes', 'assigned_sales_rep',
-    'industry', 'location',
+    'industry', 'location', 'phone',
   ];
 
   const updates: Record<string, unknown> = {};

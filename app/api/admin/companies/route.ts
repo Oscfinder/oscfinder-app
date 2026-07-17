@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     plan           = 'starter',
     password,
     full_name      = '',
+    phone          = '',
     industry       = '',
     location       = '',
     setup_fee_paid = false,
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
     .insert({
       name:             name.trim(),
       email:            email.trim().toLowerCase(),
+      phone:            phone.trim() || null,
       plan,
       industry:         industry  || null,
       location:         location  || null,

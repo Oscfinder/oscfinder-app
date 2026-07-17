@@ -196,6 +196,12 @@ export function Sidebar({
         )}
       </div>
 
+      </aside>
+
+      {/* Rendered outside <aside> — that element has a translate-x transform for its
+          slide-in/out animation, which would otherwise become the containing block
+          for this modal's fixed positioning and center it within the sidebar's own
+          width instead of the full viewport. */}
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
@@ -229,7 +235,6 @@ export function Sidebar({
           </div>
         </div>
       )}
-      </aside>
     </>
   );
 }

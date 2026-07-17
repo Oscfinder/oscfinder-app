@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAdmin, logAdminAction } from '@/lib/auth';
+import { createNotification } from '@/lib/notifications';
 
 // ── GET /api/admin/invoices ──────────────────────────────────────
 // Returns all invoices with company name, newest first.
@@ -74,6 +75,14 @@ export async function POST(req: NextRequest) {
     invoice_id:   invoice.id,
     invoice_type,
     amount,
+  });
+
+  const invoiceNumber = `${invoice_type.toUpperCase()}-${invoice.id.slice(0, 8).toUpperCase()}`;
+  await createNotification({
+    company_id,
+    title:   'New invoice',
+    message: `Invoice #${invoiceNumber} — ₦${Number(amount).toLocaleString()}`,
+    type:    'billing',
   });
 
   return NextResponse.json(invoice);

@@ -505,3 +505,81 @@ changes (via a new `handleStateChange` wrapping `setState`). `SelectField`
 gained a `disabled` prop to support this. City and Area/District/Town remain
 free text, unchanged, for the same reason as item 14 — no fixed enumerable
 list exists for those in Nigeria.
+
+## 29. Logout confirmation modal wasn't centered on screen
+
+**Reported:** the logout confirmation popup should be centered in the middle
+of the screen.
+
+**Root cause:** `app/_components/Sidebar.tsx` — the modal was nested inside
+the `<aside>` sidebar element, which has Tailwind `translate-x-*` classes
+(used for the mobile slide-in/out drawer animation). Any element with a CSS
+`transform` becomes the containing block for its `position: fixed`
+descendants — so the modal's `fixed inset-0` was resolving against the
+240px-wide (68px collapsed) sidebar box instead of the actual viewport,
+pinning it to that narrow strip rather than centering on the full screen.
+
+**Fix:** moved the confirmation modal to render as a sibling of `<aside>`
+(inside the component's top-level fragment) instead of a child, so it's no
+longer inside a transformed ancestor and centers correctly across the whole
+screen.
+
+## 30. Suspended accounts had no clear "you're suspended" screen
+
+**Reported:** after suspending a company from `/admin`, a logged-in user of
+that company should see a clear message telling them the account is
+suspended and to reach out to support@oscfinder.com — and this should also
+cover attempted actions (scraping, etc.), not just login.
+
+**Investigation:** `requireActiveAccount` (`lib/auth.ts`) already returned a
+403 `{ error: 'Account suspended. Contact support.' }` from every gated API
+route, but nothing in the frontend surfaced that message anywhere clear —
+individual pages either showed nothing, a buried inline error, or nothing at
+all, depending on the page. There was no single place blocking a suspended
+account from reaching working buttons in the first place.
+
+**Fix:** rather than patching every gated action individually to catch and
+display that 403, blocked access at the root — `app/(dashboard)/layout.tsx`
+(which every dashboard page passes through) now checks the company's status
+via a new `getCompanyStatus(companyId)` helper (`lib/auth.ts`) right after the
+session/onboarding checks, for non-admin sessions. If `status === 'suspended'`,
+it renders a full-screen blocking card (bold "Account Suspended" heading,
+explanation, and a `mailto:support@oscfinder.com` button) **instead of**
+`<Shell>{children}</Shell>` — no sidebar, no dashboard content, on every
+route. Since this bypasses `<Shell>` entirely, there'd be no way to sign out
+from this screen otherwise, so a small standalone `SuspendedSignOutLink`
+client component was added just for this screen. Because the block happens
+before any page renders, a suspended user can never reach the scrape button,
+email composer, or any other gated action to hit a silent 403 in the first
+place — one consistent screen covers every case at once.
+
+## 31. No way to revert a paid invoice, and no confirmation either way
+
+**Reported:** after marking an invoice paid, the superadmin should be able to
+change it back, and that action needs a confirmation.
+
+**Reality check:** the app actually had no path to revert at all — the
+invoices table only ever showed a "Mark Paid" button when `status ===
+'pending'`, and `PATCH /api/admin/invoices/[id]` rejected any action once an
+invoice was already `paid` (`400: Invoice is already paid`). Clarified scope
+with the user via `AskUserQuestion`: since a paid setup invoice already
+flipped the company to `active` (and a paid renewal already extended
+`plan_end_date` by a year), should reverting also undo those side effects?
+Chosen answer: **no** — revert only flips the invoice row itself back to
+`pending`; it deliberately does not touch the company record. Simpler, at the
+cost of the invoice and company state being able to disagree afterward (e.g.
+company stays active while its invoice shows pending) until resolved
+manually.
+
+**Fix:**
+- `app/api/admin/invoices/[id]/route.ts` — new `action: 'revert_to_pending'`,
+  valid only when `invoice.status === 'paid'`; sets `status: 'pending'` and
+  clears `paid_date`/`payment_method`/`reference`. Logged via
+  `logAdminAction(..., 'revert_invoice_to_pending', ...)`.
+- `app/(dashboard)/admin/page.tsx` — a paid invoice's Actions cell now shows
+  "Revert to Pending" (orange, distinct from the green "Mark Paid" it
+  replaces). Clicking it opens a confirmation modal spelling out exactly what
+  does and doesn't happen (invoice fields cleared; company activation/renewal
+  date extension not undone), following the same
+  try/catch-with-retry-on-failure pattern as the other confirmation modals in
+  this doc (items 23, 27).

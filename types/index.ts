@@ -48,22 +48,25 @@ export type CompanyPlan   = 'starter' | 'growth' | 'enterprise' | 'demo';
 export type CompanyStatus = 'inactive' | 'active' | 'suspended' | 'churned';
 
 export interface Company {
-  id:               string;
-  name:             string;
-  email:            string;
-  industry:         string;
-  location:         string;
-  plan:             CompanyPlan;
-  status:           CompanyStatus;
-  setup_fee_paid:   boolean;
-  renewal_fee_paid: boolean;
-  plan_start_date:  string;
-  plan_end_date:    string;
-  is_demo:          boolean;
-  demo_expires_at:  string | null;
-  demo_converted:   boolean;
-  demo_notes:       string | null;
-  created_at:       string;
+  id:                 string;
+  name:               string;
+  email:              string;
+  phone:              string | null;
+  industry:           string;
+  location:           string;
+  plan:               CompanyPlan;
+  status:             CompanyStatus;
+  setup_fee_paid:     boolean;
+  renewal_fee_paid:   boolean;
+  plan_start_date:    string;
+  plan_end_date:      string;
+  is_demo:            boolean;
+  demo_expires_at:    string | null;
+  demo_converted:     boolean;
+  demo_notes:         string | null;
+  notes:              string | null;
+  assigned_sales_rep: string | null;
+  created_at:         string;
 }
 
 // ── Plan Limits ──────────────────────────────────────────────────
@@ -157,6 +160,7 @@ export interface AdminCompanyOverview {
   id:                 string;
   name:               string;
   email:              string;
+  phone:              string | null;
   plan:               CompanyPlan;
   status:             CompanyStatus;
   is_demo:            boolean;
@@ -316,4 +320,18 @@ export interface CampaignRecipient {
 export interface SearchFormValues {
   category:   string;
   location:   string;
+}
+
+// ── Notification ─────────────────────────────────────────────────
+export type NotificationType = 'campaign' | 'usage' | 'scrape' | 'billing' | 'sender';
+
+export interface AppNotification {
+  id:         string;
+  company_id: string;
+  user_id:    string | null;
+  title:      string;
+  message:    string;
+  type:       NotificationType;
+  read:       boolean;
+  created_at: string;
 }

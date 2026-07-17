@@ -1,7 +1,8 @@
 'use client';
 import { useRouter, usePathname } from 'next/navigation';
-import { Menu, Bell } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { NotificationBell } from './NotificationBell';
 
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/':            { title: 'Dashboard',      subtitle: 'Overview of your lead generation pipeline' },
@@ -50,10 +51,7 @@ export function Header({
       </div>
 
       <div className="flex items-center gap-2 md:gap-3 shrink-0">
-        <button className="relative w-9 h-9 rounded-lg border border-[#E5E7EB] bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors">
-          <Bell size={16} />
-          <span className="absolute top-[6px] right-[6px] w-2 h-2 bg-[#00C48C] rounded-full border-2 border-white" />
-        </button>
+        <NotificationBell />
         <button
           onClick={() => router.push('/scrape')}
           className="px-3 md:px-4 py-2 bg-[#00C48C] hover:bg-[#00A86B] text-white text-[13px] font-semibold rounded-lg transition-colors whitespace-nowrap"

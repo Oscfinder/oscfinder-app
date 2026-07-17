@@ -6,6 +6,7 @@ import { getSender, getRemainingCeiling, isPastSoftLimit, hasAcknowledgmentForTo
 import { logUsage, getRemainingMonthlyEmailQuota } from '@/lib/usage';
 import { personalize } from '@/app/api/email/campaigns/route';
 import { buildEmailHtml } from '@/lib/emailHtml';
+import { createNotification } from '@/lib/notifications';
 
 // Cron-triggered worker (see vercel.json + the external cPanel cron — both hit this
 // route; see doc/13_EMAIL_SMTP_SENDERS.md). Deliberately sends only a handful of
@@ -58,9 +59,12 @@ export async function GET(req: NextRequest) {
     byCompany.get(row.company_id)!.push(row);
   }
 
-  const campaignInfoCache = new Map<string, { template_id: string }>();
-  const templateCache     = new Map<string, { subject: string; body: string }>();
+  const campaignInfoCache  = new Map<string, { template_id: string; name: string }>();
+  const templateCache      = new Map<string, { subject: string; body: string }>();
   const visitedCampaignIds = new Set<string>();
+  const campaignCompanyMap = new Map<string, string>();  // campaign_id -> company_id
+  const runFailureCounts   = new Map<string, number>();  // campaign_id -> failures this run
+  const ceilingHitCompanies = new Set<string>();          // companies stopped by technical_ceiling this run
 
   let capReached = false;
 
@@ -99,7 +103,7 @@ export async function GET(req: NextRequest) {
 
     for (const row of rows as any[]) {
       if (capReached) break;
-      if (remaining <= 0) break;
+      if (remaining <= 0) { ceilingHitCompanies.add(companyId); break; }
       if (planRemaining <= 0) break;
       if (Date.now() - start > TIME_BUDGET_MS) break;
 
@@ -107,13 +111,14 @@ export async function GET(req: NextRequest) {
       if (!campaignInfo) {
         const { data: campaign } = await supabaseAdmin
           .from('email_campaigns')
-          .select('template_id')
+          .select('template_id, name')
           .eq('id', row.campaign_id)
           .single();
         if (!campaign?.template_id) continue;
         campaignInfo = campaign;
         campaignInfoCache.set(row.campaign_id, campaign);
       }
+      campaignCompanyMap.set(row.campaign_id, companyId);
 
       let template = templateCache.get(campaignInfo.template_id);
       if (!template) {
@@ -186,6 +191,7 @@ export async function GET(req: NextRequest) {
         });
 
         stats.failed++;
+        runFailureCounts.set(row.campaign_id, (runFailureCounts.get(row.campaign_id) ?? 0) + 1);
       }
 
       // Cap counts every attempt (sent + failed) — a run's "activity" is bounded
@@ -199,6 +205,10 @@ export async function GET(req: NextRequest) {
 
   // Finalize only campaigns we actually attempted sends for this run.
   for (const campaignId of visitedCampaignIds) {
+    const campaignInfo = campaignInfoCache.get(campaignId);
+    const companyId    = campaignCompanyMap.get(campaignId);
+    const runFailures  = runFailureCounts.get(campaignId) ?? 0;
+
     const { count: stillQueued } = await supabaseAdmin
       .from('campaign_recipients')
       .select('id', { count: 'exact', head: true })
@@ -211,6 +221,27 @@ export async function GET(req: NextRequest) {
         .update({ status: 'sending' })
         .eq('id', campaignId)
         .eq('status', 'queued');
+
+      // Only a genuine technical_ceiling stop counts as "paused" — not just this
+      // run's per-invocation send cap, which resumes again within minutes.
+      if (companyId && ceilingHitCompanies.has(companyId) && campaignInfo) {
+        await createNotification({
+          company_id: companyId,
+          title:      'Campaign paused',
+          message:    `${campaignInfo.name} — daily limit reached, ${stillQueued} emails resume tomorrow`,
+          type:       'campaign',
+        });
+      }
+
+      if (runFailures > 0 && companyId && campaignInfo) {
+        await createNotification({
+          company_id: companyId,
+          title:      'Send failures',
+          message:    `${runFailures} emails failed in ${campaignInfo.name}`,
+          type:       'campaign',
+        });
+      }
+
       continue;
     }
 
@@ -219,6 +250,12 @@ export async function GET(req: NextRequest) {
       .select('id', { count: 'exact', head: true })
       .eq('campaign_id', campaignId)
       .eq('status', 'sent');
+
+    const { count: failedTotal } = await supabaseAdmin
+      .from('campaign_recipients')
+      .select('id', { count: 'exact', head: true })
+      .eq('campaign_id', campaignId)
+      .eq('status', 'failed');
 
     await supabaseAdmin
       .from('email_campaigns')
@@ -229,7 +266,25 @@ export async function GET(req: NextRequest) {
       })
       .eq('id', campaignId);
 
-    const templateId = campaignInfoCache.get(campaignId)?.template_id;
+    if (companyId && campaignInfo) {
+      await createNotification({
+        company_id: companyId,
+        title:      'Campaign completed',
+        message:    `${campaignInfo.name} — ${sentTotal ?? 0} sent, ${failedTotal ?? 0} failed`,
+        type:       'campaign',
+      });
+
+      if (runFailures > 0) {
+        await createNotification({
+          company_id: companyId,
+          title:      'Send failures',
+          message:    `${runFailures} emails failed in ${campaignInfo.name}`,
+          type:       'campaign',
+        });
+      }
+    }
+
+    const templateId = campaignInfo?.template_id;
     if (templateId) {
       await supabaseAdmin.rpc('increment_template_use_count', { p_template_id: templateId });
     }

@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
+import { createNotification } from '@/lib/notifications';
 
 // ── POST /api/senders/verify ──────────────────────────────────────
 // Body: { company_id? } — company_id only honored for admin callers.
@@ -68,6 +69,13 @@ export async function POST(req: NextRequest) {
 
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
+    await createNotification({
+      company_id: companyId,
+      title:      'Sender verified',
+      message:    `${sender.email} is ready to send`,
+      type:       'sender',
+    });
+
     return NextResponse.json(updated);
   } catch (err: any) {
     const message = err?.message ?? 'SMTP verification failed';
@@ -76,6 +84,13 @@ export async function POST(req: NextRequest) {
       .from('email_senders')
       .update({ status: 'failed', last_error: message })
       .eq('id', sender.id);
+
+    await createNotification({
+      company_id: companyId,
+      title:      'Sender verification failed',
+      message:    `Connection to ${sender.smtp_host} failed — check your credentials`,
+      type:       'sender',
+    });
 
     return NextResponse.json({ error: message, status: 'failed' }, { status: 400 });
   }

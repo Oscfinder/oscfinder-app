@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { supabaseAdmin } from './supabase-server';
+import { createNotification } from './notifications';
 
 // Fallback string prevents module-evaluation crash during `next build`
 // when env vars aren't yet resolved; never used at runtime.
@@ -95,6 +96,19 @@ export async function checkAndSendUsageAlert(
       limit,
       plan:  company.plan,
       month,
+    });
+
+    // 7. In-app notification — additive to the email alert above, not a replacement.
+    const label   = ACTION_LABEL[action];
+    const pctUsed = Math.min(Math.round((used / limit) * 100), 100);
+
+    await createNotification({
+      company_id: companyId,
+      title:      threshold === '100%' ? 'Plan limit reached' : 'Approaching plan limit',
+      message:    threshold === '100%'
+        ? `Monthly ${label} limit reached — upgrade or wait until next month`
+        : `You've used ${pctUsed}% of your monthly ${label} quota`,
+      type: 'usage',
     });
   }
 }
