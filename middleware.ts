@@ -5,6 +5,18 @@ export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   const { pathname } = req.nextUrl;
 
+  // Redirect a logged-in visitor away from these — there's no reason to show
+  // a logged-in user a login/forgot-password form. Deliberately excludes
+  // /reset-password: verifyOtp()/exchangeCodeForSession() on that page
+  // establishes a real login session as soon as the recovery link is
+  // verified (that's how Supabase's recovery flow works — verify first,
+  // *then* set the password while authenticated) — treating that session the
+  // same as "already logged in, redirect away" bounced the user straight to
+  // the dashboard before they ever got to the password form.
+  const guestOnlyPaths = ['/login', '/forgot-password'];
+  // Never force these through the "not logged in → /login" redirect either —
+  // /reset-password needs to be reachable mid-flow, before or after a session
+  // exists.
   const authOnlyPaths = ['/login', '/forgot-password', '/reset-password'];
   // Accessible regardless of login state -- no redirect either direction.
   const openPaths = ['/api-docs', '/swagger.json'];
@@ -41,8 +53,8 @@ export async function middleware(req: NextRequest) {
     user = null;
   }
 
-  // If logged in and visiting an auth page → send to dashboard
-  if (user && authOnlyPaths.includes(pathname)) {
+  // If logged in and visiting login/forgot-password → send to dashboard
+  if (user && guestOnlyPaths.includes(pathname)) {
     return NextResponse.redirect(new URL('/', req.url));
   }
 
