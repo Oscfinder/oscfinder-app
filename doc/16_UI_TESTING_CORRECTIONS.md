@@ -805,3 +805,34 @@ instead of through login). `/forgot-password` was already a clean,
 independent email-only page with no code/token handling — only its
 `redirectTo` was updated to prefer `NEXT_PUBLIC_APP_URL` over
 `window.location.origin`, matching `lib/provisionUser.ts`'s existing pattern.
+
+## 41. Links still showed "expired" immediately, even freshly resent
+
+**Reported:** after item 40's fix, a freshly resent admin password-set link
+still immediately showed "This link has expired or already been used."
+
+**Root cause:** `lib/provisionUser.ts`'s `sendPasswordSetEmail` was emailing
+`generateLink()`'s `action_link` — Supabase's own `/auth/v1/verify` endpoint.
+That endpoint consumes the single-use recovery token on **any** HTTP request
+that reaches it, not just a real user click — including automated
+email-security link scanners (Outlook Safe Links, Gmail link scanning,
+corporate proxies) that prefetch every link in an email before a human ever
+sees it. The scanner's prefetch silently burned the token; by the time the
+real click happened, it was already dead.
+
+**Fix:** build the emailed link directly instead of using `action_link` —
+`${appUrl}/reset-password?token_hash=${hashed_token}&type=recovery`, using
+the `hashed_token` `generateLink()` already returns alongside `action_link`.
+Nothing gets consumed until our own page's JS actually runs
+`verifyOtp({ token_hash, type })` (the path already built in item 39) — a
+non-JS-executing scanner fetching the HTML doesn't trigger that.
+
+**Separately clarified, not a bug:** traced the exact Supabase call sequence
+on request — `provisionCompanyUser()` (user creation) calls `generateLink`
+exactly once; the separate "Resend email" button calls it again. Supabase
+only keeps one active recovery token per user — generating a new one
+**invalidates the previous unused one immediately**. So clicking an older,
+superseded email's link after a resend will always show "expired," by
+design — only the most recently sent email for a given user is ever valid.
+This compounded the scanner issue during testing (multiple emails existed
+for the same test user, and an older one got clicked).
