@@ -84,7 +84,16 @@ export async function sendPasswordSetEmail(params: {
     if (linkError || !linkData)
       return { email_sent: false, email_error: linkError?.message ?? 'Failed to generate link' };
 
-    const link = linkData.properties.action_link;
+    // Deliberately NOT linkData.properties.action_link — that's Supabase's own
+    // /auth/v1/verify endpoint, which consumes the single-use token on ANY HTTP
+    // request that reaches it, including automated email-security link scanners
+    // (Outlook Safe Links, Gmail link scanning, corporate proxies) that prefetch
+    // links before a human ever clicks — burning the token before the real
+    // click happens, which is exactly what made every link look "expired"
+    // immediately. Building the link straight to our own /reset-password page
+    // with the token_hash instead means nothing gets consumed until our page's
+    // own JS runs verifyOtp() — a scanner fetching the HTML doesn't execute it.
+    const link = `${appUrl}/reset-password?token_hash=${linkData.properties.hashed_token}&type=recovery`;
     const firstName = params.full_name?.trim().split(' ')[0] || 'there';
 
     await resend.emails.send({
