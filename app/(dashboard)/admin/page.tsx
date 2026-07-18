@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, CheckCircle, XCircle, ChevronDown, X, RefreshCw, AlertTriangle, Pencil } from 'lucide-react';
+import { Plus, CheckCircle, XCircle, ChevronDown, X, RefreshCw, AlertTriangle, Pencil, Eye } from 'lucide-react';
 import {
   AdminCompanyOverview, Invoice, RevenueSummary, Company,
   CompanyPlan, InvoiceType,
@@ -103,20 +104,25 @@ function StatCard({ label, value, sub, iconBg }: {
 // ── New Company Modal ─────────────────────────────────────────────
 function NewCompanyModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState({
-    name: '', email: '', plan: 'starter' as CompanyPlan, password: '',
+    name: '', email: '', plan: 'starter' as CompanyPlan,
     full_name: '', phone: '', industry: '', location: '', setup_fee_paid: false, notes: '',
   });
-  const [saving,  setSaving]  = useState(false);
-  const [formErr, setFormErr] = useState('');
+  const [saving,   setSaving]   = useState(false);
+  const [formErr,  setFormErr]  = useState('');
+  // Set only when the company/user were created but the password-set email
+  // itself failed to send — kept open so the admin sees it instead of it
+  // silently vanishing into a closed modal.
+  const [emailWarning, setEmailWarning] = useState('');
 
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
 
   const submit = async () => {
-    if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
-      setFormErr('Name, email, and password are required');
+    if (!form.name.trim() || !form.email.trim()) {
+      setFormErr('Name and email are required');
       return;
     }
     setSaving(true);
+    setFormErr('');
     const res  = await fetch('/api/admin/companies', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body:   JSON.stringify(form),
@@ -124,9 +130,36 @@ function NewCompanyModal({ onClose, onCreated }: { onClose: () => void; onCreate
     const data = await res.json();
     setSaving(false);
     if (!res.ok) { setFormErr(data.error ?? 'Failed to create company'); return; }
+
     onCreated();
+    if (!data.email_sent) {
+      setEmailWarning(data.email_error ?? 'The password-set email failed to send.');
+      return;
+    }
     onClose();
   };
+
+  if (emailWarning) {
+    return (
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[440px] p-6 space-y-3">
+          <h2 className="text-[16px] font-bold text-[#0A1628]">Company created</h2>
+          <p className="text-[13px] text-[#1A3A5C]">
+            The company and user account were created, but the password-set email
+            failed to send: <span className="text-red-500">{emailWarning}</span>
+          </p>
+          <p className="text-[13px] text-[#888888]">
+            You can resend it any time from the company's detail page.
+          </p>
+          <div className="flex justify-end pt-2">
+            <button onClick={onClose} className="h-9 px-5 rounded-lg bg-[#0099CC] hover:bg-[#006285] text-white text-[13px] font-semibold transition-colors">
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const inputCls  = 'w-full h-10 px-3 rounded-lg border border-[#E5E7EB] text-[13px] text-[#0A1628] focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] placeholder:text-[#888888]';
   const selectCls = 'w-full h-10 pl-3 pr-8 rounded-lg border border-[#E5E7EB] bg-white text-[13px] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] text-[#0A1628]';
@@ -155,12 +188,12 @@ function NewCompanyModal({ onClose, onCreated }: { onClose: () => void; onCreate
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Initial Password *</label>
-              <input type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Min 8 characters" className={inputCls} />
-            </div>
-            <div>
               <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Contact Name</label>
               <input value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="John Doe" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Phone Number</label>
+              <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+234 801 234 5678" className={inputCls} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -176,19 +209,13 @@ function NewCompanyModal({ onClose, onCreated }: { onClose: () => void; onCreate
               </div>
             </div>
             <div>
-              <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Phone Number</label>
-              <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+234 801 234 5678" className={inputCls} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
               <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Industry</label>
               <input value={form.industry} onChange={e => set('industry', e.target.value)} placeholder="Healthcare" className={inputCls} />
             </div>
-            <div>
-              <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Location</label>
-              <input value={form.location} onChange={e => set('location', e.target.value)} placeholder="Lagos, Nigeria" className={inputCls} />
-            </div>
+          </div>
+          <div>
+            <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Location</label>
+            <input value={form.location} onChange={e => set('location', e.target.value)} placeholder="Lagos, Nigeria" className={inputCls} />
           </div>
           <div>
             <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Notes</label>
@@ -715,6 +742,13 @@ export default function AdminPage() {
                         </td>
                         <td className={tdCls}>
                           <div className="flex items-center gap-1.5">
+                            <Link
+                              href={`/admin/companies/${c.id}`}
+                              title="View company & users"
+                              className="flex items-center justify-center w-7 h-7 rounded-lg text-[#888888] hover:bg-gray-100 transition-colors"
+                            >
+                              <Eye size={13} />
+                            </Link>
                             <button
                               onClick={() => setEditingCompanyId(c.id)}
                               title="Edit company"

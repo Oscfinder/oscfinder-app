@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAdmin, logAdminAction } from '@/lib/auth';
 import { seedDefaultTemplates } from '@/lib/seedTemplates';
+import { provisionCompanyUser } from '@/lib/provisionUser';
 
 // ── GET /api/admin/companies ─────────────────────────────────────
 // Returns all companies with this-month usage from admin_company_overview view.
@@ -19,8 +20,10 @@ export async function GET() {
 }
 
 // ── POST /api/admin/companies ────────────────────────────────────
-// Creates a company + Supabase auth user + users table record.
-// Body: { name, email, plan, password, full_name?, industry?, location?,
+// Creates a company + Supabase auth user + users table record. No password is
+// collected here — the new user gets a branded email with a link to set their
+// own password (see lib/provisionUser.ts).
+// Body: { name, email, plan, full_name?, phone?, industry?, location?,
 //         setup_fee_paid, plan_start_date?, plan_end_date?, notes? }
 export async function POST(req: NextRequest) {
   const { user: admin, error } = await requireAdmin();
@@ -31,7 +34,6 @@ export async function POST(req: NextRequest) {
     name,
     email,
     plan           = 'starter',
-    password,
     full_name      = '',
     phone          = '',
     industry       = '',
@@ -42,8 +44,8 @@ export async function POST(req: NextRequest) {
     notes          = '',
   } = body;
 
-  if (!name?.trim() || !email?.trim() || !password?.trim())
-    return NextResponse.json({ error: 'name, email, and password are required' }, { status: 400 });
+  if (!name?.trim() || !email?.trim())
+    return NextResponse.json({ error: 'name and email are required' }, { status: 400 });
 
   const validPlans = ['starter', 'growth', 'enterprise'];
   if (!validPlans.includes(plan))
@@ -76,32 +78,29 @@ export async function POST(req: NextRequest) {
   if (companyError)
     return NextResponse.json({ error: companyError.message }, { status: 500 });
 
-  // 2. Create Supabase Auth user
-  const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-    email:         email.trim().toLowerCase(),
-    password,
-    email_confirm: true,
-    user_metadata: { company_id: company.id, role: 'company_admin', full_name },
-  });
-
-  if (authError) {
+  // 2+3+4. Auth user + users row + password-set email — don't leave an
+  // orphaned company behind if provisioning fails.
+  let provisioned;
+  try {
+    provisioned = await provisionCompanyUser({
+      company_id:   company.id,
+      company_name: company.name,
+      email:        email.trim().toLowerCase(),
+      full_name,
+    });
+  } catch (err: any) {
     await supabaseAdmin.from('companies').delete().eq('id', company.id);
-    return NextResponse.json({ error: authError.message }, { status: 500 });
+    return NextResponse.json({ error: err?.message ?? 'Failed to create user' }, { status: 500 });
   }
-
-  // 3. Create users table record
-  await supabaseAdmin.from('users').insert({
-    id:         authUser.user.id,
-    company_id: company.id,
-    email:      email.trim().toLowerCase(),
-    role:       'company_admin',
-    full_name:  full_name || null,
-    is_active:  true,
-  });
 
   await seedDefaultTemplates(company.id);
 
   await logAdminAction(admin.id, 'create_company', company.id, { name, plan, setup_fee_paid });
 
-  return NextResponse.json({ company, user_id: authUser.user.id });
+  return NextResponse.json({
+    company,
+    user_id:      provisioned.user_id,
+    email_sent:   provisioned.email_sent,
+    email_error:  provisioned.email_error,
+  });
 }

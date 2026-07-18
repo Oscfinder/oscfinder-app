@@ -70,13 +70,21 @@ export async function POST(req: NextRequest) {
     if (authError)
       return NextResponse.json({ error: authError.message }, { status: 500 });
 
-    await supabaseAdmin.from('users').insert({
+    // Must be an upsert — see the identical comment in
+    // app/api/admin/companies/route.ts for why a plain insert silently no-ops
+    // here (the handle_new_user() trigger already created a row for this id).
+    const { error: usersError } = await supabaseAdmin.from('users').upsert({
       id:         authUser.user.id,
       company_id: companyId,
       email:      email.trim().toLowerCase(),
       role:       'company_admin',
       is_active:  true,
     });
+
+    if (usersError) {
+      await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+      return NextResponse.json({ error: usersError.message }, { status: 500 });
+    }
 
     await seedDefaultTemplates(companyId);
 

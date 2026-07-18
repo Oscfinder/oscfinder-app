@@ -24,7 +24,7 @@ export async function GET(
 
   const { data: users = [] } = await supabaseAdmin
     .from('users')
-    .select('id, email, full_name, role, is_active, last_login, created_at')
+    .select('id, company_id, email, full_name, role, is_active, last_login, created_at')
     .eq('company_id', id);
 
   return NextResponse.json({ company, users });

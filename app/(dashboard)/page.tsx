@@ -5,6 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 import { Lead, UsageLog } from '@/types';
+import { GettingStartedChecklist } from '@/app/_components/GettingStartedChecklist';
 
 function buildLeadGrowth(leads: Lead[]) {
   const days: { date: string; count: number; isToday: boolean }[] = [];
@@ -100,6 +101,8 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-screen-xl mx-auto space-y-5">
+
+      <GettingStartedChecklist />
 
       {/* 4 Stat Cards */}
       <div className="grid grid-cols-4 gap-4">

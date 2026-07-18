@@ -82,7 +82,7 @@ export interface PlanLimits {
 }
 
 // ── App User ─────────────────────────────────────────────────────
-export type UserRole = 'admin' | 'company_admin';
+export type UserRole = 'admin' | 'company_admin' | 'client';
 
 export interface AppUser {
   id:         string;

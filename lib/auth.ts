@@ -4,7 +4,7 @@ import { createSupabaseServerClient, supabaseAdmin } from './supabase-server';
 export type SessionUser = {
   id:                  string;
   email:               string;
-  role:                'admin' | 'company_admin';
+  role:                'admin' | 'company_admin' | 'client';
   company_id:          string | null;
   full_name:           string | null;
   onboarding_complete: boolean;
@@ -19,11 +19,16 @@ export async function getSession(): Promise<SessionUser | null> {
 
   const { data: profile } = await supabaseAdmin
     .from('users')
-    .select('role, company_id, full_name, onboarding_complete')
+    .select('role, company_id, full_name, onboarding_complete, is_active')
     .eq('id', user.id)
     .single();
 
   if (!profile) return null;
+
+  // A deactivated user (admin toggle, see app/api/admin/companies/[id]/users/[userId])
+  // is treated as not logged in — their Supabase Auth session/password stays valid,
+  // but every app route bounces them to /login until reactivated.
+  if (profile.is_active === false) return null;
 
   return {
     id:                  user.id,
