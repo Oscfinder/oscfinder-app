@@ -694,3 +694,57 @@ itself is a Supabase project setting, not app code — Supabase recommends
 3600 (1 hour) for normal operation; worth reverting once expiry testing is
 done, since a 60-second expiry means every request re-authenticates far more
 aggressively than needed.
+
+## 37. No Help page existed
+
+**Reported:** add a single Help page, reachable from the sidebar, covering
+each part of the platform — a video embed plus a plain-language guide, no
+external docs site or ticket form.
+
+**Fix:** new `app/(dashboard)/help/page.tsx` — an optional YouTube embed
+(reads `NEXT_PUBLIC_DEMO_VIDEO_URL`, hidden entirely rather than showing a
+broken iframe if unset or unparsable), an 8-section single-open accordion
+(Generating Leads, Managing Your Leads, Setting Up Your Sender, Email
+Templates, Email Campaigns, Exporting Data, Billing & Usage, Understanding
+Your Dashboard), and a support contact card (`support@oscfinder.com`).
+
+**Also fixed while wiring up the sidebar link:** the "Account" nav group
+(Billing, Sender Settings) was previously hidden *entirely* for admin
+sessions — simply appending Help to that same array would have made Help
+invisible to admins too, contradicting "visible to every role." Restructured
+`app/_components/Sidebar.tsx` so the group's contents are built from a small
+`accountNav(isAdmin)` function instead of a static array: admins get `[Help]`
+alone, everyone else gets `[Billing, Sender Settings, Help]` — one
+always-rendered group instead of a second conditional block. Full detail in
+`doc/18_HELP_PAGE.md`.
+
+## 38. Getting Started checklist's permanent Dismiss was the wrong behavior
+
+**Reported:** the checklist's "Dismiss" button (`doc/17`) was wrong — a user
+who dismisses it on day one loses it entirely when they actually need it on
+day three. It should only ever disappear once every step is genuinely
+complete, never from a user action.
+
+**Fix — `app/_components/GettingStartedChecklist.tsx` rewritten:**
+- Removed "Dismiss" and its `localStorage` flag entirely. No DB column was
+  ever added for it either, so nothing to migrate away from.
+- Added a collapse-after-first-visit behavior instead: a new `checklist_seen`
+  `localStorage` flag distinguishes the very first dashboard visit (renders
+  fully expanded, all 5 steps) from every visit after that (renders collapsed
+  to a single ~48px bar — progress dots + "Getting Started — N of 5 steps
+  complete" + chevron). Clicking the bar expands it; navigating away and back
+  collapses it again, since that expand choice is plain component state, not
+  persisted.
+- Restructured the expand/collapse into one persistent card whose steps
+  section animates height via the same `grid-rows` `0fr`/`1fr` technique as
+  the Help page accordion (item 37), rather than swapping between two
+  entirely different rendered layouts — the first version of this rewrite
+  did exactly that swap, which would have caused the jarring layout jump the
+  spec explicitly called out to avoid.
+- All-complete behavior unchanged: a subtle green "You're all set!" bar for
+  the current session (`sessionStorage`), then the component renders nothing
+  at all on the next visit.
+- Step copy expanded to match the new design spec: each step now shows a
+  real confirmation line when done ("Your sending mailbox is verified and
+  ready.") instead of just strikethrough text, and a short description plus a
+  right-aligned link (e.g. "Templates →") when not done.

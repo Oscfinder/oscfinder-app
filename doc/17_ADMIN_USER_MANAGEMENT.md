@@ -67,10 +67,12 @@ full, including the live-data cleanup, in `doc/16_UI_TESTING_CORRECTIONS.md` ite
 
 ## Checklist dismiss storage
 
-No migration — `localStorage`/`sessionStorage` keys (`getting_started_dismissed`,
-`getting_started_congrats_shown`) instead of a `checklist_dismissed` column, per the
-spec's own fallback option. Per-browser, not per-account; acceptable tradeoff for a
-one-way, low-stakes UI dismiss.
+> **Superseded** — the permanent "Dismiss" described here was removed in a follow-up
+> revision (see item 38 in `doc/16_UI_TESTING_CORRECTIONS.md`): a user who dismissed
+> it on day one would lose access to it when they actually needed it on day three. It
+> now only ever disappears once every step is genuinely complete, and collapses
+> (rather than hides) on visits after the first. No DB column either way —
+> `localStorage`/`sessionStorage` only.
 
 ## Explicitly not touched
 
