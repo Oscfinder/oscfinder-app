@@ -3,6 +3,11 @@ import { createServerClient } from '@supabase/ssr';
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
+  const { pathname } = req.nextUrl;
+
+  const authOnlyPaths = ['/login', '/forgot-password', '/reset-password'];
+  // Accessible regardless of login state -- no redirect either direction.
+  const openPaths = ['/api-docs', '/swagger.json'];
 
   // Build a Supabase client that can read/write cookies in middleware
   const supabase = createServerClient(
@@ -21,14 +26,20 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // Refresh the session if it has expired
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const { pathname } = req.nextUrl;
-
-  const authOnlyPaths = ['/login', '/forgot-password', '/reset-password'];
-  // Accessible regardless of login state -- no redirect either direction.
-  const openPaths = ['/api-docs', '/swagger.json'];
+  // Refresh the session if it has expired. An expired/invalid refresh token
+  // (e.g. an aggressively short access-token expiry, or a token issued before
+  // a project-level auth setting change) can make getUser() throw rather than
+  // return { user: null } — without this try/catch, that crashes the whole
+  // middleware function (no response at all, not even a redirect), which is
+  // exactly what a raw platform error page with no redirect looks like. Any
+  // failure here is treated the same as "not logged in".
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    user = null;
+  }
 
   // If logged in and visiting an auth page → send to dashboard
   if (user && authOnlyPaths.includes(pathname)) {

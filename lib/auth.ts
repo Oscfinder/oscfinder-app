@@ -14,7 +14,19 @@ export type SessionUser = {
 // Returns null if not logged in.
 export async function getSession(): Promise<SessionUser | null> {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+
+  // Defense in depth alongside the identical try/catch in middleware.ts — an
+  // expired/invalid refresh token can make getUser() throw rather than return
+  // { user: null }. Server Components can't redirect on a thrown error the
+  // way middleware can, so an uncaught throw here crashes the whole page
+  // render instead of just treating the visitor as logged out.
+  let user;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    return null;
+  }
   if (!user) return null;
 
   const { data: profile } = await supabaseAdmin

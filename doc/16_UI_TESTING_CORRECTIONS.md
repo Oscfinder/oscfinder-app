@@ -583,3 +583,114 @@ manually.
   date extension not undone), following the same
   try/catch-with-retry-on-failure pattern as the other confirmation modals in
   this doc (items 23, 27).
+
+## 32. No way to store or edit a company's phone number
+
+**Reported:** for each company, add their phone number so they can be
+contacted.
+
+**Fix:** `supabase/migrations/017_company_phone.sql` — added `companies.phone`
+and recreated `admin_company_overview` to surface it. `POST /api/admin/companies`
+and `PATCH /api/admin/companies/[id]` accept/store `phone`. `NewCompanyModal`
+gained a Phone Number field for new companies; for companies that already
+existed before this, `app/(dashboard)/admin/page.tsx` also gained an inline
+`EditablePhone` control (click to add/edit, right under the company's email
+in the table) so existing companies aren't stuck without one.
+
+## 33. No way to edit an existing company at all
+
+**Reported:** let me edit a company (not just activate/suspend/set phone).
+
+**Fix:** new `EditCompanyModal` in `app/(dashboard)/admin/page.tsx` — loads
+the full company record (the list view doesn't carry
+industry/location/notes/assigned_sales_rep/plan_start_date) via the existing
+`GET /api/admin/companies/[id]`, then lets the admin edit name, phone, plan,
+industry, location, plan start/end dates, assigned sales rep, notes, and the
+setup-fee/renewal-fee-paid checkboxes. Deliberately excludes status/suspend
+(already has its own confirmed flow, item 27) and email (tied to the
+Supabase Auth login — editing it here wouldn't change how the user actually
+signs in). `PATCH /api/admin/companies/[id]` gained `name` to its allowed
+fields to support this.
+
+## 34. `CREATE OR REPLACE VIEW` failed when adding the phone column
+
+**Reported:** running `017_company_phone.sql` in the Supabase SQL Editor
+failed with `ERROR: 42P16: cannot change name of view column "plan" to
+"phone"`.
+
+**Root cause:** the migration's `CREATE OR REPLACE VIEW` inserted `c.phone`
+right after `c.email` — but Postgres only allows a view replacement to
+*append* new columns at the end of the `SELECT` list; inserting one in the
+middle shifts every column after it by one position, which Postgres reads as
+an (disallowed) attempt to rename each of those columns.
+
+**Fix:** moved `c.phone` to the very end of the column list instead, keeping
+every pre-existing column's name and position unchanged. The application
+code was unaffected either way, since Supabase's JS client accesses columns
+by name, not position.
+
+## 35. Every admin-created company ended up with a broken user account
+
+**Reported:** creating a new company ("Food Company"), then logging in and
+running onboarding, hit "No company associated with account" — the same
+error previously seen (and wrongly blamed on manual Supabase edits) for two
+other test accounts.
+
+**Root cause found:** a Postgres trigger, `handle_new_user()`, fires the
+instant `supabaseAdmin.auth.admin.createUser()` runs, inserting a placeholder
+`public.users` row `(id, email, full_name)` with `company_id` left `NULL`
+(and `role` defaulting to `'company_admin'` per the column's DB default —
+which is exactly why the broken rows still looked plausible at a glance).
+Both `/api/admin/companies` and `/api/admin/demos` then followed up with a
+plain `INSERT` meant to set the real `company_id`/`role` — which silently
+no-ops on the primary-key conflict, since the trigger's row already exists,
+and the error was never checked. **This means every single company created
+through the admin panel up to this point had a broken user underneath it** —
+not something caused by manual database edits, contradicting what was
+concluded (and reported to the user) earlier in this log.
+
+**Fix:** switched the `users` write in both routes from `insert` to `upsert`,
+with the error now checked and rolled back on failure (deletes the orphaned
+auth user/company rather than leaving a partial, broken account behind).
+Live cleanup: corrected `food@gmail.com`'s `company_id` directly so testing
+could continue immediately, and deleted two company rows ("Test Company",
+"Dexcreed") that had no matching login at all from an earlier failed attempt
+at the same bug. See `doc/17_ADMIN_USER_MANAGEMENT.md` for the shared
+`provisionCompanyUser()` helper that replaced this logic going forward.
+
+## 36. Expired session crashed the whole page instead of redirecting to login
+
+**Reported:** after lowering the Supabase project's access-token expiry to 60
+seconds (to test expiry behavior) and leaving a session idle past that,
+`app.oscfinder.com` showed a raw platform error page ("This page couldn't
+load. A server error occurred.") — no redirect to `/login`, and no custom
+"page not found" page exists either.
+
+**Root cause:** both call sites that check the session —
+`middleware.ts` and `getSession()` in `lib/auth.ts` — called
+`supabase.auth.getUser()` completely unguarded. Under normal expiry this
+silently refreshes and returns `{ user: null }` on failure, but an
+expired/invalid refresh token (made far more likely by an aggressively short
+access-token lifetime) can make it throw instead. An uncaught throw in
+`middleware.ts` crashes the whole middleware function before it can produce
+any response at all — not even a redirect — which is exactly what a raw,
+un-styled crash page with no redirect looks like. The same call in
+`getSession()` (used by every dashboard Server Component) had the identical
+gap.
+
+**Fix:**
+- `middleware.ts` and `lib/auth.ts`'s `getSession()` — wrapped the
+  `supabase.auth.getUser()` call in `try/catch` in both places; any failure
+  is now treated the same as "not logged in" (redirect to `/login` from
+  middleware; `null` session from `getSession()`), instead of crashing.
+- New `app/error.tsx` — a root error boundary as a last-resort net for
+  anything else that still throws uncaught, styled to match the app (retry
+  button + a link back to `/login`) instead of the platform's raw crash page.
+- New `app/not-found.tsx` — a styled 404 page (previously nonexistent —
+  any unmatched route fell through to Next's generic default).
+
+**Not fixed (by design, out of scope):** the 60-second access-token expiry
+itself is a Supabase project setting, not app code — Supabase recommends
+3600 (1 hour) for normal operation; worth reverting once expiry testing is
+done, since a 60-second expiry means every request re-authenticates far more
+aggressively than needed.
