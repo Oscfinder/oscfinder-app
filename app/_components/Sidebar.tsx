@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Building2, Zap,
   Mail, FileText, Download, BarChart2,
-  ShieldCheck, Users, LogOut, CreditCard, Settings, Code2, AlertTriangle,
+  ShieldCheck, Users, LogOut, CreditCard, Settings, Code2, AlertTriangle, HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -31,6 +31,13 @@ const billingNav = [
   { href: '/billing',         label: 'Billing',         icon: CreditCard },
   { href: '/settings/sender', label: 'Sender Settings', icon: Settings },
 ];
+
+const helpItem = { href: '/help', label: 'Help', icon: HelpCircle };
+
+// Admins don't see billingNav (no billing/sender of their own), but Help is
+// visible to every role — so the "Account" group is admin: [Help], everyone
+// else: [Billing, Sender Settings, Help], rather than a second sidebar group.
+const accountNav = (isAdmin: boolean) => isAdmin ? [helpItem] : [...billingNav, helpItem];
 
 const adminNav = [
   { href: '/admin',       label: 'Admin Panel',   icon: ShieldCheck },
@@ -152,9 +159,7 @@ export function Sidebar({
         <NavGroup label="Main"     items={mainNav}     collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
         <NavGroup label="Outreach" items={outreachNav} collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
         <NavGroup label="Data"     items={dataNav}     collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
-        {!isAdmin && (
-          <NavGroup label="Account" items={billingNav} collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
-        )}
+        <NavGroup label="Account" items={accountNav(!!isAdmin)} collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
         {isAdmin && (
           <NavGroup label="Admin" items={adminNav} collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
         )}
