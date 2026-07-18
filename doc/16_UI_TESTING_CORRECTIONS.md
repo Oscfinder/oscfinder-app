@@ -836,3 +836,37 @@ superseded email's link after a resend will always show "expired," by
 design — only the most recently sent email for a given user is ever valid.
 This compounded the scanner issue during testing (multiple emails existed
 for the same test user, and an older one got clicked).
+
+## 42. Recovery link logged the user straight into the dashboard, password never set
+
+**Reported:** a test user clicked a working recovery link and ended up
+browsing the dashboard (sidebar, Leads page) without ever seeing or
+submitting the "set new password" form.
+
+**Root cause:** `middleware.ts` redirected any logged-in visitor away from
+`/login`, `/forgot-password`, **and `/reset-password`** to `/`. But
+`verifyOtp()`/`exchangeCodeForSession()` on `/reset-password` (items 39–41)
+establishes a real, full login session the instant the recovery link is
+verified — that's inherent to how Supabase's recovery flow works, verify
+first, then set the password while authenticated. The very next request
+middleware saw (a refresh, a re-render, anything) now had a valid session on
+`pathname === '/reset-password'`, matched the "already logged in" rule, and
+redirected straight to the dashboard — skipping the password form entirely.
+The account's password was never actually set; the user was only ever
+browsing on the strength of the temporary recovery session.
+
+**Fix:** split the single `authOnlyPaths` list into `guestOnlyPaths`
+(`/login`, `/forgot-password` — redirect away if already logged in, as
+before) and kept `/reset-password` only in the separate "don't force through
+the not-logged-in → `/login` redirect" list, exempting it entirely from the
+"already logged in → redirect away" rule. It's now reachable whether or not
+a session exists yet, in either direction.
+
+**Operationally important:** any account that hit this bug before the fix
+still has **no password set at all** — `createUser()` in
+`lib/provisionUser.ts` is called with no `password` field by design (the
+whole point of this flow is the user sets their own). Landing on the
+dashboard via the leftover recovery session doesn't change that. Affected
+users need to revisit their password-set link (or get a fresh one via
+"Resend") and actually submit the form — otherwise they'll be unable to log
+in again once that session/cookie expires.
