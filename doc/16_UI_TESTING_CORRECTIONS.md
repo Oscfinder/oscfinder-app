@@ -748,3 +748,30 @@ complete, never from a user action.
   real confirmation line when done ("Your sending mailbox is verified and
   ready.") instead of just strikethrough text, and a short description plus a
   right-aligned link (e.g. "Templates →") when not done.
+
+## 39. "Auth session missing!" when setting a password from the email link
+
+**Reported:** a new admin-provisioned user clicking the password-set email's
+link and trying to confirm their new password got "Auth session missing!"
+
+**Root cause:** not specific to the new admin-provisioning feature — a
+pre-existing gap in the shared `/reset-password` page, used by both this
+flow and self-serve "Forgot Password." `lib/supabase.ts`'s
+`createBrowserClient` (from `@supabase/ssr`) defaults to the **PKCE** auth
+flow, which delivers recovery/invite links with a `?code=` query param that
+must be explicitly exchanged for a real session via
+`supabase.auth.exchangeCodeForSession(code)` before anything is
+authenticated. `/reset-password` never did this — it went straight to
+`supabase.auth.updateUser({ password })` with no session ever established,
+which is exactly why it failed.
+
+**Fix:** `app/(auth)/reset-password/page.tsx` — on mount, reads `?code=` from
+the URL and exchanges it for a session first; the password form only renders
+once that resolves. Shows "Verifying your link..." while exchanging, and a
+clear "This link has expired or already been used" message with a "Request a
+New Link" button if the exchange fails, instead of silently landing on a
+form that was always going to error. (`useSearchParams()` requires a
+`Suspense` boundary to prerender — split into a wrapper `ResetPasswordPage` +
+inner `ResetPasswordForm` to satisfy that.) Since this fixes the shared
+landing page itself, any already-sent, still-valid link works immediately
+without needing to be resent.

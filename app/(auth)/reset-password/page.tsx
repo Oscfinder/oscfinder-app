@@ -1,6 +1,6 @@
 'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -50,11 +50,44 @@ function PasswordInput({
 }
 
 export default function ResetPasswordPage() {
-  const router = useRouter();
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordForm />
+    </Suspense>
+  );
+}
+
+function ResetPasswordForm() {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
   const [password, setPassword]     = useState('');
   const [confirm, setConfirm]       = useState('');
   const [error, setError]           = useState('');
   const [loading, setLoading]       = useState(false);
+
+  // Recovery/invite links land here with a PKCE `?code=` param (the
+  // @supabase/ssr browser client defaults to the PKCE flow) — that code has
+  // to be explicitly exchanged for a real session before updateUser() has
+  // anything to act on. Without this, every recovery link failed with "Auth
+  // session missing!" since no session was ever established.
+  const [exchanging, setExchanging] = useState(true);
+  const [linkError, setLinkError]   = useState('');
+
+  useEffect(() => {
+    const code = searchParams.get('code');
+    if (!code) {
+      // Older/implicit-flow links carry the session in the URL hash instead,
+      // which the client SDK already picks up automatically on init — nothing
+      // to exchange here.
+      setExchanging(false);
+      return;
+    }
+
+    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      if (error) setLinkError('This link has expired or already been used. Request a new one and try again.');
+      setExchanging(false);
+    });
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,35 +127,51 @@ export default function ResetPasswordPage() {
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <PasswordInput
-            id="new-password"
-            label="New Password"
-            value={password}
-            onChange={setPassword}
-          />
-
-          <PasswordInput
-            id="confirm-password"
-            label="Confirm Password"
-            value={confirm}
-            onChange={setConfirm}
-          />
-
-          {error && (
+        {exchanging ? (
+          <p className="text-sm text-gray-500 text-center py-6">Verifying your link...</p>
+        ) : linkError ? (
+          <div className="space-y-4">
             <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-              {error}
+              {linkError}
             </p>
-          )}
+            <a
+              href="/forgot-password"
+              className="block w-full h-10 leading-10 text-center rounded-lg bg-[#006285] text-white text-sm font-semibold hover:bg-[#004f6b] transition-colors"
+            >
+              Request a New Link
+            </a>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <PasswordInput
+              id="new-password"
+              label="New Password"
+              value={password}
+              onChange={setPassword}
+            />
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full h-10 rounded-lg bg-[#006285] text-white text-sm font-semibold hover:bg-[#004f6b] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Updating...' : 'Update Password'}
-          </button>
-        </form>
+            <PasswordInput
+              id="confirm-password"
+              label="Confirm Password"
+              value={confirm}
+              onChange={setConfirm}
+            />
+
+            {error && (
+              <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full h-10 rounded-lg bg-[#006285] text-white text-sm font-semibold hover:bg-[#004f6b] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Updating...' : 'Update Password'}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
