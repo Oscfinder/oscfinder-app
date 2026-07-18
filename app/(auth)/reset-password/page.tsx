@@ -65,28 +65,53 @@ function ResetPasswordForm() {
   const [error, setError]           = useState('');
   const [loading, setLoading]       = useState(false);
 
-  // Recovery/invite links land here with a PKCE `?code=` param (the
-  // @supabase/ssr browser client defaults to the PKCE flow) — that code has
-  // to be explicitly exchanged for a real session before updateUser() has
-  // anything to act on. Without this, every recovery link failed with "Auth
-  // session missing!" since no session was ever established.
+  // Recovery/invite links can land here in any of three shapes, and this page
+  // must not guess which one — it has to handle all three:
+  //  1. `?code=...`               — self-serve "Forgot Password", initiated by
+  //     this browser (our client hardcodes flowType: 'pkce'), redeemed via
+  //     exchangeCodeForSession(). Confirmed by reading @supabase/ssr's source
+  //     directly (createBrowserClient.js sets flowType: "pkce").
+  //  2. `?token_hash=...&type=...` — admin-provisioned links (generateLink(),
+  //     see lib/provisionUser.ts) — never went through this browser, so there
+  //     is no PKCE code_verifier for it to redeem against; Supabase's admin
+  //     API links use OTP-hash verification instead, redeemed via
+  //     verifyOtp({ token_hash, type }).
+  //  3. `#access_token=...`        — legacy implicit-flow links. The SDK's
+  //     detectSessionInUrl (on by default in the browser) already auto-
+  //     establishes a session from this on client init; nothing to do here
+  //     beyond confirming a session actually exists.
+  // Skipping this entirely (the pre-fix state) meant updateUser() always ran
+  // against zero session, failing with "Auth session missing!" for whichever
+  // of these a given link actually turned out to be.
   const [exchanging, setExchanging] = useState(true);
   const [linkError, setLinkError]   = useState('');
 
   useEffect(() => {
-    const code = searchParams.get('code');
-    if (!code) {
-      // Older/implicit-flow links carry the session in the URL hash instead,
-      // which the client SDK already picks up automatically on init — nothing
-      // to exchange here.
-      setExchanging(false);
-      return;
-    }
+    const code      = searchParams.get('code');
+    const tokenHash = searchParams.get('token_hash');
+    const otpType   = searchParams.get('type');
 
-    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-      if (error) setLinkError('This link has expired or already been used. Request a new one and try again.');
+    const fail = () => setLinkError('This link has expired or already been used. Request a new one and try again.');
+
+    (async () => {
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) fail();
+      } else if (tokenHash && otpType) {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type:       otpType as 'recovery' | 'invite' | 'email',
+        });
+        if (error) fail();
+      } else {
+        // No query-param token — either a legacy hash-fragment link (already
+        // auto-handled by detectSessionInUrl) or no token at all. Confirm
+        // which by just checking whether a session actually exists.
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) fail();
+      }
       setExchanging(false);
-    });
+    })();
   }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
