@@ -775,3 +775,33 @@ form that was always going to error. (`useSearchParams()` requires a
 inner `ResetPasswordForm` to satisfy that.) Since this fixes the shared
 landing page itself, any already-sent, still-valid link works immediately
 without needing to be resent.
+
+## 40. Double-render permanently consumed the recovery code before use
+
+**Reported:** links kept coming back "expired or already been used" even
+when freshly generated and never clicked before.
+
+**Root cause:** the code/token exchange added in item 39 ran inside a plain
+`useEffect` with no re-entry guard. React 18 strict mode (dev) double-invokes
+effects on mount — the first invocation exchanged the code successfully, the
+second invocation (same effect, same code) fired immediately after and
+failed, since Supabase invalidates a recovery code/token the instant it's
+redeemed. Whichever invocation set state last determined what the user saw,
+so the page could show the error state despite the exchange having actually
+succeeded moments earlier. The same risk exists in production from any
+re-render of the effect, not just strict mode.
+
+**Fix:** `app/(auth)/reset-password/page.tsx` — guarded the effect with a
+`useRef` (`exchangeAttempted`), not `useState`: a ref update is synchronous
+and doesn't trigger a re-render, so the second invocation's very first line
+(`if (exchangeAttempted.current) return;`) reliably blocks it before the
+exchange call ever fires a second time — a `useState` guard would not be
+reliably synchronous enough for this. Also consolidated the two separate
+`exchanging`/`linkError` booleans into one `linkState:
+'verifying' | 'ready' | 'error'`, and added the missing success state after
+`updateUser()` succeeds: "Password updated! Redirecting to login..." then
+`router.push('/login')` after 2 seconds (previously redirected to `/`
+instead of through login). `/forgot-password` was already a clean,
+independent email-only page with no code/token handling — only its
+`redirectTo` was updated to prefer `NEXT_PUBLIC_APP_URL` over
+`window.location.origin`, matching `lib/provisionUser.ts`'s existing pattern.

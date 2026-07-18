@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -57,87 +57,96 @@ export default function ResetPasswordPage() {
   );
 }
 
+type LinkState = 'verifying' | 'ready' | 'error';
+
 function ResetPasswordForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
-  const [password, setPassword]     = useState('');
-  const [confirm, setConfirm]       = useState('');
-  const [error, setError]           = useState('');
-  const [loading, setLoading]       = useState(false);
 
-  // Recovery/invite links can land here in any of three shapes, and this page
-  // must not guess which one — it has to handle all three:
-  //  1. `?code=...`               — self-serve "Forgot Password", initiated by
-  //     this browser (our client hardcodes flowType: 'pkce'), redeemed via
-  //     exchangeCodeForSession(). Confirmed by reading @supabase/ssr's source
-  //     directly (createBrowserClient.js sets flowType: "pkce").
-  //  2. `?token_hash=...&type=...` — admin-provisioned links (generateLink(),
-  //     see lib/provisionUser.ts) — never went through this browser, so there
-  //     is no PKCE code_verifier for it to redeem against; Supabase's admin
-  //     API links use OTP-hash verification instead, redeemed via
-  //     verifyOtp({ token_hash, type }).
-  //  3. `#access_token=...`        — legacy implicit-flow links. The SDK's
-  //     detectSessionInUrl (on by default in the browser) already auto-
-  //     establishes a session from this on client init; nothing to do here
-  //     beyond confirming a session actually exists.
-  // Skipping this entirely (the pre-fix state) meant updateUser() always ran
-  // against zero session, failing with "Auth session missing!" for whichever
-  // of these a given link actually turned out to be.
-  const [exchanging, setExchanging] = useState(true);
-  const [linkError, setLinkError]   = useState('');
+  const [linkState, setLinkState] = useState<LinkState>('verifying');
+  const [password, setPassword]   = useState('');
+  const [confirm, setConfirm]     = useState('');
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving]       = useState(false);
+  const [done, setDone]           = useState(false);
+
+  // React 18 strict mode double-invokes effects in development, and the
+  // exchange is single-use by design (Supabase invalidates the code/token the
+  // instant it's redeemed) — without this ref, the second invocation always
+  // fails with "already used", permanently breaking every link on first load.
+  // A ref (not state) is required here: it must block the second call
+  // synchronously, before any state update has a chance to re-render.
+  const exchangeAttempted = useRef(false);
 
   useEffect(() => {
+    if (exchangeAttempted.current) return;
+    exchangeAttempted.current = true;
+
+    // Recovery/invite links land here in one of three shapes:
+    //  1. `?code=...`                — self-serve "Forgot Password", initiated
+    //     by this browser (our client hardcodes flowType: 'pkce', confirmed by
+    //     reading @supabase/ssr's source directly). Redeemed via
+    //     exchangeCodeForSession().
+    //  2. `?token_hash=...&type=...` — admin-provisioned links
+    //     (lib/provisionUser.ts's generateLink()) never went through this
+    //     browser, so there's no PKCE code_verifier to redeem against;
+    //     Supabase's admin API links use OTP-hash verification instead,
+    //     redeemed via verifyOtp({ token_hash, type }).
+    //  3. `#access_token=...`        — legacy implicit-flow hash fragment,
+    //     already auto-handled by the SDK's detectSessionInUrl (on by default
+    //     in the browser) — just confirmed here via getSession(). This is
+    //     also what a bare, param-less direct visit to this page falls
+    //     through to, correctly landing on the error state below.
     const code      = searchParams.get('code');
     const tokenHash = searchParams.get('token_hash');
     const otpType   = searchParams.get('type');
 
-    const fail = () => setLinkError('This link has expired or already been used. Request a new one and try again.');
-
     (async () => {
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) fail();
-      } else if (tokenHash && otpType) {
+        setLinkState(error ? 'error' : 'ready');
+        return;
+      }
+      if (tokenHash && otpType) {
         const { error } = await supabase.auth.verifyOtp({
           token_hash: tokenHash,
           type:       otpType as 'recovery' | 'invite' | 'email',
         });
-        if (error) fail();
-      } else {
-        // No query-param token — either a legacy hash-fragment link (already
-        // auto-handled by detectSessionInUrl) or no token at all. Confirm
-        // which by just checking whether a session actually exists.
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) fail();
+        setLinkState(error ? 'error' : 'ready');
+        return;
       }
-      setExchanging(false);
+      const { data: { session } } = await supabase.auth.getSession();
+      setLinkState(session ? 'ready' : 'error');
     })();
   }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setFormError('');
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+      setFormError('Password must be at least 8 characters.');
       return;
     }
     if (password !== confirm) {
-      setError('Passwords do not match.');
+      setFormError('Passwords do not match.');
       return;
     }
 
-    setLoading(true);
+    setSaving(true);
     const { error } = await supabase.auth.updateUser({ password });
+    setSaving(false);
 
     if (error) {
-      setError(error.message);
-      setLoading(false);
+      setFormError(error.message);
       return;
     }
 
-    router.push('/');
-    router.refresh();
+    setDone(true);
+    setTimeout(() => {
+      router.push('/login');
+      router.refresh();
+    }, 2000);
   };
 
   return (
@@ -152,12 +161,16 @@ function ResetPasswordForm() {
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
-        {exchanging ? (
+        {done ? (
+          <p className="text-sm text-center text-[#00A86B] font-semibold py-6">
+            Password updated! Redirecting to login...
+          </p>
+        ) : linkState === 'verifying' ? (
           <p className="text-sm text-gray-500 text-center py-6">Verifying your link...</p>
-        ) : linkError ? (
+        ) : linkState === 'error' ? (
           <div className="space-y-4">
             <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-              {linkError}
+              This link has expired or already been used. Request a new one and try again.
             </p>
             <a
               href="/forgot-password"
@@ -182,18 +195,18 @@ function ResetPasswordForm() {
               onChange={setConfirm}
             />
 
-            {error && (
+            {formError && (
               <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-                {error}
+                {formError}
               </p>
             )}
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={saving}
               className="w-full h-10 rounded-lg bg-[#006285] text-white text-sm font-semibold hover:bg-[#004f6b] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {loading ? 'Updating...' : 'Update Password'}
+              {saving ? 'Updating...' : 'Update Password'}
             </button>
           </form>
         )}
