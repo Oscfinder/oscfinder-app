@@ -906,3 +906,21 @@ same anti-enumeration property `resetPasswordForEmail()` had built in.
 Supabase SDK directly. Both password-related flows in the app now share one
 link-generation path — no more asymmetry where fixing one silently left the
 other broken.
+
+## 44. "Request a New Link" bounced to the dashboard instead of /forgot-password
+
+**Reported:** clicking "Request a New Link" on `/reset-password`'s error
+state took the user to the dashboard instead of `/forgot-password`.
+
+**Root cause:** item 42 exempted `/reset-password` from `middleware.ts`'s
+"already logged in → redirect to `/`" rule, but `/forgot-password` was still
+in that list. Anyone in this state has exactly the kind of session item 42
+described — established by a recovery link, password never actually set —
+and middleware treated it as a fully logged-in user with no reason to see
+`/forgot-password`, redirecting away before the form ever rendered.
+
+**Fix:** `middleware.ts` — `guestOnlyPaths` (redirect-away-if-logged-in) now
+contains only `/login`. Both `/forgot-password` and `/reset-password` are
+reachable regardless of session state, in both directions — matching the
+reality that a session on either of these pages doesn't mean the account has
+a usable password yet.
