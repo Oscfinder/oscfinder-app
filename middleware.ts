@@ -6,17 +6,19 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Redirect a logged-in visitor away from these — there's no reason to show
-  // a logged-in user a login/forgot-password form. Deliberately excludes
-  // /reset-password: verifyOtp()/exchangeCodeForSession() on that page
-  // establishes a real login session as soon as the recovery link is
-  // verified (that's how Supabase's recovery flow works — verify first,
-  // *then* set the password while authenticated) — treating that session the
-  // same as "already logged in, redirect away" bounced the user straight to
-  // the dashboard before they ever got to the password form.
-  const guestOnlyPaths = ['/login', '/forgot-password'];
+  // a fully logged-in user the login form. Deliberately excludes
+  // /reset-password AND /forgot-password: verifyOtp()/exchangeCodeForSession()
+  // on /reset-password establishes a real login session as soon as a recovery
+  // link is verified (that's how Supabase's recovery flow works — verify
+  // first, *then* set the password while authenticated), and a
+  // not-yet-completed recovery leaves exactly that kind of session sitting
+  // around. Someone in that state clicking "Request a New Link" needs to
+  // actually reach /forgot-password, not get bounced to the dashboard because
+  // they technically have a session — that session doesn't mean their
+  // password was ever set.
+  const guestOnlyPaths = ['/login'];
   // Never force these through the "not logged in → /login" redirect either —
-  // /reset-password needs to be reachable mid-flow, before or after a session
-  // exists.
+  // both need to be reachable mid-flow, before or after a session exists.
   const authOnlyPaths = ['/login', '/forgot-password', '/reset-password'];
   // Accessible regardless of login state -- no redirect either direction.
   const openPaths = ['/api-docs', '/swagger.json'];
