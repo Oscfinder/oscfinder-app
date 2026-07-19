@@ -870,3 +870,39 @@ dashboard via the leftover recovery session doesn't change that. Affected
 users need to revisit their password-set link (or get a fresh one via
 "Resend") and actually submit the form — otherwise they'll be unable to log
 in again once that session/cookie expires.
+
+## 43. Self-serve "Forgot Password" never actually got the items 39–42 fixes
+
+**Reported:** the admin password-set flow now works, but self-serve "Forgot
+Password" still shows "expired" immediately, and a resend sometimes lands
+the user logged into the dashboard with no password set — the exact symptoms
+items 39–42 already fixed, but for a different flow.
+
+**Root cause:** items 39–42 all fixed how `/reset-password` *receives* a
+link. But `/forgot-password` never generates its link the way
+`lib/provisionUser.ts` does — it called
+`supabase.auth.resetPasswordForEmail()` directly, which makes **Supabase
+itself** send its own email using its own `{{ .ConfirmationURL }}` template:
+Supabase's own `/auth/v1/verify` hop, the exact mechanism already identified
+in item 41 as vulnerable to email-security link scanners, and in item 42's
+investigation as capable of falling back to redirecting to the bare Site URL
+(not `redirect_to`) — landing a session on whatever page happens to sit at
+that root, entirely bypassing `/reset-password`'s password form. The admin
+flow was fixed because it happened to go through `lib/provisionUser.ts`;
+self-serve forgot-password used a completely separate code path that never
+got the same treatment.
+
+**Fix:** gave it the identical architecture.
+`lib/provisionUser.ts` — extracted the link-building logic shared by the
+admin flow into `buildRecoveryLink(email)`, and added
+`sendPasswordResetEmail(email)` (same direct `/reset-password?token_hash=...`
+link, different copy: "Reset your OsCompanyFinder password" instead of the
+admin flow's "Welcome" wording). New public
+`POST /api/auth/forgot-password` route calls it — deliberately always
+responds `{ success: true }` regardless of whether the email actually has an
+account (`generateLink` errors on an unregistered email), preserving the
+same anti-enumeration property `resetPasswordForEmail()` had built in.
+`app/(auth)/forgot-password/page.tsx` now calls this route instead of the
+Supabase SDK directly. Both password-related flows in the app now share one
+link-generation path — no more asymmetry where fixing one silently left the
+other broken.
