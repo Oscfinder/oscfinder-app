@@ -63,37 +63,43 @@ export async function provisionCompanyUser(params: {
   return { user_id: authUser.user.id, ...emailResult };
 }
 
-// Generates a fresh Supabase recovery link and sends it via Resend (not
-// Supabase's own mailer) so it comes from the branded mail.oscfinder.com
-// domain. Split out on its own so "Resend email" can call just this part
-// without re-provisioning the user.
+// Generates a fresh Supabase recovery token and builds a link straight to our
+// own /reset-password page — never linkData.properties.action_link. That's
+// Supabase's own /auth/v1/verify endpoint, which consumes the single-use
+// token on ANY HTTP request that reaches it, including automated
+// email-security link scanners (Outlook Safe Links, Gmail link scanning,
+// corporate proxies) that prefetch links before a human ever clicks, and
+// which falls back to redirecting to the project's bare Site URL (not our
+// redirectTo) whenever it doesn't like something about the request — landing
+// a visitor logged in on the dashboard with no password ever set, via
+// whatever page happens to be sitting at that root URL. Building the link
+// ourselves with the token_hash means nothing is consumed and nothing
+// redirects until our own /reset-password page's JS runs verifyOtp().
+async function buildRecoveryLink(email: string): Promise<{ link: string } | { error: string }> {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.oscfinder.com';
+
+  const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+    type: 'recovery',
+    email,
+  });
+
+  if (linkError || !linkData)
+    return { error: linkError?.message ?? 'Failed to generate link' };
+
+  return { link: `${appUrl}/reset-password?token_hash=${linkData.properties.hashed_token}&type=recovery` };
+}
+
+// Split out on its own so "Resend email" (admin company-detail page) can call
+// just this part without re-provisioning the user.
 export async function sendPasswordSetEmail(params: {
   email:        string;
   full_name:    string;
   company_name: string;
 }): Promise<{ email_sent: boolean; email_error?: string }> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.oscfinder.com';
-
   try {
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type:  'recovery',
-      email: params.email,
-      options: { redirectTo: `${appUrl}/reset-password` },
-    });
+    const result = await buildRecoveryLink(params.email);
+    if ('error' in result) return { email_sent: false, email_error: result.error };
 
-    if (linkError || !linkData)
-      return { email_sent: false, email_error: linkError?.message ?? 'Failed to generate link' };
-
-    // Deliberately NOT linkData.properties.action_link — that's Supabase's own
-    // /auth/v1/verify endpoint, which consumes the single-use token on ANY HTTP
-    // request that reaches it, including automated email-security link scanners
-    // (Outlook Safe Links, Gmail link scanning, corporate proxies) that prefetch
-    // links before a human ever clicks — burning the token before the real
-    // click happens, which is exactly what made every link look "expired"
-    // immediately. Building the link straight to our own /reset-password page
-    // with the token_hash instead means nothing gets consumed until our page's
-    // own JS runs verifyOtp() — a scanner fetching the HTML doesn't execute it.
-    const link = `${appUrl}/reset-password?token_hash=${linkData.properties.hashed_token}&type=recovery`;
     const firstName = params.full_name?.trim().split(' ')[0] || 'there';
 
     await resend.emails.send({
@@ -105,8 +111,40 @@ export async function sendPasswordSetEmail(params: {
         <p>Hi ${firstName},</p>
         <p>Your account for <strong>${params.company_name}</strong> is ready. Click the
         link below to set your password and get started.</p>
-        <p><a href="${link}">Set your password</a></p>
+        <p><a href="${result.link}">Set your password</a></p>
         <p style="color:#888888;font-size:12px;">If you didn't expect this email, you can safely ignore it.</p>
+      `,
+    });
+
+    return { email_sent: true };
+  } catch (err: any) {
+    return { email_sent: false, email_error: err?.message ?? 'Failed to send email' };
+  }
+}
+
+// Self-serve "Forgot Password" (app/(auth)/forgot-password/page.tsx via
+// POST /api/auth/forgot-password). Deliberately mirrors sendPasswordSetEmail's
+// link-building rather than calling supabase.auth.resetPasswordForEmail(),
+// which sends Supabase's OWN email through its OWN /verify hop — exactly the
+// mechanism this whole file exists to avoid. Never throws: the caller must
+// always respond as if the email was sent, whether or not the address is
+// actually registered, to avoid leaking which emails have accounts.
+export async function sendPasswordResetEmail(email: string): Promise<{ email_sent: boolean; email_error?: string }> {
+  try {
+    const result = await buildRecoveryLink(email);
+    if ('error' in result) return { email_sent: false, email_error: result.error };
+
+    await resend.emails.send({
+      from:    process.env.RESEND_FROM ?? 'OsCFinder <hello@mail.oscfinder.com>',
+      replyTo: 'support@oscfinder.com',
+      to:      email,
+      subject: 'Reset your OsCompanyFinder password',
+      html: `
+        <p>Hi there,</p>
+        <p>We received a request to reset your OsCompanyFinder password. Click
+        the link below to set a new one.</p>
+        <p><a href="${result.link}">Reset your password</a></p>
+        <p style="color:#888888;font-size:12px;">If you didn't request this, you can safely ignore this email — your password won't change.</p>
       `,
     });
 

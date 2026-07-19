@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Mail } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail]   = useState('');
@@ -15,12 +14,23 @@ export default function ForgotPasswordPage() {
     setLoad(true);
     setError('');
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/reset-password`,
-    });
-
-    if (error) {
-      setError(error.message);
+    // Not supabase.auth.resetPasswordForEmail() — that sends Supabase's own
+    // email through its own /verify hop, the exact mechanism this route
+    // exists to avoid (see lib/provisionUser.ts's sendPasswordResetEmail).
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? 'Something went wrong. Please try again.');
+        setLoad(false);
+        return;
+      }
+    } catch {
+      setError('Network error — check your connection and try again.');
       setLoad(false);
       return;
     }
