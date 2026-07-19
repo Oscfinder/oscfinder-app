@@ -118,6 +118,13 @@ export function Sidebar({
     .slice(0, 2)
     .toUpperCase();
 
+  // The mobile off-canvas drawer must always show full labels regardless of
+  // the desktop icon-rail preference — `collapsed` and `mobileOpen` are two
+  // independent toggles (Shell.tsx's single hamburger handler flips both at
+  // once), so without this, opening the drawer for the first time also set
+  // collapsed: true, rendering the mobile drawer icon-only with no text.
+  const showFull = !collapsed || mobileOpen;
+
   return (
     <>
       {/* Mobile backdrop -- dims everything behind the off-canvas drawer, tap to close */}
@@ -138,7 +145,7 @@ export function Sidebar({
       >
       {/* Logo */}
       <div className="px-5 py-5 border-b border-white/[0.07] shrink-0 min-h-[64px] flex items-center">
-        {!collapsed ? (
+        {showFull ? (
           <div>
             <div className="text-[17px] font-bold leading-tight">
               <span className="text-[#0099CC]">Os</span>
@@ -156,18 +163,18 @@ export function Sidebar({
 
       {/* Nav */}
       <nav className="flex-1 py-2 overflow-y-auto">
-        <NavGroup label="Main"     items={mainNav}     collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
-        <NavGroup label="Outreach" items={outreachNav} collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
-        <NavGroup label="Data"     items={dataNav}     collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
-        <NavGroup label="Account" items={accountNav(!!isAdmin)} collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
+        <NavGroup label="Main"     items={mainNav}     collapsed={!showFull} pathname={pathname} onNavigate={onMobileClose} />
+        <NavGroup label="Outreach" items={outreachNav} collapsed={!showFull} pathname={pathname} onNavigate={onMobileClose} />
+        <NavGroup label="Data"     items={dataNav}     collapsed={!showFull} pathname={pathname} onNavigate={onMobileClose} />
+        <NavGroup label="Account" items={accountNav(!!isAdmin)} collapsed={!showFull} pathname={pathname} onNavigate={onMobileClose} />
         {isAdmin && (
-          <NavGroup label="Admin" items={adminNav} collapsed={collapsed} pathname={pathname} onNavigate={onMobileClose} />
+          <NavGroup label="Admin" items={adminNav} collapsed={!showFull} pathname={pathname} onNavigate={onMobileClose} />
         )}
       </nav>
 
       {/* Footer — user card */}
       <div className="border-t border-white/[0.07] shrink-0">
-        {!collapsed ? (
+        {showFull ? (
           <div className="px-4 py-4 flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-[#006285] flex items-center justify-center text-white font-bold text-[13px] shrink-0">
               {initials}
