@@ -15,6 +15,12 @@ type ModalType = 'view' | 'edit' | 'message' | 'delete' | 'add' | 'bulk-send' | 
 
 const STATUS_OPTIONS = ['new', 'contacted', 'qualified', 'ignored'] as const;
 
+const SCORE_OPTIONS: { label: string; value: string; min: number; max: number }[] = [
+  { label: '80–100 (High)',   value: '80-100', min: 80, max: 100 },
+  { label: '60–79 (Medium)',  value: '60-79',  min: 60, max: 79 },
+  { label: 'Below 60 (Low)',  value: '0-59',   min: 0,  max: 59 },
+];
+
 const STATUS_BADGE: Record<string, string> = {
   contacted: 'bg-[#dff2f9] text-[#006285]',
   qualified:  'bg-[#dff7ee] text-[#00A86B]',
@@ -44,6 +50,7 @@ export default function LeadsPage() {
   const [filterLga, setFilterLga]             = useState('');
   const [filterCategory, setFilterCategory]   = useState('');
   const [filterStatus, setFilterStatus]       = useState('');
+  const [filterScore, setFilterScore]         = useState('');
   const [modal, setModal]                     = useState<ModalType>(null);
   const [active, setActive]                   = useState<Lead | null>(null);
   const [page, setPage]                       = useState(1);
@@ -65,8 +72,12 @@ export default function LeadsPage() {
     if (filterCategory)  p.set('category', filterCategory);
     if (filterStatus)    p.set('status', filterStatus);
     if (debouncedSearch) p.set('search', debouncedSearch);
+    if (filterScore) {
+      const bucket = SCORE_OPTIONS.find(s => s.value === filterScore);
+      if (bucket) { p.set('min_score', String(bucket.min)); p.set('max_score', String(bucket.max)); }
+    }
     return p.toString();
-  }, [page, perPage, filterState, filterLga, filterCategory, filterStatus, debouncedSearch]);
+  }, [page, perPage, filterState, filterLga, filterCategory, filterStatus, filterScore, debouncedSearch]);
 
   const handlePerPageChange = (n: number) => {
     setPerPage(n);
@@ -101,7 +112,7 @@ export default function LeadsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [filterState, filterLga, filterCategory, filterStatus, debouncedSearch]);
+  }, [filterState, filterLga, filterCategory, filterStatus, filterScore, debouncedSearch]);
 
   const pageIds        = leads.map(l => l.id);
   const allPageChecked = pageIds.length > 0 && pageIds.every(id => selected.has(id));
@@ -195,10 +206,10 @@ export default function LeadsPage() {
     close();
   };
 
-  const hasFilters = filterState || filterLga || filterCategory || filterStatus || search;
+  const hasFilters = filterState || filterLga || filterCategory || filterStatus || filterScore || search;
 
   const clearFilters = () => {
-    setFilterState(''); setFilterLga(''); setFilterCategory(''); setFilterStatus(''); setSearch('');
+    setFilterState(''); setFilterLga(''); setFilterCategory(''); setFilterStatus(''); setFilterScore(''); setSearch('');
   };
 
   const handleExportSelected = () => {
@@ -288,6 +299,19 @@ export default function LeadsPage() {
               {STATUS_OPTIONS.map(s => (
                 <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>
               ))}
+            </select>
+            <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
+          </div>
+
+          {/* Score */}
+          <div className="relative">
+            <select
+              value={filterScore}
+              onChange={e => setFilterScore(e.target.value)}
+              className="h-9 pl-3 pr-8 rounded-lg border border-[#E5E7EB] bg-white text-[13px] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] text-[#0A1628]"
+            >
+              <option value="">All Scores</option>
+              {SCORE_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
             <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
           </div>

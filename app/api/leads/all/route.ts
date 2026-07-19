@@ -17,6 +17,8 @@ export async function GET(req: NextRequest) {
   const localGovt  = sp.get('local_govt') ?? '';
   const category   = sp.get('category')   ?? '';
   const search     = sp.get('search')     ?? '';
+  const minScore   = sp.get('min_score');
+  const maxScore   = sp.get('max_score');
   // Pagination is opt-in: only requested by the Leads table page. Every other
   // consumer (dashboard, export, campaign audience picker) calls this route with no
   // `page` param and keeps getting the full array, unchanged, since they need the
@@ -38,6 +40,8 @@ export async function GET(req: NextRequest) {
   if (localGovt) query = query.eq('local_govt', localGovt);
   if (category)  query = query.eq('category', category);
   if (search)    query = query.or(`name.ilike.%${search}%,category.ilike.%${search}%`);
+  if (minScore)  query = query.gte('lead_score', Number(minScore));
+  if (maxScore)  query = query.lte('lead_score', Number(maxScore));
 
   if (pageParam) {
     const page    = Math.max(1, parseInt(pageParam, 10) || 1);
