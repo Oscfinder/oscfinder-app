@@ -4,6 +4,7 @@ import { requireAuth, requireActiveAccount, SessionUser } from '@/lib/auth';
 import { checkLimit } from '@/lib/usage';
 import { getSender, getSentToday, getRemainingCeiling, hasAcknowledgmentForToday } from '@/lib/senders';
 import { getRecipientCounts } from '@/lib/campaignRecipients';
+import { DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
 
 // Actual sending happens in app/api/campaigns/process/route.ts, via the company's own
 // SMTP mailbox — this route only validates, gates, and enqueues campaign_recipients.
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, template_id, filters = {}, send_now = false } = body;
+  const { name, template_id, filters = {}, send_now = false, design_id } = body;
 
   if (!name?.trim())
     return NextResponse.json({ error: 'Campaign name is required' }, { status: 400 });
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
         template_id: template_id ?? null,
         name:        name.trim(),
         status:      'draft',
+        design_id:   design_id || DEFAULT_DESIGN_ID,
       })
       .select()
       .single();
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Send Now (queues for the campaign worker — see app/api/campaigns/process) ──
-  return queueCampaignSend(user, { name: name.trim(), template_id, filters });
+  return queueCampaignSend(user, { name: name.trim(), template_id, filters, design_id });
 }
 
 // Shared by POST (new campaign) and PATCH /api/email/campaigns/[id] (sending an
@@ -102,9 +104,10 @@ export async function queueCampaignSend(
     template_id: string | null;
     filters: { category?: string; state?: string; status?: string };
     existingCampaignId?: string;
+    design_id?: string;
   }
 ): Promise<NextResponse> {
-  const { name, template_id, filters, existingCampaignId } = opts;
+  const { name, template_id, filters, existingCampaignId, design_id } = opts;
 
   if (!template_id)
     return NextResponse.json({ error: 'Select a template before sending' }, { status: 400 });
@@ -192,6 +195,7 @@ export async function queueCampaignSend(
           name,
           status:           'queued',
           total_recipients: recipients.length,
+          ...(design_id ? { design_id } : {}),
         })
         .eq('id', existingCampaignId)
         .eq('company_id', user.company_id!)
@@ -206,6 +210,7 @@ export async function queueCampaignSend(
           name,
           status:           'queued',
           total_recipients: recipients.length,
+          design_id:        design_id || DEFAULT_DESIGN_ID,
         })
         .select()
         .single();
@@ -243,13 +248,4 @@ export async function queueCampaignSend(
   });
 }
 
-export function personalize(
-  text: string,
-  lead: { name: string; category: string; state?: string; website?: string }
-) {
-  return text
-    .replace(/\{\{company_name\}\}/gi, lead.name)
-    .replace(/\{\{category\}\}/gi,     lead.category)
-    .replace(/\{\{state\}\}/gi,        lead.state   ?? '')
-    .replace(/\{\{website\}\}/gi,      lead.website ?? '');
-}
+export { personalize } from '@/lib/personalize';

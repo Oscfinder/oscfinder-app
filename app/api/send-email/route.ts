@@ -6,6 +6,7 @@ import { checkLimit, logUsage } from '@/lib/usage';
 import { decrypt } from '@/lib/crypto';
 import { getSender, getSentToday, getRemainingCeiling, hasAcknowledgmentForToday, incrementDailyUsage } from '@/lib/senders';
 import { buildEmailHtml } from '@/lib/emailHtml';
+import { DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
 
 // Direct lead outreach (single-send + bulk-send from the Leads page) — must go through
 // the company's own verified SMTP mailbox, same as campaigns. Client outreach must
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
   const { user, error } = await requireAuth();
   if (error) return error;
 
-  const { leadId, to, subject, body } = await req.json();
+  const { leadId, to, subject, body, design_id } = await req.json();
 
   if (!to || !subject || !body)
     return NextResponse.json({ error: 'to, subject and body are required' }, { status: 400 });
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest) {
       to,
       subject,
       text:    body,
-      html:    buildEmailHtml(body, sender.reply_to ?? sender.email),
+      html:    buildEmailHtml(body, sender.reply_to ?? sender.email, design_id || DEFAULT_DESIGN_ID, sender.display_name),
     });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Failed to send email' }, { status: 500 });

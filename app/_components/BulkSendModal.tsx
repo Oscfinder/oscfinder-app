@@ -5,6 +5,8 @@ import { Lead, MailTemplate, RequiresAcknowledgment } from '@/types';
 import { Button } from './Button';
 import { SendLimitConsentModal } from './SendLimitConsentModal';
 import { cn } from '@/lib/utils';
+import { EMAIL_DESIGNS, DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
+import { SUGGESTED_DESIGN_BY_TITLE } from '@/lib/seedTemplateDesigns';
 
 interface BulkSendModalProps {
   selected: Lead[];
@@ -18,6 +20,7 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
   const [templates, setTemplates]   = useState<MailTemplate[]>([]);
   const [loadingTpl, setLoadingTpl] = useState(true);
   const [chosenId, setChosenId]     = useState<string>('');
+  const [designId, setDesignId]     = useState<string>(DEFAULT_DESIGN_ID);
   const [sending, setSending]       = useState(false);
   const [done, setDone]             = useState(false);
   const [error, setError]           = useState('');
@@ -65,10 +68,11 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({
-            leadId:  lead.id,
-            to:      lead.emails[0],
-            subject: fillTemplate(chosen.subject, lead),
-            body:    fillTemplate(chosen.body, lead),
+            leadId:    lead.id,
+            to:        lead.emails[0],
+            subject:   fillTemplate(chosen.subject, lead),
+            body:      fillTemplate(chosen.body, lead),
+            design_id: designId,
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -164,7 +168,13 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
             <div className="relative">
               <select
                 value={chosenId}
-                onChange={e => setChosenId(e.target.value)}
+                onChange={e => {
+                  const id = e.target.value;
+                  setChosenId(id);
+                  const tpl = templates.find(t => t.id === id);
+                  const suggested = tpl ? SUGGESTED_DESIGN_BY_TITLE[tpl.title] : undefined;
+                  if (suggested) setDesignId(suggested);
+                }}
                 disabled={loadingTpl}
                 className={cn(
                   'w-full h-11 pl-4 pr-9 rounded-lg border text-sm appearance-none cursor-pointer',
@@ -182,6 +192,21 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
             {!loadingTpl && templates.length === 0 && (
               <p className="text-xs text-gray-400 mt-1.5">No templates yet — create one on the Templates page first.</p>
             )}
+          </div>
+
+          {/* Design picker */}
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Design</p>
+            <div className="relative">
+              <select
+                value={designId}
+                onChange={e => setDesignId(e.target.value)}
+                className="w-full h-11 pl-4 pr-9 rounded-lg border border-gray-300 text-sm appearance-none cursor-pointer text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#006285]/30 focus:border-[#006285]"
+              >
+                {EMAIL_DESIGNS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
           </div>
 
           {/* Template preview */}

@@ -99,15 +99,19 @@ export interface AppUser {
 export type TemplateTag = 'Outreach' | 'Follow-up' | 'Partnership' | 'Introduction' | 'Promotion' | 'General';
 
 export interface MailTemplate {
-  id:         string;
-  company_id: string;
-  title:      string;
-  subject:    string;
-  body:       string;
-  tag:        TemplateTag;
-  use_count:  number;
-  last_used:  string | null;
-  created_at: string;
+  id:                 string;
+  company_id:         string;
+  title:              string;
+  subject:            string;
+  body:               string;
+  tag:                TemplateTag;
+  use_count:          number;
+  last_used:          string | null;
+  created_at:         string;
+  // Not persisted per-template in the DB — matched by title against
+  // lib/seedTemplates.ts's DEFAULT_EMAIL_TEMPLATES, since designs are chosen
+  // at send time, not template creation time (see lib/emailDesigns.ts).
+  suggested_design_id?: string;
 }
 
 // ── Usage ────────────────────────────────────────────────────────
@@ -220,6 +224,7 @@ export interface EmailCampaign {
   company_id:       string;
   template_id:      string | null;
   name:             string;
+  design_id:        string;
   status:           CampaignStatus;
   total_recipients: number;
   sent_count:       number;

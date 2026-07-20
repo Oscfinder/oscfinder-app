@@ -7,6 +7,12 @@ import { cn } from '@/lib/utils';
 import { MailTemplate, TemplateTag } from '@/types';
 import { Button } from '@/app/_components/Button';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { EmailPreviewModal } from '@/app/_components/EmailPreviewModal';
+import { DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
+import { SUGGESTED_DESIGN_BY_TITLE } from '@/lib/seedTemplateDesigns';
+import { personalize } from '@/lib/personalize';
+
+const SAMPLE_LEAD = { name: 'Acme Logistics', category: 'Logistics', state: 'Lagos', website: 'acmelogistics.com' };
 
 const TAG_STYLES: Record<TemplateTag, string> = {
   Outreach:     'bg-[#dff2f9] text-[#006285]',
@@ -46,6 +52,8 @@ function ModalHeader({ title, subtitle, onClose }: { title: string; subtitle?: s
 
 function PreviewModal({ tpl, onClose }: { tpl: MailTemplate; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
+  const [designId, setDesignId] = useState(SUGGESTED_DESIGN_BY_TITLE[tpl.title] ?? DEFAULT_DESIGN_ID);
   const handleCopy = () => {
     navigator.clipboard.writeText(tpl.body);
     setCopied(true);
@@ -78,8 +86,21 @@ function PreviewModal({ tpl, onClose }: { tpl: MailTemplate; onClose: () => void
           {copied ? <CheckCheck size={14} className="text-[#00A86B]" /> : <Copy size={14} />}
           {copied ? 'Copied!' : 'Copy body'}
         </button>
-        <Button variant="outline" onClick={onClose}>Close</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setShowEmailPreview(true)}>Preview</Button>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+        </div>
       </div>
+
+      {showEmailPreview && (
+        <EmailPreviewModal
+          subject={personalize(tpl.subject, SAMPLE_LEAD)}
+          bodyText={personalize(tpl.body, SAMPLE_LEAD)}
+          designId={designId}
+          onDesignIdChange={setDesignId}
+          onClose={() => setShowEmailPreview(false)}
+        />
+      )}
     </Modal>
   );
 }
@@ -97,6 +118,10 @@ function TemplateFormModal({ initial, onSave, onClose }: {
   const [errors, setErrors] = useState<Partial<typeof form>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
+  const [previewDesignId, setPreviewDesignId] = useState(
+    SUGGESTED_DESIGN_BY_TITLE[initial?.title ?? ''] ?? DEFAULT_DESIGN_ID
+  );
 
   const set = (k: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -188,11 +213,28 @@ function TemplateFormModal({ initial, onSave, onClose }: {
       </div>
       <div className="px-6 py-3 border-t border-[#E5E7EB] flex justify-end gap-3 bg-[#F8FAFC] rounded-b-2xl">
         <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button
+          variant="outline"
+          onClick={() => setShowEmailPreview(true)}
+          disabled={!form.subject.trim() || !form.body.trim()}
+        >
+          Preview
+        </Button>
         <Button onClick={handleSave} isLoading={saving} className="gap-2">
           {!saving && <FileText size={14} />}
           {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Template'}
         </Button>
       </div>
+
+      {showEmailPreview && (
+        <EmailPreviewModal
+          subject={personalize(form.subject, SAMPLE_LEAD)}
+          bodyText={personalize(form.body, SAMPLE_LEAD)}
+          designId={previewDesignId}
+          onDesignIdChange={setPreviewDesignId}
+          onClose={() => setShowEmailPreview(false)}
+        />
+      )}
     </Modal>
   );
 }

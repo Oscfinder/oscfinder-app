@@ -7,6 +7,13 @@ import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData
 import { cn } from '@/lib/utils';
 import { LockedFeatureCard } from '@/app/_components/LockedFeatureCard';
 import { SendLimitConsentModal } from '@/app/_components/SendLimitConsentModal';
+import { DesignSelector } from '@/app/_components/DesignSelector';
+import { EmailPreviewModal } from '@/app/_components/EmailPreviewModal';
+import { DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
+import { SUGGESTED_DESIGN_BY_TITLE } from '@/lib/seedTemplateDesigns';
+import { personalize } from '@/lib/personalize';
+
+const SAMPLE_LEAD = { name: 'Acme Logistics', category: 'Logistics', state: 'Lagos', website: 'acmelogistics.com' };
 
 // ── Local types ───────────────────────────────────────────────────
 type CampaignStatus = 'draft' | 'queued' | 'sending' | 'completed' | 'failed';
@@ -55,22 +62,26 @@ function NewCampaignModal({
   usageSummary,
   usageLimits,
   editDraft,
+  sender,
   onClose,
   onCreated,
 }: {
   templates:    MailTemplate[];
   usageSummary: { email_count: number } | undefined;
   usageLimits:  { email_limit: number | null } | undefined;
-  editDraft?:   { id: string; name: string; template_id: string | null } | null;
+  editDraft?:   { id: string; name: string; template_id: string | null; design_id?: string } | null;
+  sender?:      EmailSender | null;
   onClose:      () => void;
   onCreated:    () => void;
 }) {
   const [name,        setName]        = useState(editDraft?.name ?? '');
   const [templateId,  setTemplateId]  = useState(editDraft?.template_id ?? '');
+  const [designId,    setDesignId]    = useState(editDraft?.design_id ?? DEFAULT_DESIGN_ID);
   const [catFilter,   setCatFilter]   = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [statFilter,  setStatFilter]  = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [showFullPreview, setShowFullPreview] = useState(false);
   const [isSending,   setIsSending]   = useState(false);
   const [formError,   setFormError]   = useState('');
   const [pendingAck,  setPendingAck]  = useState<RequiresAcknowledgment | null>(null);
@@ -103,6 +114,7 @@ function NewCampaignModal({
       template_id: templateId || null,
       filters:     { category: catFilter, state: stateFilter, status: statFilter },
       send_now:    sendNow,
+      design_id:   designId,
     });
     return editDraft
       ? fetch(`/api/email/campaigns/${editDraft.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: payload })
@@ -221,7 +233,14 @@ function NewCampaignModal({
             <div className="relative">
               <select
                 value={templateId}
-                onChange={e => { setTemplateId(e.target.value); setShowPreview(false); }}
+                onChange={e => {
+                  const id = e.target.value;
+                  setTemplateId(id);
+                  setShowPreview(false);
+                  const tpl = templates.find(t => t.id === id);
+                  const suggested = tpl ? SUGGESTED_DESIGN_BY_TITLE[tpl.title] : undefined;
+                  if (suggested) setDesignId(suggested);
+                }}
                 className={selectCls}
               >
                 <option value="">Select a template...</option>
@@ -256,6 +275,12 @@ function NewCampaignModal({
               )}
             </div>
           )}
+
+          {/* Design picker */}
+          <div className="border-t border-[#f3f4f6] pt-4">
+            <p className="text-[12px] font-semibold text-[#1A3A5C] mb-2.5">Choose a Design</p>
+            <DesignSelector value={designId} onChange={setDesignId} />
+          </div>
 
           {/* Recipient filters */}
           <div className="border-t border-[#f3f4f6] pt-4">
@@ -313,6 +338,14 @@ function NewCampaignModal({
           </button>
           <button
             type="button"
+            onClick={() => setShowFullPreview(true)}
+            disabled={!selectedTemplate}
+            className="h-9 px-4 rounded-lg border border-[#E5E7EB] text-[13px] font-semibold text-[#1A3A5C] hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Preview
+          </button>
+          <button
+            type="button"
             onClick={() => submit(false)}
             disabled={isSending}
             className="h-9 px-4 rounded-lg border border-[#1A3A5C] text-[13px] font-semibold text-[#1A3A5C] hover:bg-[#f0f4f8] transition-colors disabled:opacity-50"
@@ -338,6 +371,18 @@ function NewCampaignModal({
           confirming={acking}
           onConfirm={handleAckConfirm}
           onCancel={() => setPendingAck(null)}
+        />
+      )}
+
+      {showFullPreview && selectedTemplate && (
+        <EmailPreviewModal
+          subject={personalize(selectedTemplate.subject, SAMPLE_LEAD)}
+          bodyText={personalize(selectedTemplate.body, SAMPLE_LEAD)}
+          designId={designId}
+          onDesignIdChange={setDesignId}
+          senderName={sender?.display_name ?? undefined}
+          replyTo={sender?.reply_to ?? sender?.email}
+          onClose={() => setShowFullPreview(false)}
         />
       )}
     </div>
@@ -700,7 +745,8 @@ export default function EmailPage() {
           templates={templates}
           usageSummary={usageSummary}
           usageLimits={usageLimits}
-          editDraft={editDraft ? { id: editDraft.id, name: editDraft.name, template_id: editDraft.template_id } : null}
+          editDraft={editDraft ? { id: editDraft.id, name: editDraft.name, template_id: editDraft.template_id, design_id: editDraft.design_id } : null}
+          sender={sender}
           onClose={() => { setShowNew(false); setEditDraft(null); }}
           onCreated={() => queryClient.invalidateQueries({ queryKey: ['campaigns'] })}
         />

@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
     byCompany.get(row.company_id)!.push(row);
   }
 
-  const campaignInfoCache  = new Map<string, { template_id: string; name: string }>();
+  const campaignInfoCache  = new Map<string, { template_id: string; name: string; design_id: string }>();
   const templateCache      = new Map<string, { subject: string; body: string }>();
   const visitedCampaignIds = new Set<string>();
   const campaignCompanyMap = new Map<string, string>();  // campaign_id -> company_id
@@ -111,7 +111,7 @@ export async function GET(req: NextRequest) {
       if (!campaignInfo) {
         const { data: campaign } = await supabaseAdmin
           .from('email_campaigns')
-          .select('template_id, name')
+          .select('template_id, name, design_id')
           .eq('id', row.campaign_id)
           .single();
         if (!campaign?.template_id) continue;
@@ -136,7 +136,12 @@ export async function GET(req: NextRequest) {
 
       const lead = row.lead ?? { name: '', category: '', state: '', website: '' };
       const subject = personalize(template.subject, lead);
-      const html = buildEmailHtml(personalize(template.body, lead), sender.reply_to ?? sender.email);
+      const html = buildEmailHtml(
+        personalize(template.body, lead),
+        sender.reply_to ?? sender.email,
+        campaignInfo.design_id,
+        sender.display_name
+      );
 
       // Everything below happens immediately after the send attempt, per recipient —
       // never batched until the end of the run — so a mid-run kill (timeout, deploy,

@@ -74,7 +74,7 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { name, template_id, filters = {}, send_now = false } = body;
+  const { name, template_id, filters = {}, send_now = false, design_id } = body;
 
   if (!name?.trim())
     return NextResponse.json({ error: 'Campaign name is required' }, { status: 400 });
@@ -82,7 +82,11 @@ export async function PATCH(
   if (!send_now) {
     const { data: campaign, error: updateError } = await supabaseAdmin
       .from('email_campaigns')
-      .update({ name: name.trim(), template_id: template_id ?? null })
+      .update({
+        name: name.trim(),
+        template_id: template_id ?? null,
+        ...(design_id ? { design_id } : {}),
+      })
       .eq('id', id)
       .eq('company_id', user.company_id!)
       .eq('status', 'draft')
@@ -102,6 +106,7 @@ export async function PATCH(
     template_id,
     filters,
     existingCampaignId: id,
+    design_id,
   });
 }
 

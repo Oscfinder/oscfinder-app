@@ -4,11 +4,17 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 // existing) so nobody starts from a blank template list — they can edit or
 // duplicate these freely. Uses the same {{company_name}}/{{category}}/{{state}}/
 // {{website}} placeholders personalize() already supports.
-export const DEFAULT_EMAIL_TEMPLATES: Array<{ title: string; subject: string; body: string; tag: string }> = [
+//
+// suggested_design_id is a pairing hint only (lib/emailDesigns.ts) — matched by
+// title on the client to auto-select a design when composing with one of these
+// templates. It's a suggestion, not a lock: designs are chosen at send time,
+// not stored on the template row.
+export const DEFAULT_EMAIL_TEMPLATES: Array<{ title: string; subject: string; body: string; tag: string; suggested_design_id: string }> = [
   {
     title:   'Initial Outreach',
     subject: 'Quick question for {{company_name}}',
     tag:     'Outreach',
+    suggested_design_id: 'clean-minimal',
     body:
 `Hi {{company_name}} team,
 
@@ -22,6 +28,7 @@ Looking forward to hearing from you.`,
     title:   'Follow-Up After No Response',
     subject: 'Following up — {{company_name}}',
     tag:     'Follow-up',
+    suggested_design_id: 'accent-sidebar',
     body:
 `Hi {{company_name}} team,
 
@@ -35,6 +42,7 @@ Thanks for your time.`,
     title:   'Partnership Proposal',
     subject: 'Partnership opportunity with {{company_name}}',
     tag:     'Partnership',
+    suggested_design_id: 'professional-header',
     body:
 `Hi {{company_name}} team,
 
@@ -48,6 +56,7 @@ Looking forward to connecting.`,
     title:   'Company Introduction',
     subject: 'Introducing our work to {{company_name}}',
     tag:     'Introduction',
+    suggested_design_id: 'boxed-card',
     body:
 `Hi {{company_name}} team,
 
@@ -61,6 +70,7 @@ Best regards.`,
     title:   'Special Offer / Promotion',
     subject: 'A special offer for {{company_name}}',
     tag:     'Promotion',
+    suggested_design_id: 'bold-headline',
     body:
 `Hi {{company_name}} team,
 
@@ -74,6 +84,7 @@ Talk soon.`,
     title:   'Checking In / Relationship Building',
     subject: 'Checking in with {{company_name}}',
     tag:     'General',
+    suggested_design_id: 'clean-minimal',
     body:
 `Hi {{company_name}} team,
 
@@ -87,6 +98,7 @@ Best.`,
     title:   'Website / Service Feedback Request',
     subject: 'A thought on {{company_name}}\'s online presence',
     tag:     'General',
+    suggested_design_id: 'two-tone',
     body:
 `Hi {{company_name}} team,
 
