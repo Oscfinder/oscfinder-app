@@ -56,8 +56,8 @@ export async function POST(req: NextRequest) {
         address: sender.email
       },
       to:      sender.reply_to ?? sender.email,
-      subject: 'OsCompanyFinder sender verification',
-      html:    '<p>This mailbox is now verified for sending OsCompanyFinder campaign emails.</p>',
+      subject: 'OsCFinder sender verification',
+      html:    '<p>This mailbox is now verified for sending OsCFinder campaign emails.</p>',
     });
 
     const { data: updated, error: updateError } = await supabaseAdmin

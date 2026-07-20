@@ -3,7 +3,7 @@ import './globals.css';
 import { Providers } from './_components/Providers';
 
 export const metadata: Metadata = {
-  title: 'OsCompanyFinder',
+  title: 'OsCFinder',
   description: 'B2B Lead Generation SaaS',
 };
 

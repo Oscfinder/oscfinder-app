@@ -123,7 +123,7 @@ export default function HelpPage() {
       <div>
         <h1 className="text-[20px] font-bold text-[#0A1628]">Help &amp; Getting Started</h1>
         <p className="text-[13px] text-[#888888] mt-1">
-          Learn how to get the most out of OsCompanyFinder
+          Learn how to get the most out of OsCFinder
         </p>
       </div>
 
@@ -134,7 +134,7 @@ export default function HelpPage() {
             <div className="relative w-full rounded-xl overflow-hidden" style={{ paddingTop: '56.25%' }}>
               <iframe
                 src={embedUrl}
-                title="OsCompanyFinder walkthrough"
+                title="OsCFinder walkthrough"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
                 className="absolute inset-0 w-full h-full rounded-xl border-0"

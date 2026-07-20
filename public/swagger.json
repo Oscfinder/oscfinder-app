@@ -1,8 +1,8 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "OsCompanyFinder API",
-    "description": "Internal API for OsCompanyFinder, a B2B lead-generation SaaS. Generated directly from the route handlers under app/api/** — every schema here reflects what the code actually reads/returns, not a hand-written guess.",
+    "title": "OsCFinder API",
+    "description": "Internal API for OsCFinder, a B2B lead-generation SaaS. Generated directly from the route handlers under app/api/** — every schema here reflects what the code actually reads/returns, not a hand-written guess.",
     "version": "1.0.0"
   },
   "servers": [{ "url": "/", "description": "Same origin as the web app" }],

@@ -106,7 +106,7 @@ export async function sendPasswordSetEmail(params: {
       from:    process.env.RESEND_FROM ?? 'OsCFinder <hello@mail.oscfinder.com>',
       replyTo: 'support@oscfinder.com',
       to:      params.email,
-      subject: 'Welcome to OsCompanyFinder — set your password',
+      subject: 'Welcome to OsCFinder — set your password',
       html: `
         <p>Hi ${firstName},</p>
         <p>Your account for <strong>${params.company_name}</strong> is ready. Click the
@@ -138,10 +138,10 @@ export async function sendPasswordResetEmail(email: string): Promise<{ email_sen
       from:    process.env.RESEND_FROM ?? 'OsCFinder <hello@mail.oscfinder.com>',
       replyTo: 'support@oscfinder.com',
       to:      email,
-      subject: 'Reset your OsCompanyFinder password',
+      subject: 'Reset your OsCFinder password',
       html: `
         <p>Hi there,</p>
-        <p>We received a request to reset your OsCompanyFinder password. Click
+        <p>We received a request to reset your OsCFinder password. Click
         the link below to set a new one.</p>
         <p><a href="${result.link}">Reset your password</a></p>
         <p style="color:#888888;font-size:12px;">If you didn't request this, you can safely ignore this email — your password won't change.</p>

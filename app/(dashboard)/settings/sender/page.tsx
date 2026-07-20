@@ -137,7 +137,7 @@ export default function SenderSettingsPage() {
               <Mail size={16} className="text-[#0099CC]" /> Sender Mailbox
             </h1>
             <p className="text-[12px] text-[#888888] mt-0.5">
-              Campaign emails send through this mailbox — not through OsCompanyFinder's own email service.
+              Campaign emails send through this mailbox — not through OsCFinder's own email service.
             </p>
           </div>
           {sender && (

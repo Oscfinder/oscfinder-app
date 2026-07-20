@@ -26,7 +26,7 @@ export function Header({
   const router   = useRouter();
   const pathname = usePathname();
 
-  const meta = PAGE_META[pathname] ?? { title: 'OsCompanyFinder', subtitle: '' };
+  const meta = PAGE_META[pathname] ?? { title: 'OsCFinder', subtitle: '' };
 
   return (
     <header
