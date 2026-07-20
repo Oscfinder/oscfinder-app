@@ -924,3 +924,44 @@ contains only `/login`. Both `/forgot-password` and `/reset-password` are
 reachable regardless of session state, in both directions — matching the
 reality that a session on either of these pages doesn't mean the account has
 a usable password yet.
+
+## 45. Brand name was inconsistent across the app — "OsCompanyFinder" vs "OsCFinder"
+
+**Reported:** the brand name is "OsCFinder" everywhere except legal documents
+(privacy policy, terms of service, billing invoice footers) — searched for
+every "OsCompanyFinder"/"Oscfinder"/sender-name variant and asked for all
+customer-facing instances to be replaced.
+
+**Fix:** grepped the full codebase for the old name and every variant. Updated
+page/site titles (`app/layout.tsx`, `app/_components/Header.tsx`), the Help
+page's copy and video iframe title, the sender-settings description, the
+sender-verification email's subject/body (`app/api/senders/verify/route.ts`),
+the welcome and password-reset email subjects/body
+(`lib/provisionUser.ts`), and the API docs title/description
+(`public/swagger.json`, served at `/api-docs`). Left
+`app/(dashboard)/billing/page.tsx`'s "OsCompanyFinder Ltd" bank-transfer
+account name unchanged — it's the legal entity name shown in the billing
+invoice instructions, the one carve-out the request itself called for.
+`.env`'s `RESEND_FROM` was already `OsCFinder <hello@mail.oscfinder.com>` —
+no change needed there, only a reminder that Vercel's copy of the same env
+var needs to match if it ever drifts.
+
+## 46. Every outgoing email used one fixed look, with no way to preview it
+
+**Reported:** campaign/single/bulk-send emails all rendered through the same
+plain white-card HTML shell regardless of context — asked for a set of
+selectable visual designs, plus a way to see what an email will actually
+look like before sending.
+
+**Fix:** built 7 table-based, inline-CSS email layouts (Clean Minimal —
+default, Professional Header, Accent Sidebar, Feature Highlight, Bold
+Headline, Boxed Card, Two-Tone) that any text template or hand-typed message
+can be dropped into. Campaign compose gets a thumbnail design-selector row
+plus a live full-email preview modal (sample-personalized); the single-send
+`MessageModal` and `BulkSendModal` get a simpler dropdown; the Templates page
+can preview a template across all 7 designs without locking one to it. Each
+seed template suggests a matching design that auto-selects (but stays
+overridable) when chosen in the composer. `email_campaigns` gained a
+`design_id` column (migration `019_email_designs.sql`, defaulting to
+`clean-minimal` so every existing campaign/send is unaffected). Full detail
+in `doc/19_EMAIL_DESIGNS.md`.
