@@ -273,7 +273,7 @@ export default function FirstRunPage() {
           <div className="py-10 flex flex-col items-center gap-4 text-center">
             <Loader2 size={36} className="text-[#0099CC] animate-spin" />
             <div>
-              <p className="text-[15px] font-bold text-[#0A1628]">Searching Google Maps…</p>
+              <p className="text-[15px] font-bold text-[#0A1628]">Searching…</p>
               <p className="text-[13px] text-[#888888] mt-1">
                 Finding businesses, extracting contact details. This takes 15–30 seconds.
               </p>

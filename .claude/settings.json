@@ -6,7 +6,11 @@
       "Bash(git push *)",
       "Bash(node -e ' *)",
       "Bash(node \"C:\\\\Users\\\\ANCHOR\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-ANCHOR-Documents-OscompanyFinder-oscfinder-app\\\\9b57d087-fa00-4406-9472-ca7ff507ea3a\\\\scratchpad\\\\check-rpc.js\" \".env\" \"$\\(pwd\\)/node_modules/@supabase/supabase-js\")",
-      "Bash(git commit -m 'Log item 41: root cause of persistent link-expired bug *)"
+      "Bash(git commit -m 'Log item 41: root cause of persistent link-expired bug *)",
+      "Read(//c/Users/USER/Downloads/**)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\USER\\Downloads"
     ]
   }
 }
