@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAdmin, logAdminAction } from '@/lib/auth';
 import { seedDefaultTemplates } from '@/lib/seedTemplates';
+import { sendPasswordSetEmail } from '@/lib/provisionUser';
 
 // ── GET /api/admin/demos ─────────────────────────────────────────
 // Returns all demo companies from admin_demo_overview view.
@@ -21,7 +22,7 @@ export async function GET() {
 // ── POST /api/admin/demos ────────────────────────────────────────
 // Body: { action: 'create' | 'convert' | 'extend' | 'suspend', ...fields }
 //
-// create:  { name, email, duration, password, notes? }
+// create:  { name, email, duration, notes? }
 // convert: { company_id, plan }
 // extend:  { company_id, days }
 // suspend: { company_id }
@@ -36,11 +37,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'action is required' }, { status: 400 });
 
   // ── Create Demo ───────────────────────────────────────────────
+  // No password is collected here — the new user gets a branded email with a
+  // link to set their own password (see lib/provisionUser.ts), same as the
+  // paid company creation flow in app/api/admin/companies/route.ts.
   if (action === 'create') {
-    const { name, email, duration = 7, password, notes } = body;
+    const { name, email, duration = 7, notes } = body;
 
-    if (!name?.trim() || !email?.trim() || !password?.trim())
-      return NextResponse.json({ error: 'name, email, and password are required' }, { status: 400 });
+    if (!name?.trim() || !email?.trim())
+      return NextResponse.json({ error: 'name and email are required' }, { status: 400 });
 
     // create_demo_company() creates company + demo_usage + demo_feature_flags
     const { data: companyId, error: rpcError } = await supabaseAdmin.rpc('create_demo_company', {
@@ -59,16 +63,18 @@ export async function POST(req: NextRequest) {
         .eq('id', companyId);
     }
 
-    // Create Supabase Auth user
+    // Create Supabase Auth user — email_confirm: true because the admin is
+    // vouching for this address, same as provisionCompanyUser().
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email:         email.trim().toLowerCase(),
-      password,
       email_confirm: true,
       user_metadata: { company_id: companyId, role: 'company_admin' },
     });
 
-    if (authError)
+    if (authError) {
+      await supabaseAdmin.from('companies').delete().eq('id', companyId);
       return NextResponse.json({ error: authError.message }, { status: 500 });
+    }
 
     // Must be an upsert — see the identical comment in
     // app/api/admin/companies/route.ts for why a plain insert silently no-ops
@@ -83,14 +89,29 @@ export async function POST(req: NextRequest) {
 
     if (usersError) {
       await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+      await supabaseAdmin.from('companies').delete().eq('id', companyId);
       return NextResponse.json({ error: usersError.message }, { status: 500 });
     }
 
     await seedDefaultTemplates(companyId);
 
+    // A failure here doesn't roll back the account — same reasoning as
+    // provisionCompanyUser(): it's real and usable once they get a password
+    // some other way — so it's reported back to the caller rather than thrown.
+    const emailResult = await sendPasswordSetEmail({
+      email:        email.trim().toLowerCase(),
+      full_name:    '',
+      company_name: name.trim(),
+    });
+
     await logAdminAction(admin.id, 'create_demo', companyId, { name, email, duration });
 
-    return NextResponse.json({ company_id: companyId, user_id: authUser.user.id });
+    return NextResponse.json({
+      company_id:  companyId,
+      user_id:     authUser.user.id,
+      email_sent:  emailResult.email_sent,
+      email_error: emailResult.email_error,
+    });
   }
 
   // ── Convert Demo → Paid ───────────────────────────────────────

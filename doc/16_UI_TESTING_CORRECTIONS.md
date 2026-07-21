@@ -965,3 +965,25 @@ overridable) when chosen in the composer. `email_campaigns` gained a
 `design_id` column (migration `019_email_designs.sql`, defaulting to
 `clean-minimal` so every existing campaign/send is unaffected). Full detail
 in `doc/19_EMAIL_DESIGNS.md`.
+
+## 47. "Register Demo Account" still collected a plaintext Initial Password
+
+**Reported:** the demo-registration form had an "Initial Password" field —
+the paid "New Company" flow had already dropped this in favor of a
+password-set email, and the demo flow should match.
+
+**Fix:** `app/api/admin/demos/route.ts`'s `create` action no longer accepts
+or requires `password`. It creates the Supabase Auth user with
+`supabaseAdmin.auth.admin.createUser({ email, email_confirm: true,
+user_metadata: {...} })` — same as `provisionCompanyUser()` — then, once the
+`users` row is upserted, sends the password-set email via
+`sendPasswordSetEmail()` (`lib/provisionUser.ts`), reusing the exact
+link-building path items 39–41 already hardened against email-security link
+scanners. Also tightened cleanup to match the paid-company flow: if user
+creation or the `users` upsert fails, the demo company row created just
+before it is now deleted too, instead of being left behind as an orphan (a
+gap the paid flow didn't have, but this one did).
+`app/(dashboard)/admin/demos/page.tsx`'s `RegisterDemoModal` drops the
+password field/validation and gains the same "email failed to send, you can
+resend from the company detail page" fallback screen `NewCompanyModal`
+already had.

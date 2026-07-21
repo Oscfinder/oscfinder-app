@@ -27,19 +27,25 @@ function UsageBar({ used, max, label }: { used: number; max: number; label: stri
 // ── Register Demo Modal ───────────────────────────────────────────
 function RegisterDemoModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState({
-    name: '', email: '', duration: 7, password: '', notes: '',
+    name: '', email: '', duration: 7, notes: '',
   });
   const [saving,  setSaving]  = useState(false);
   const [formErr, setFormErr] = useState('');
+  // Set only when the company/user were created but the password-set email
+  // itself failed to send — kept open so the admin sees it instead of it
+  // silently vanishing into a closed modal. Same pattern as NewCompanyModal
+  // in app/(dashboard)/admin/page.tsx.
+  const [emailWarning, setEmailWarning] = useState('');
 
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
 
   const submit = async () => {
-    if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
-      setFormErr('Name, email, and password are required');
+    if (!form.name.trim() || !form.email.trim()) {
+      setFormErr('Name and email are required');
       return;
     }
     setSaving(true);
+    setFormErr('');
     const res  = await fetch('/api/admin/demos', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -48,11 +54,38 @@ function RegisterDemoModal({ onClose, onCreated }: { onClose: () => void; onCrea
     const data = await res.json();
     setSaving(false);
     if (!res.ok) { setFormErr(data.error ?? 'Failed'); return; }
+
     onCreated();
+    if (!data.email_sent) {
+      setEmailWarning(data.email_error ?? 'The password-set email failed to send.');
+      return;
+    }
     onClose();
   };
 
   const inputCls = 'w-full h-10 px-3 rounded-lg border border-[#E5E7EB] text-[13px] text-[#0A1628] focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] placeholder:text-[#888888]';
+
+  if (emailWarning) {
+    return (
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[440px] p-6 space-y-3">
+          <h2 className="text-[16px] font-bold text-[#0A1628]">Demo account created</h2>
+          <p className="text-[13px] text-[#1A3A5C]">
+            The company and user account were created, but the password-set email
+            failed to send: <span className="text-red-500">{emailWarning}</span>
+          </p>
+          <p className="text-[13px] text-[#888888]">
+            You can resend it any time from the company's detail page.
+          </p>
+          <div className="flex justify-end pt-2">
+            <button onClick={onClose} className="h-9 px-5 rounded-lg bg-[#0099CC] hover:bg-[#006285] text-white text-[13px] font-semibold transition-colors">
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -60,7 +93,7 @@ function RegisterDemoModal({ onClose, onCreated }: { onClose: () => void; onCrea
         <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E7EB]">
           <div>
             <h2 className="text-[17px] font-bold text-[#0A1628]">Register Demo Account</h2>
-            <p className="text-[12px] text-[#888888] mt-0.5">Creates company + login credentials</p>
+            <p className="text-[12px] text-[#888888] mt-0.5">Creates company + sends a password-set link</p>
           </div>
           <button onClick={onClose}><X size={18} className="text-[#888888]" /></button>
         </div>
@@ -69,15 +102,9 @@ function RegisterDemoModal({ onClose, onCreated }: { onClose: () => void; onCrea
             <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Company Name *</label>
             <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Prospect Company Ltd" className={inputCls} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Contact Email *</label>
-              <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="ceo@company.com" className={inputCls} />
-            </div>
-            <div>
-              <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Initial Password *</label>
-              <input type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Min 8 chars" className={inputCls} />
-            </div>
+          <div>
+            <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Contact Email *</label>
+            <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="ceo@company.com" className={inputCls} />
           </div>
           <div>
             <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-2">Demo Duration</label>
