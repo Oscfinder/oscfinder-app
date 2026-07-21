@@ -35,7 +35,8 @@ export default function LoginPage() {
       {/* Logo */}
       <div className="text-center mb-8">
         <div className="text-2xl font-bold">
-          <span className="text-[#0099CC]">Os</span>Company
+          <span className="text-[#0099CC]">Os</span>
+          <span className="text-gray-800">C</span>
           <span className="text-[#00C48C]">Finder</span>
         </div>
         <p className="text-sm text-gray-500 mt-1">Sign in to your account</p>
