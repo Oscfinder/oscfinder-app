@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email:         email.trim().toLowerCase(),
       email_confirm: true,
-      user_metadata: { company_id: companyId, role: 'company_admin' },
+      user_metadata: { full_name: name.trim(), company_id: companyId, role: 'company_admin' },
     });
 
     if (authError) {
@@ -85,6 +85,10 @@ export async function POST(req: NextRequest) {
       email:      email.trim().toLowerCase(),
       role:       'company_admin',
       is_active:  true,
+      // Demo users go through the same onboarding wizard as paid users
+      // (see the identical comment in lib/provisionUser.ts) — this is also
+      // just the DB column default, made explicit here for clarity.
+      onboarding_complete: false,
     });
 
     if (usersError) {
@@ -115,6 +119,11 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Convert Demo → Paid ───────────────────────────────────────
+  // convert_demo_to_paid() (see sql_dump/company_finder_backup.sql) only ever
+  // updates the companies row (plan/is_demo/status/dates/fees) and clears the
+  // two demo-only tables — it has no access to and never touches `users` at
+  // all. onboarding_complete is a one-way switch: if the demo user already
+  // completed onboarding, that survives the conversion untouched by design.
   if (action === 'convert') {
     const { company_id, plan } = body;
     if (!company_id || !plan)

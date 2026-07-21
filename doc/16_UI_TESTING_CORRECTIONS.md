@@ -987,3 +987,66 @@ gap the paid flow didn't have, but this one did).
 password field/validation and gains the same "email failed to send, you can
 resend from the company detail page" fallback screen `NewCompanyModal`
 already had.
+
+## 48. Admin-created users skipped onboarding, and first-run timed out on a working scrape
+
+**Reported, three related issues:** (1) both admin-created flows (paid
+company + demo) set `onboarding_complete: true` outright, so those users
+never saw the Welcome → Industry → Location → First Run wizard at all — it
+should be shown to everyone; (2) demo-to-paid conversion needed to be
+verified as never resetting `onboarding_complete` back to `false`; (3) the
+onboarding wizard's final step, First Run, reliably showed "Search took too
+long. You can try again from the dashboard." even though the underlying
+scrape was working fine.
+
+**Fix, part 1 — onboarding is for everyone now:** `lib/provisionUser.ts`
+(paid company + "Add User") and `app/api/admin/demos/route.ts` (demo) both
+flipped their `users` upsert from `onboarding_complete: true` to `false` —
+an admin already knowing the company's industry/location was never the
+point of skipping onboarding; the wizard's job is giving a brand-new user
+their first leads and a guided tour, which every admin-created account
+should get same as anyone.
+
+**Fix, part 2 — verified, not just assumed:** read
+`convert_demo_to_paid()` (`sql_dump/company_finder_backup.sql`) directly —
+it only ever updates the `companies` row (plan/is_demo/status/dates/fees)
+and clears `demo_usage`/`demo_feature_flags`; it has no access to `users` at
+all, so a demo user's `onboarding_complete` genuinely survives conversion
+untouched. Grepped the full codebase for every place `onboarding_complete`
+is set — the only `true`-setter left is `app/api/onboarding/complete/route.ts`
+(first-run completing, or either skip path below); nothing anywhere sets it
+back to `false` once true. Added a comment on the `convert` action
+documenting this invariant so it doesn't get accidentally violated later.
+
+**Fix, part 3 — root cause of the timeout, and the actual fix:**
+`app/onboarding/first-run/page.tsx` already POSTed to `/api/scrape` (the
+same background-job endpoint the main Generate Leads page uses, which
+returns a `jobId` immediately via `after()` — see `doc/1_DATABASE_MIGRATION.md`/
+the scrape pipeline) — so it was never hitting a real Vercel function
+timeout. The actual bug was purely client-side: it polled with a hardcoded
+cap of 20 attempts × 3s (60s total) and gave up with a misleading "took too
+long" error the moment that cap was reached, even though the job kept
+running successfully in the background past that point — exactly what a
+scrape visiting more than a handful of company websites needs. Rewritten to
+use the exact same polling hooks the main `/scrape` page already relies on
+(`hooks/useScrapeJob.ts`, `hooks/useLeads.ts` — `useScrapeJob` refetches
+every 2s for as long as the job is `pending`/`running`, with no attempt
+cap; `useLeads` polls the real `leads` rows tied to that `jobId`), so
+first-run and the main scrape page now share one polling implementation
+instead of a second, weaker one existing in parallel.
+
+On top of that, the page's "running" state now shows real progress instead
+of a bare spinner: a live "Found N companies so far" count and a
+`processed`/`total` progress bar (both straight from the polled job/leads
+data, no separate progress plumbing needed), plus a growing list of
+company names as they're found. A "Skip — go to dashboard" link is visible
+the entire time a scrape is running, not just after a failure — clicking it
+calls `POST /api/onboarding/complete` and navigates home immediately, while
+the scrape (already a background job) keeps going and its leads land on
+the dashboard whenever it finishes, whether or not the user was still
+watching. Completion now shows a "Found N companies!" checkmark moment with
+a primary "Go to Dashboard" button (Skip disappears here since the primary
+button does the same thing); failure shows a plain-language message with
+its own "Go to Dashboard" button plus the same form again below it so
+retrying doesn't require leaving the page. Onboarding steps 1–3 and the
+scrape pipeline itself were untouched — this was entirely a page-level fix.

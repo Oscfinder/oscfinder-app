@@ -42,7 +42,11 @@ export async function provisionCompanyUser(params: {
     role:                'client',
     full_name:           params.full_name || null,
     is_active:           true,
-    onboarding_complete: true, // admin already supplied industry/location — skip it
+    // Every admin-created user goes through the same onboarding wizard
+    // (Welcome → Industry → Location → First Run) as a self-serve signup would —
+    // it's how they get their first leads and a guided intro to the platform, not
+    // just a formality to skip because an admin already knows their industry/location.
+    onboarding_complete: false,
   });
 
   if (usersError) {
