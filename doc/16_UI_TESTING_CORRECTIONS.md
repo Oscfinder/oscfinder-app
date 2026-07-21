@@ -1050,3 +1050,26 @@ button does the same thing); failure shows a plain-language message with
 its own "Go to Dashboard" button plus the same form again below it so
 retrying doesn't require leaving the page. Onboarding steps 1–3 and the
 scrape pipeline itself were untouched — this was entirely a page-level fix.
+
+## 49. Onboarding's Location step had no LGA dropdown
+
+**Reported:** the onboarding location step should show a Local Government
+Area dropdown once a state is picked, same as the Add Lead modal and the
+main Generate Leads page already do — it was still a free-text "City / LGA"
+input.
+
+**Fix:** `app/onboarding/location/page.tsx` — replaced the free-text field
+with a `<select>` populated from `NIGERIAN_LGAS_BY_STATE[state]`
+(`app/data/nigeriaLgas.ts`), disabled with a "Select a state first"
+placeholder until a state is chosen, resetting whenever the state changes.
+
+**Also found while wiring this up:** this page kept its own local
+`NIGERIAN_STATES` array instead of the shared one in
+`app/data/newCompaniesData.ts`, and it spelled the FCT entry
+`'FCT — Abuja'` (em dash) where the shared list — and every key in
+`NIGERIAN_LGAS_BY_STATE` — uses `'FCT - Abuja'` (plain hyphen). Left as a
+hardcoded local list, wiring the LGA lookup straight to `state` would have
+silently returned no LGAs at all for FCT specifically (a mismatched object
+key, not an error). Fixed by switching this page to import the shared
+`NIGERIAN_STATES` list instead of keeping its own, which also fixes the
+`POPULAR_STATES` quick-pick pill for FCT.

@@ -4,17 +4,14 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, ArrowLeft, Loader2, ChevronDown } from 'lucide-react';
 import { StepProgress } from '@/app/onboarding/StepProgress';
 import { cn } from '@/lib/utils';
+import { NIGERIAN_STATES } from '@/app/data/newCompaniesData';
+import { NIGERIAN_LGAS_BY_STATE } from '@/app/data/nigeriaLgas';
 
-const NIGERIAN_STATES = [
-  'Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa',
-  'Benue', 'Borno', 'Cross River', 'Delta', 'Ebonyi', 'Edo', 'Ekiti',
-  'Enugu', 'FCT — Abuja', 'Gombe', 'Imo', 'Jigawa', 'Kaduna', 'Kano',
-  'Katsina', 'Kebbi', 'Kogi', 'Kwara', 'Lagos', 'Nasarawa', 'Niger',
-  'Ogun', 'Ondo', 'Osun', 'Oyo', 'Plateau', 'Rivers', 'Sokoto',
-  'Taraba', 'Yobe', 'Zamfara',
-];
-
-const POPULAR_STATES = ['Lagos', 'FCT — Abuja', 'Rivers', 'Kano', 'Oyo'];
+// Matches app/data/newCompaniesData.ts's spelling exactly ("FCT - Abuja", a
+// plain hyphen) — this page used to keep its own local NIGERIAN_STATES list
+// with an em dash ("FCT — Abuja"), which silently broke any lookup into
+// NIGERIAN_LGAS_BY_STATE (keyed off the shared list) for that state.
+const POPULAR_STATES = ['Lagos', 'FCT - Abuja', 'Rivers', 'Kano', 'Oyo'];
 
 export default function LocationPage() {
   const router                  = useRouter();
@@ -22,6 +19,14 @@ export default function LocationPage() {
   const [lga,     setLga]       = useState('');
   const [saving,  setSaving]    = useState(false);
   const [error,   setError]     = useState('');
+
+  const lgaOptions = state ? (NIGERIAN_LGAS_BY_STATE[state] ?? []) : [];
+
+  const handleStateChange = (s: string) => {
+    setState(s);
+    setLga(''); // LGA options depend on the chosen state — reset on change
+    setError('');
+  };
 
   const handleNext = async () => {
     if (!state) { setError('Please select a state to continue.'); return; }
@@ -58,7 +63,7 @@ export default function LocationPage() {
             {POPULAR_STATES.map(s => (
               <button
                 key={s}
-                onClick={() => { setState(s); setError(''); }}
+                onClick={() => handleStateChange(s)}
                 className={cn(
                   'px-4 py-2 rounded-lg border text-[13px] font-semibold transition-colors',
                   state === s
@@ -78,7 +83,7 @@ export default function LocationPage() {
           <div className="relative">
             <select
               value={state}
-              onChange={e => { setState(e.target.value); setError(''); }}
+              onChange={e => handleStateChange(e.target.value)}
               className={selectCls}
             >
               <option value="">Select a state...</option>
@@ -90,18 +95,26 @@ export default function LocationPage() {
           </div>
         </div>
 
-        {/* Optional LGA */}
+        {/* Optional LGA — populated from the chosen state */}
         <div>
           <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">
-            City / LGA{' '}
+            Local Government Area{' '}
             <span className="font-normal text-[#888888]">(optional — narrows your results)</span>
           </label>
-          <input
-            value={lga}
-            onChange={e => setLga(e.target.value)}
-            placeholder="e.g. Ikeja, Victoria Island, Garki..."
-            className="w-full h-11 px-3 rounded-xl border border-[#E5E7EB] text-[13px] text-[#0A1628] focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] placeholder:text-[#888888]"
-          />
+          <div className="relative">
+            <select
+              value={lga}
+              onChange={e => setLga(e.target.value)}
+              disabled={!state}
+              className={cn(selectCls, !state && 'opacity-50 cursor-not-allowed')}
+            >
+              <option value="">{state ? 'Select LGA...' : 'Select a state first'}</option>
+              {lgaOptions.map(l => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+            <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
+          </div>
         </div>
 
         {state && (
