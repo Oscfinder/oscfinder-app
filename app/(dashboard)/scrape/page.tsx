@@ -10,6 +10,7 @@ import { NIGERIAN_LGAS_BY_STATE } from '@/app/data/nigeriaLgas';
 import { useScrapeJob } from '@/hooks/useScrapeJob';
 import { useLeads } from '@/hooks/useLeads';
 import { useQuery } from '@tanstack/react-query';
+import { DemoPlanBlockedCard } from '@/app/_components/DemoPlanBlockedCard';
 
 const MAX_RESULTS_OPTIONS = ['50', '100', '200'];
 
@@ -75,7 +76,7 @@ function TextField({ label, value, onChange, placeholder, icon: Icon }: {
 }
 
 type UsageSummary = { scrape_count: number; email_count: number; export_count: number };
-type UsageLimits  = { scrape_limit: number | null; email_limit: number | null; export_limit: number | null };
+type UsageLimits  = { plan: string; scrape_limit: number | null; email_limit: number | null; export_limit: number | null };
 
 export default function ScrapePage() {
   const [category,   setCategory]   = useState('');
@@ -88,6 +89,7 @@ export default function ScrapePage() {
   const [showModal,  setShowModal]  = useState(false);
   const [savedLeads, setSavedLeads] = useState<Lead[]>([]);
   const [isAdding,   setIsAdding]   = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   const lgaOptions = state ? (NIGERIAN_LGAS_BY_STATE[state] ?? []) : [];
 
@@ -123,6 +125,7 @@ export default function ScrapePage() {
 
   const handleSearch = async () => {
     if (!canSearch) return;
+    setSearchError('');
     const res = await fetch('/api/scrape', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -137,6 +140,10 @@ export default function ScrapePage() {
       }),
     });
     const data = await res.json();
+    if (!res.ok) {
+      setSearchError(data.error ?? 'Failed to start search. Please try again.');
+      return;
+    }
     if (data.jobId) {
       setJobId(data.jobId);
       setShowModal(false);
@@ -162,6 +169,15 @@ export default function ScrapePage() {
 
   const pct = (used: number, limit: number | null | undefined) =>
     limit ? Math.min(Math.round((used / limit) * 100), 100) : 0;
+
+  if (usageLimits?.scrape_limit === 0) {
+    return (
+      <DemoPlanBlockedCard
+        heading="Lead generation is not available on the demo plan"
+        description="Upgrade to a paid plan to search for and generate new leads."
+      />
+    );
+  }
 
   return (
     <div className="max-w-screen-xl mx-auto">
@@ -226,6 +242,23 @@ export default function ScrapePage() {
                 All fields except Max Results are required — the more specific the
                 location, the more precise the search.
               </p>
+
+              {searchError && (
+                <div className="flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                  <p className="text-[13px] text-red-600 font-medium">
+                    {searchError}
+                    {usageLimits?.plan === 'demo' && ' Upgrade to continue generating leads.'}
+                  </p>
+                  {usageLimits?.plan === 'demo' && (
+                    <a
+                      href="mailto:support@oscfinder.com"
+                      className="shrink-0 h-8 px-3 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[12px] font-bold flex items-center justify-center transition-colors"
+                    >
+                      Contact Us
+                    </a>
+                  )}
+                </div>
+              )}
 
               <Button
                 onClick={handleSearch}

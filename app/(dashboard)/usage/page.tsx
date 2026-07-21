@@ -1,6 +1,8 @@
 'use client';
 import { useQuery } from '@tanstack/react-query';
 import { UsageLog } from '@/types';
+import { DemoExpiryBanner } from '@/app/_components/DemoExpiryBanner';
+import { useCompanyPlan } from '@/hooks/useCompanyPlan';
 
 type Summary = { scrape_count: number; email_count: number; export_count: number };
 type Limits  = { plan: string; scrape_limit: number | null; email_limit: number | null; export_limit: number | null };
@@ -59,11 +61,62 @@ export default function UsagePage() {
     queryKey: ['usage-logs'],
     queryFn:  () => fetch('/api/usage/logs').then(r => r.json()),
   });
+  const { data: planInfo } = useCompanyPlan();
 
-  const plan = limits?.plan ?? 'growth';
+  const plan   = limits?.plan ?? 'growth';
+  const company = planInfo?.company;
+
+  const fmtDate = (d: string | null | undefined) =>
+    d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
   return (
     <div className="max-w-screen-xl mx-auto space-y-6">
+
+      <DemoExpiryBanner
+        isDemo={company?.is_demo}
+        demoExpiresAt={company?.demo_expires_at}
+      />
+
+      {/* Current Plan */}
+      {company && (
+        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
+          <div className="flex items-center justify-between mb-3.5">
+            <span className="text-[13px] font-semibold text-[#1A3A5C]">Current Plan</span>
+            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#dff2f9] text-[#006285] capitalize">
+              {company.plan}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {company.is_demo ? (
+              <>
+                <div>
+                  <p className="text-[11px] text-[#888888]">Demo Expires</p>
+                  <p className="text-[13px] font-semibold text-[#0A1628] mt-0.5">{fmtDate(company.demo_expires_at)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-[#888888]">Days Remaining</p>
+                  <p className="text-[13px] font-semibold text-[#0A1628] mt-0.5">
+                    {company.demo_expires_at
+                      ? Math.max(0, Math.ceil((new Date(company.demo_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+                      : '—'}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <p className="text-[11px] text-[#888888]">Plan Start</p>
+                  <p className="text-[13px] font-semibold text-[#0A1628] mt-0.5">{fmtDate(company.plan_start_date)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-[#888888]">Plan End</p>
+                  <p className="text-[13px] font-semibold text-[#0A1628] mt-0.5">{fmtDate(company.plan_end_date)}</p>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 3 Usage Cards */}
       <div className="grid grid-cols-3 gap-4">

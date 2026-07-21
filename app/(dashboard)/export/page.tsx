@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Lead } from '@/types';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { ChevronDown, X } from 'lucide-react';
+import { DemoPlanBlockedCard } from '@/app/_components/DemoPlanBlockedCard';
 
 const FORMAT_OPTIONS = [
   { id: 'xlsx', label: 'Excel (.xlsx)', desc: 'Full data with all fields',    locked: false },
@@ -25,6 +26,7 @@ export default function ExportPage() {
   const [filterStatus,   setFilterStatus]   = useState('');
   const [isDownloading,  setIsDownloading]  = useState(false);
   const [selectedIds,    setSelectedIds]    = useState<string[] | null>(null);
+  const [downloadError,  setDownloadError]  = useState('');
 
   // Picked up from the Leads table's "Export Selected" — set just before that
   // navigation, read once here, then cleared so a later plain visit to /export
@@ -48,6 +50,10 @@ export default function ExportPage() {
     queryKey: ['usage-summary'],
     queryFn:  () => fetch('/api/usage/summary').then(r => r.json()),
   });
+  const { data: usageLimits, isLoading: limitsLoading } = useQuery<{ plan: string; export_limit: number | null }>({
+    queryKey: ['usage-limits'],
+    queryFn:  () => fetch('/api/usage/limits').then(r => r.json()),
+  });
   const { data: history = [], refetch: refetchHistory } = useQuery<ExportHistory[]>({
     queryKey: ['export-history'],
     queryFn:  () => fetch('/api/export/history').then(r => r.json()),
@@ -64,6 +70,7 @@ export default function ExportPage() {
   const handleDownload = async () => {
     if (isDownloading) return;
     setIsDownloading(true);
+    setDownloadError('');
     const params = selectedIds
       ? new URLSearchParams({ format: selectedFormat, ids: selectedIds.join(',') })
       : new URLSearchParams({
@@ -82,9 +89,24 @@ export default function ExportPage() {
       a.click();
       URL.revokeObjectURL(url);
       refetchHistory();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setDownloadError(data.error ?? 'Failed to export leads. Please try again.');
     }
     setIsDownloading(false);
   };
+
+  // export_limit === 0 means the plan can't export at all — a different state
+  // from "exhausted this month" (export_limit > 0 but used up), which keeps
+  // the normal page and just gets an upgrade nudge appended below.
+  if (!limitsLoading && usageLimits?.export_limit === 0) {
+    return (
+      <DemoPlanBlockedCard
+        heading="Export is not available on the demo plan"
+        description="Upgrade to a paid plan to download your leads as Excel or CSV."
+      />
+    );
+  }
 
   const selectCls = 'h-9 pl-3 pr-8 rounded-lg border border-[#E5E7EB] bg-white text-[13px] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] text-[#0A1628]';
 
@@ -171,6 +193,23 @@ export default function ExportPage() {
               Exports used: <strong className="text-[#0A1628]">{usageSummary?.export_count ?? 0}</strong> this month
             </div>
           </div>
+
+          {downloadError && (
+            <div className="flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+              <p className="text-[13px] text-red-600 font-medium">
+                {downloadError}
+                {usageLimits?.plan === 'demo' && ' — upgrade to continue exporting.'}
+              </p>
+              {usageLimits?.plan === 'demo' && (
+                <a
+                  href="mailto:support@oscfinder.com"
+                  className="shrink-0 h-8 px-3 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[12px] font-bold flex items-center justify-center transition-colors"
+                >
+                  Contact Us
+                </a>
+              )}
+            </div>
+          )}
 
           <button
             onClick={handleDownload}

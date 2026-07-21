@@ -1073,3 +1073,58 @@ silently returned no LGAs at all for FCT specifically (a mismatched object
 key, not an error). Fixed by switching this page to import the shared
 `NIGERIAN_STATES` list instead of keeping its own, which also fixes the
 `POPULAR_STATES` quick-pick pill for FCT.
+
+## 50. Demo plan restrictions failed silently, and no expiry warning existed anywhere
+
+**Reported:** demo accounts hitting a plan restriction (e.g. export, which
+the demo plan's `plan_limits` row has at `export_limit: 0`) got a correct
+403 from the API but no UI feedback at all — a silent failure. Separately,
+nothing anywhere told a demo user how many days were left before
+`companies.demo_expires_at`.
+
+**Fix — shared components, not per-page copies:**
+- `app/_components/DemoPlanBlockedCard.tsx` — new. Shown instead of a
+  feature's entire normal UI when that feature's plan limit is `0` (not
+  "used up this month," genuinely not on the plan) — icon, heading,
+  description, and a "Contact Us to Upgrade" button (`mailto:support@oscfinder.com`).
+- `app/_components/DemoExpiryBanner.tsx` — new. Takes `is_demo`/`demo_expires_at`
+  and renders nothing for non-demo (or admin, which has no company row at
+  all) sessions. Computes `daysRemaining` via
+  `Math.ceil((expiresAt - now) / 86400000)`: amber "Demo account — N days
+  remaining" above 2 days, red "Demo expiring soon" at ≤2 days, and a
+  distinct red "Your demo has expired" state once past `demo_expires_at`
+  entirely — each with its own CTA (Upgrade / Contact Us).
+- `hooks/useCompanyPlan.ts` — new. Thin wrapper around the existing
+  `GET /api/billing` (reused as-is, not modified — it already returns
+  `company.{is_demo, demo_expires_at, plan_start_date, plan_end_date}`
+  exactly as needed) so the dashboard and usage pages don't duplicate that
+  fetch.
+
+**Wired in:**
+- `app/(dashboard)/export/page.tsx` — `export_limit === 0` (from
+  `/api/usage/limits`, already returning `plan`) now renders
+  `DemoPlanBlockedCard` instead of the export controls entirely.
+  `handleDownload` also now actually reads a non-200 response (previously
+  silently did nothing on a 403) and shows an inline error, with an extra
+  "upgrade to continue exporting" + Contact Us for demo plans specifically.
+- `app/(dashboard)/email/page.tsx` — `email_limit === 0` shows
+  `DemoPlanBlockedCard` (checked before the existing sender-not-verified
+  lock, since a plan that can't send email at all shouldn't first ask
+  someone to go set up a sender). Separately, `NewCampaignModal`'s summary
+  bar now shows an "upgrade to send more" nudge when `email_limit > 0` but
+  this month's quota is used up — a genuinely different state from "not
+  available at all," kept distinct per the request.
+- `app/(dashboard)/scrape/page.tsx` — same `scrape_limit === 0` guard.
+  `handleSearch` previously only checked `data.jobId` and silently ignored
+  a non-200 response entirely (no "limit reached" UI existed here at all
+  before this); it now reads the actual error and shows it inline, with the
+  same demo-specific upgrade nudge.
+- `app/(dashboard)/page.tsx` (dashboard) — `DemoExpiryBanner` rendered right
+  after `GettingStartedChecklist`, before the stat cards.
+- `app/(dashboard)/usage/page.tsx` — same banner at the top, plus a new
+  "Current Plan" card (plan name; demo accounts show expiry date + days
+  remaining, paid accounts show plan start/end dates instead).
+
+Left `checkLimit()`/`lib/usage.ts` and the `plan_limits` table completely
+untouched — every change here is purely how the UI reacts to a response
+that was already correct.

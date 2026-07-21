@@ -6,6 +6,7 @@ import { EmailCampaign, MailTemplate, EmailSender, RequiresAcknowledgment } from
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { cn } from '@/lib/utils';
 import { LockedFeatureCard } from '@/app/_components/LockedFeatureCard';
+import { DemoPlanBlockedCard } from '@/app/_components/DemoPlanBlockedCard';
 import { SendLimitConsentModal } from '@/app/_components/SendLimitConsentModal';
 import { DesignSelector } from '@/app/_components/DesignSelector';
 import { EmailPreviewModal } from '@/app/_components/EmailPreviewModal';
@@ -323,6 +324,23 @@ function NewCampaignModal({
             </div>
           </div>
 
+          {/* Distinct from the "not available at all" card above this modal never
+              reaches — this is "the plan allows it, but this month's quota is
+              used up" */}
+          {emailsLimit !== null && emailsUsed >= emailsLimit && (
+            <div className="flex items-center justify-between gap-3 bg-[#fff3e0] border border-[#ffe0b2] rounded-lg px-4 py-2.5">
+              <p className="text-[12px] text-[#b45309] font-medium">
+                You've used all {emailsLimit} emails for this month. Upgrade to send more.
+              </p>
+              <a
+                href="mailto:support@oscfinder.com"
+                className="shrink-0 h-7 px-3 rounded-lg bg-[#e67e22] hover:bg-[#d35400] text-white text-[11px] font-bold flex items-center justify-center transition-colors"
+              >
+                Contact Us
+              </a>
+            </div>
+          )}
+
           {formError && (
             <p className="text-[12px] text-red-500 font-medium">{formError}</p>
           )}
@@ -534,7 +552,7 @@ export default function EmailPage() {
     queryFn:  () => fetch('/api/usage/summary').then(r => r.json()),
   });
 
-  const { data: usageLimits } = useQuery<{ email_limit: number | null }>({
+  const { data: usageLimits, isLoading: limitsLoading } = useQuery<{ plan: string; email_limit: number | null }>({
     queryKey: ['usage-limits'],
     queryFn:  () => fetch('/api/usage/limits').then(r => r.json()),
   });
@@ -571,8 +589,20 @@ export default function EmailPage() {
     }
   };
 
-  if (senderLoading) {
+  if (senderLoading || limitsLoading) {
     return <div className="text-center py-16 text-[13px] text-[#888888]">Loading...</div>;
+  }
+
+  // Plan can't send campaign email at all — a different state from "sent this
+  // month's quota" (email_limit > 0 but exhausted), which shows up as an
+  // upgrade nudge inside NewCampaignModal's summary bar instead.
+  if (usageLimits?.email_limit === 0) {
+    return (
+      <DemoPlanBlockedCard
+        heading="Email campaigns are not available on the demo plan"
+        description="Upgrade to a paid plan to send outreach campaigns to your leads."
+      />
+    );
   }
 
   if (!sender || sender.status !== 'verified') {
