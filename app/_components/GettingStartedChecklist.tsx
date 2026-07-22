@@ -31,6 +31,7 @@ interface Step {
   doneDescription:  string;
   todoDescription:  string;
   done:             boolean;
+  external?:        boolean;
 }
 
 export function GettingStartedChecklist() {
@@ -105,18 +106,62 @@ export function GettingStartedChecklist() {
   const completedCount = steps.filter(s => s.done).length;
   const allComplete    = completedCount === steps.length;
 
+  // Feedback is a bonus nudge, not a setup step — it never counts toward
+  // completedCount/allComplete/the "N of 5" progress display, and only shows
+  // up once someone has actually used enough of the product (>=3 of 5 real
+  // steps) for asking "how's it going?" to make sense. Hidden entirely
+  // without a configured form URL, same pattern as the Help page video.
+  const feedbackUrl = process.env.NEXT_PUBLIC_FEEDBACK_FORM_URL;
+  const showFeedbackStep = !!feedbackUrl && completedCount >= 3;
+  const feedbackStep: Step | null = showFeedbackStep ? {
+    title:           'Share your feedback',
+    href:            feedbackUrl!,
+    linkLabel:       'Give Feedback →',
+    doneDescription: '',
+    todoDescription: "Tell us what's working and what needs improvement",
+    done:            false, // never auto-completes, by design
+    external:        true,
+  } : null;
+
+  // Used by the expanded (not-yet-all-complete) card below — the 5 real
+  // steps plus the feedback nudge appended at the end when it should show.
+  const visibleSteps = feedbackStep ? [...steps, feedbackStep] : steps;
+
   // All complete: a subtle celebratory bar for this session only, then gone
-  // for good on the next dashboard visit.
+  // for good on the next dashboard visit — but the feedback nudge (if
+  // configured) still renders underneath it, since that step never
+  // "completes" and there's always something to gently ask for.
   if (allComplete) {
-    if (congratsShown) return null;
+    if (congratsShown && !feedbackStep) return null;
 
     sessionStorage.setItem(CONGRATS_KEY, 'true');
     return (
-      <div className="bg-[#dff7ee] rounded-xl border border-[#b2f0d6] px-5 py-3.5 flex items-center gap-2.5">
-        <CheckCircle2 size={17} className="text-[#00A86B] shrink-0" />
-        <p className="text-[13px] font-semibold text-[#0A1628]">
-          You're all set! Your account is fully configured.
-        </p>
+      <div className="space-y-2">
+        {!congratsShown && (
+          <div className="bg-[#dff7ee] rounded-xl border border-[#b2f0d6] px-5 py-3.5 flex items-center gap-2.5">
+            <CheckCircle2 size={17} className="text-[#00A86B] shrink-0" />
+            <p className="text-[13px] font-semibold text-[#0A1628]">
+              You're all set! Your account is fully configured.
+            </p>
+          </div>
+        )}
+        {feedbackStep && (
+          <div className="bg-white rounded-xl border border-[#E5E7EB] px-5 py-3 flex items-start gap-3">
+            <Circle size={18} className="text-[#E5E7EB] shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] text-[#0A1628] font-bold">{feedbackStep.title}</p>
+              <p className="text-[12px] text-[#888888] mt-0.5">{feedbackStep.todoDescription}</p>
+            </div>
+            <a
+              href={feedbackStep.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[12px] font-semibold text-[#0099CC] hover:text-[#006285] transition-colors shrink-0 mt-0.5 whitespace-nowrap"
+            >
+              {feedbackStep.linkLabel}
+            </a>
+          </div>
+        )}
       </div>
     );
   }
@@ -166,12 +211,12 @@ export function GettingStartedChecklist() {
       >
         <div className="overflow-hidden">
           <div className="border-t border-[#f3f4f6] px-5">
-            {steps.map((step, i) => (
+            {visibleSteps.map((step, i) => (
               <div
                 key={step.title}
                 className={cn(
                   'flex items-start gap-3 py-3',
-                  i !== steps.length - 1 && 'border-b border-[#f3f4f6]'
+                  i !== visibleSteps.length - 1 && 'border-b border-[#f3f4f6]'
                 )}
               >
                 {step.done
@@ -189,12 +234,23 @@ export function GettingStartedChecklist() {
                   </p>
                 </div>
                 {!step.done && (
-                  <Link
-                    href={step.href}
-                    className="text-[12px] font-semibold text-[#0099CC] hover:text-[#006285] transition-colors shrink-0 mt-0.5 whitespace-nowrap"
-                  >
-                    {step.linkLabel}
-                  </Link>
+                  step.external ? (
+                    <a
+                      href={step.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[12px] font-semibold text-[#0099CC] hover:text-[#006285] transition-colors shrink-0 mt-0.5 whitespace-nowrap"
+                    >
+                      {step.linkLabel}
+                    </a>
+                  ) : (
+                    <Link
+                      href={step.href}
+                      className="text-[12px] font-semibold text-[#0099CC] hover:text-[#006285] transition-colors shrink-0 mt-0.5 whitespace-nowrap"
+                    >
+                      {step.linkLabel}
+                    </Link>
+                  )
                 )}
               </div>
             ))}

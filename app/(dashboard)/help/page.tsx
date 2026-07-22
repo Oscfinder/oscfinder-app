@@ -159,6 +159,25 @@ export default function HelpPage() {
         ))}
       </div>
 
+      {/* Feedback — hidden entirely when no form URL is configured */}
+      {process.env.NEXT_PUBLIC_FEEDBACK_FORM_URL && (
+        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
+          <p className="text-[14px] font-bold text-[#0A1628]">Share Your Feedback</p>
+          <p className="text-[13px] text-[#1A3A5C] mt-1.5 leading-relaxed">
+            We're always improving OsCFinder. If you have thoughts on what's working,
+            what's not, or what you'd like to see, we'd love to hear from you.
+          </p>
+          <a
+            href={process.env.NEXT_PUBLIC_FEEDBACK_FORM_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center h-9 px-4 mt-3 rounded-lg bg-[#0099CC] hover:bg-[#006285] text-white text-[13px] font-semibold transition-colors"
+          >
+            Give Feedback →
+          </a>
+        </div>
+      )}
+
       {/* Contact support */}
       <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-[#dff2f9] flex items-center justify-center shrink-0">
