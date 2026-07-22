@@ -1128,3 +1128,28 @@ nothing anywhere told a demo user how many days were left before
 Left `checkLimit()`/`lib/usage.ts` and the `plan_limits` table completely
 untouched — every change here is purely how the UI reacts to a response
 that was already correct.
+
+## 51. Deleting a lead that had been part of a campaign threw a 500
+
+**Reported:** deleting a lead used in a past campaign failed with a 500 —
+`campaign_recipients_lead_id_fkey` had no `ON DELETE` behavior.
+
+**Investigation:** the actual live schema had drifted from
+`sql_dump/company_finder_backup.sql` (which predates several migrations and
+doesn't even contain `campaign_recipients`), so checked every migration file
+directly instead of the stale dump. `013_email_smtp_senders.sql` created
+`campaign_recipients.lead_id references leads(id)` with no `on delete`
+clause at all — defaults to `NO ACTION`/`RESTRICT`, blocking the delete
+outright — while `campaign_id` and `company_id` on that same table already
+correctly cascade. Checked every other migration for any other foreign key
+referencing `leads.id`; this was the only one — `email_events` has no
+`lead_id` column at all, it stores the recipient `email` as plain text.
+
+**Fix:** new `supabase/migrations/019_lead_delete_cascade.sql` — drops and
+recreates `campaign_recipients_lead_id_fkey` as `ON DELETE CASCADE`. Accepted
+tradeoff, per explicit instruction: deleting a lead now deletes its send
+history in `campaign_recipients` along with it, rather than keeping the row
+with `lead_id` set to null (which would preserve that row's own
+`email`/`status`/`sent_at` — those don't depend on the lead still existing —
+at the cost of an orphaned recipient row). Cascade was chosen so deleting a
+lead removes every trace of it, including its place in past campaign runs.
