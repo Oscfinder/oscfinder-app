@@ -167,7 +167,7 @@ function PaymentInstructions({ invoice }: { invoice: Invoice }) {
         <CreditCard size={13} />
         Bank Transfer Details
       </div>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[12px]">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[12px]">
         <div>
           <span className="text-[#888888]">Bank: </span>
           <strong className="text-[#0A1628]">Zenith Bank</strong>
@@ -234,7 +234,7 @@ export default function BillingPage() {
       <StatusBanner company={company} />
 
       {/* Plan card + 3 usage bars */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Plan card */}
         <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
           <p className="text-[12px] text-[#888888] font-medium mb-1.5">Current Plan</p>

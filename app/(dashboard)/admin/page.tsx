@@ -176,7 +176,7 @@ function NewCompanyModal({ onClose, onCreated }: { onClose: () => void; onCreate
         </div>
 
         <div className="px-6 py-5 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Company Name *</label>
               <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Anchor Healthcare Ltd" className={inputCls} />
@@ -186,7 +186,7 @@ function NewCompanyModal({ onClose, onCreated }: { onClose: () => void; onCreate
               <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="admin@company.com" className={inputCls} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Contact Name</label>
               <input value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="John Doe" className={inputCls} />
@@ -196,7 +196,7 @@ function NewCompanyModal({ onClose, onCreated }: { onClose: () => void; onCreate
               <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+234 801 234 5678" className={inputCls} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Plan</label>
               <div className="relative">
@@ -336,7 +336,7 @@ function EditCompanyModal({ companyId, onClose, onSaved }: {
                 <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Company Name *</label>
                 <input value={form.name} onChange={e => set('name', e.target.value)} className={inputCls} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Plan</label>
                   <div className="relative">
@@ -353,7 +353,7 @@ function EditCompanyModal({ companyId, onClose, onSaved }: {
                   <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+234 801 234 5678" className={inputCls} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Industry</label>
                   <input value={form.industry} onChange={e => set('industry', e.target.value)} className={inputCls} />
@@ -363,7 +363,7 @@ function EditCompanyModal({ companyId, onClose, onSaved }: {
                   <input value={form.location} onChange={e => set('location', e.target.value)} className={inputCls} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Plan Start Date</label>
                   <input type="date" value={form.plan_start_date} onChange={e => set('plan_start_date', e.target.value)} className={inputCls} />
@@ -468,7 +468,7 @@ function NewInvoiceModal({
               <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Type *</label>
               <div className="relative">
@@ -496,7 +496,7 @@ function NewInvoiceModal({
               <input type="number" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="700000" className={inputCls} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Due Date</label>
               <input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)} className={inputCls} />
@@ -923,7 +923,7 @@ export default function AdminPage() {
       {/* ── Revenue Tab ─────────────────────────────────────────── */}
       {tab === 'revenue' && (
         revenue ? (
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               label="Total Revenue"
               value={revenue.total_revenue_ngn != null

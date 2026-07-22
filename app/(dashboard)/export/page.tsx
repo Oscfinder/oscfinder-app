@@ -164,7 +164,7 @@ export default function ExportPage() {
           </div>
 
           {/* Format picker */}
-          <div className="grid grid-cols-3 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             {FORMAT_OPTIONS.map(f => (
               <div
                 key={f.id}

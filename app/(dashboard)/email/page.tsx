@@ -286,7 +286,7 @@ function NewCampaignModal({
           {/* Recipient filters */}
           <div className="border-t border-[#f3f4f6] pt-4">
             <p className="text-[12px] font-semibold text-[#1A3A5C] mb-2.5">Recipient Filters</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div className="relative">
                 <select value={catFilter} onChange={e => setCatFilter(e.target.value)} className={selectCls}>
                   <option value="">All Categories</option>
@@ -447,7 +447,7 @@ function DetailModal({ campaignId, onClose }: { campaignId: string; onClose: () 
           <div className="py-14 text-center text-[13px] text-[#888888]">Loading...</div>
         ) : (
           <>
-            <div className="grid grid-cols-4 gap-3 px-6 pt-5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-6 pt-5">
               {[
                 { label: 'Recipients', value: c?.total_recipients ?? 0, color: 'text-[#0A1628]' },
                 { label: 'Sent',       value: rc.sent,                  color: 'text-[#006285]' },
@@ -620,7 +620,7 @@ export default function EmailPage() {
     <div className="max-w-screen-xl mx-auto space-y-5">
 
       {/* 4 Stat Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Campaigns Run"  value={completedCount}               sub="completed campaigns"  iconBg="bg-[#dff2f9]" />
         <StatCard label="Total Sent"     value={totalSent.toLocaleString()}   sub="across all campaigns" iconBg="bg-[#dff7ee]" />
         <StatCard label="In Queue"       value={totalQueued.toLocaleString()} sub="awaiting send"        iconBg="bg-[#fff3e0]" />

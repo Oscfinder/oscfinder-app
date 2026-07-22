@@ -1153,3 +1153,48 @@ with `lead_id` set to null (which would preserve that row's own
 `email`/`status`/`sent_at` — those don't depend on the lead still existing —
 at the cost of an orphaned recipient row). Cascade was chosen so deleting a
 lead removes every trace of it, including its place in past campaign runs.
+
+## 52. Dashboard cards and forms didn't stack on mobile — most grids had no responsive breakpoint at all
+
+**Reported:** make sure the dashboard is usable on a phone — vertically stack
+the cards, and check every module for mobile responsiveness.
+
+**Investigation:** the shell itself (`app/_components/Shell.tsx`,
+`Sidebar.tsx`, `Header.tsx`) already handled mobile correctly (off-canvas
+drawer below Tailwind's `md` breakpoint, item 6) — so that wasn't the gap.
+Grepping every dashboard page for `grid-cols-` found the actual problem: with
+one exception (`app/(dashboard)/admin/companies/[id]/page.tsx`, already
+`grid-cols-2 sm:grid-cols-4`), every stat-card/summary-card grid in the app
+was a bare `grid grid-cols-2/3/4` with no responsive prefix at all — on a
+phone-width screen these forced 2–4 cramped columns into ~360px instead of
+stacking to one column. Tables were already fine (all wrapped in
+`overflow-x-auto`, the correct pattern), so this was scoped to card grids and
+a couple of fixed-width form rows.
+
+**Fix — same pattern applied everywhere, mirroring the one correct example above:**
+- Stat/summary card grids changed from bare `grid-cols-N` to
+  `grid-cols-1 sm:grid-cols-2 lg:grid-cols-N` (or `sm:grid-cols-N` for
+  3-column grids) in: `app/(dashboard)/page.tsx`, `email/page.tsx` (3
+  occurrences: recipient-filter grid, campaign-detail stat grid, top-level
+  stat cards), `billing/page.tsx` (bank-transfer detail grid, plan+usage
+  grid), `usage/page.tsx` (plan-detail grid, 3 usage cards),
+  `admin/page.tsx` (8 modal field-pair grids across New/Edit Company and New
+  Invoice modals, plus the revenue-tab stat grid), `admin/demos/page.tsx`
+  (summary stat cards, active-demos grid), `scrape/page.tsx` (industry/state
+  field pair), `export/page.tsx` (format picker).
+- Two fixed `gridTemplateColumns` two-column layouts (`app/(dashboard)/page.tsx`'s
+  chart+activity split, `scrape/page.tsx`'s form+usage split) now stack to a
+  single column below `lg` via `grid-cols-1 lg:[grid-template-columns:...]`,
+  only splitting into their original ratio on larger screens.
+- `app/onboarding/industry/page.tsx`'s industry-picker grid (`grid-cols-3`,
+  too cramped for 2-up tap targets on a phone) changed to
+  `grid-cols-2 sm:grid-cols-3`.
+- `app/(dashboard)/templates/page.tsx`'s template-form title+tag row was a
+  fixed `flex` row with a hardcoded `w-[150px]` tag select — changed to
+  `flex-col sm:flex-row` with the tag select `w-full sm:w-[150px]`, so it
+  stacks instead of squeezing on narrow screens.
+- Left untouched: every table's `overflow-x-auto` wrapper (already correct),
+  and modal dialogs' `w-full max-w-[Npx]` sizing (already caps width without
+  forcing overflow on narrow viewports).
+
+Verified with `npx tsc --noEmit` after all edits — no type errors introduced.

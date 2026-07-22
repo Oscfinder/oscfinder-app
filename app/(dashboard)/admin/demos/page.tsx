@@ -304,7 +304,7 @@ export default function DemosPage() {
       </div>
 
       {/* Summary stat cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Active Demos"  value={active.length}    sub="currently live"        iconBg="bg-[#dff7ee]" />
         <StatCard label="Expiring Soon" value={expiring.length}  sub="within 2 days"         iconBg="bg-[#fff3e0]" />
         <StatCard label="Converted"     value={converted.length} sub="became paying clients"  iconBg="bg-[#dff2f9]" />
@@ -321,7 +321,7 @@ export default function DemosPage() {
           <p className="text-[13px] text-[#888888] mt-2">Register your first prospect demo to get started.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {demos
             .filter(d => !d.demo_converted)
             .sort((a, b) => a.days_remaining - b.days_remaining)

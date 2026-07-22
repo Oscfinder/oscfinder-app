@@ -172,7 +172,7 @@ function TemplateFormModal({ initial, onSave, onClose }: {
         onClose={onClose}
       />
       <div className="px-6 py-4 space-y-4 max-h-[65vh] overflow-y-auto">
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex-1">
             <label className="block text-[11px] font-semibold text-[#888888] uppercase tracking-[0.8px] mb-1">
               Template Title <span className="text-red-400">*</span>
@@ -181,7 +181,7 @@ function TemplateFormModal({ initial, onSave, onClose }: {
               className={cn(inputCls(errors.title), 'h-10')} />
             {errors.title && <p className="text-[12px] text-red-500 mt-1">{errors.title}</p>}
           </div>
-          <div className="w-[150px]">
+          <div className="w-full sm:w-[150px]">
             <label className="block text-[11px] font-semibold text-[#888888] uppercase tracking-[0.8px] mb-1">Tag</label>
             <select value={form.tag} onChange={set('tag')} className={cn(inputCls(), 'h-10 cursor-pointer appearance-none')}>
               {ALL_TAGS.map(t => <option key={t} value={t}>{t}</option>)}

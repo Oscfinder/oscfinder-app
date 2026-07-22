@@ -113,7 +113,7 @@ export default function DashboardPage() {
       />
 
       {/* 4 Stat Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map(c => (
           <div key={c.label} className="bg-white rounded-xl p-5 border border-[#E5E7EB]">
             <div className={`w-10 h-10 rounded-[10px] ${c.iconBg} float-right`} />
@@ -125,7 +125,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Chart 2fr + Activity 1fr */}
-      <div className="grid gap-5" style={{ gridTemplateColumns: '2fr 1fr' }}>
+      <div className="grid gap-5 grid-cols-1 lg:[grid-template-columns:2fr_1fr]">
 
         {/* Lead Growth Chart */}
         <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">

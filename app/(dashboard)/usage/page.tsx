@@ -86,7 +86,7 @@ export default function UsagePage() {
               {company.plan}
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {company.is_demo ? (
               <>
                 <div>
@@ -119,7 +119,7 @@ export default function UsagePage() {
       )}
 
       {/* 3 Usage Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <UsageCard
           icon="🔍" label="Scrape Searches"
           used={summary?.scrape_count ?? 0} limit={limits?.scrape_limit ?? null}

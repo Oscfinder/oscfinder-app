@@ -181,7 +181,7 @@ export default function ScrapePage() {
 
   return (
     <div className="max-w-screen-xl mx-auto">
-      <div className="grid gap-5" style={{ gridTemplateColumns: '1.1fr 1fr' }}>
+      <div className="grid gap-5 grid-cols-1 lg:[grid-template-columns:1.1fr_1fr]">
 
         {/* Left column: form + usage card */}
         <div className="space-y-4">
@@ -193,7 +193,7 @@ export default function ScrapePage() {
               <p className="text-[12px] text-[#888888] mt-0.5">Fill in the fields below to start a scrape</p>
             </div>
             <div className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <SelectField
                   label="Industry / Category *"
                   icon={Briefcase}
