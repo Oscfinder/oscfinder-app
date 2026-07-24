@@ -13,11 +13,11 @@ export async function POST(req: NextRequest) {
   if (user.role !== 'admin') {
     const accountError = await requireActiveAccount(user.company_id!);
     if (accountError) return accountError;
-  }
 
-  const allowed = await checkLimit(user.company_id!, 'google_search');
-  if (!allowed)
-    return NextResponse.json({ error: 'Scrape limit reached for this month' }, { status: 403 });
+    const allowed = await checkLimit(user.company_id!, 'google_search');
+    if (!allowed)
+      return NextResponse.json({ error: 'Scrape limit reached for this month' }, { status: 403 });
+  }
 
   const { category, location } = await req.json();
 
