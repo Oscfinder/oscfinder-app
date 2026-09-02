@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth, requireActiveAccount } from '@/lib/auth';
+import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 import { checkLimit, logUsage } from '@/lib/usage';
 import { decrypt } from '@/lib/crypto';
 import { getSender, getSentToday, getRemainingCeiling, hasAcknowledgmentForToday, incrementDailyUsage } from '@/lib/senders';
@@ -25,11 +25,15 @@ export async function POST(req: NextRequest) {
     if (accountError) return accountError;
   }
 
-  const sender = await getSender(user.company_id!);
+  const companyId = await getEffectiveCompanyId(user);
+  if (!companyId)
+    return NextResponse.json({ error: 'No company associated with this account' }, { status: 403 });
+
+  const sender = await getSender(companyId);
   if (!sender || sender.status !== 'verified' || !sender.smtp_password)
     return NextResponse.json({ error: 'No verified sending mailbox configured' }, { status: 403 });
 
-  const allowed = await checkLimit(user.company_id!, 'email_sent');
+  const allowed = await checkLimit(companyId, 'email_sent');
   if (!allowed)
     return NextResponse.json({ error: 'Email limit reached for this month' }, { status: 403 });
 
@@ -94,17 +98,14 @@ export async function POST(req: NextRequest) {
   }
 
   await incrementDailyUsage(sender.id);
-  await logUsage(user.company_id!, 'email_sent', recipientCount);
+  await logUsage(companyId, 'email_sent', recipientCount);
 
   if (leadId) {
-    let query = supabaseAdmin
+    const query = supabaseAdmin
       .from('leads')
       .update({ mail_sent: true, status: 'contacted' })
-      .eq('id', leadId);
-
-    if (user.role !== 'admin') {
-      query = query.eq('company_id', user.company_id);
-    }
+      .eq('id', leadId)
+      .eq('company_id', companyId);
 
     await query;
   }

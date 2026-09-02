@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, X, Mail } from 'lucide-react';
+import { ArrowLeft, Plus, X, Mail, Eye } from 'lucide-react';
 import { AppUser, Company } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -104,6 +104,23 @@ export default function CompanyDetailPage() {
   const [toast, setToast] = useState('');
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<Record<string, string>>({});
+  const [viewingAs, setViewingAs] = useState(false);
+
+  const viewAsCompany = async (name: string) => {
+    setViewingAs(true);
+    try {
+      const res = await fetch('/api/admin/impersonate', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ company_id: companyId, company_name: name }),
+      });
+      if (!res.ok) { setViewingAs(false); return; }
+      router.push('/');
+      router.refresh();
+    } catch {
+      setViewingAs(false);
+    }
+  };
 
   const { data, isLoading } = useQuery<{ company: Company; users: AppUser[] }>({
     queryKey: ['admin-company-detail', companyId],
@@ -194,6 +211,14 @@ export default function CompanyDetailPage() {
             <span className={cn('text-[11px] font-bold px-2.5 py-0.5 rounded-full capitalize', STATUS_BADGE[company.status])}>
               {company.status}
             </span>
+            <button
+              onClick={() => viewAsCompany(company.name)}
+              disabled={viewingAs}
+              title="See exactly what this company's users see"
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-[#0099CC] hover:bg-[#006285] text-white text-[12px] font-semibold disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              <Eye size={13} /> {viewingAs ? 'Loading…' : 'View as this Company'}
+            </button>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-5 pt-5 border-t border-[#f3f4f6]">

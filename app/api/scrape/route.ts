@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { supabaseAdmin }                                            from '@/lib/supabase-server';
-import { requireAuth, requireActiveAccount }                        from '@/lib/auth';
+import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 import { checkLimit, logUsage }                                     from '@/lib/usage';
 import { getCompanies, getPlaceDetails, parseAddressComponents }    from '@/services/googlePlaces';
 import { scrapeContactData, calculateLeadScore }                    from '@/services/scraper';
@@ -19,6 +19,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Scrape limit reached for this month' }, { status: 403 });
   }
 
+  const companyId = await getEffectiveCompanyId(user);
+  if (!companyId)
+    return NextResponse.json({ error: 'No company associated with this account' }, { status: 403 });
+
   const { category, location } = await req.json();
 
   if (!category || !location)
@@ -26,18 +30,18 @@ export async function POST(req: NextRequest) {
 
   const { data: job, error: jobError } = await supabaseAdmin
     .from('scrape_jobs')
-    .insert({ category, location, status: 'running', company_id: user.company_id })
+    .insert({ category, location, status: 'running', company_id: companyId })
     .select()
     .single();
 
   if (jobError) return NextResponse.json({ error: jobError.message }, { status: 500 });
 
-  await logUsage(user.company_id!, 'google_search');
+  await logUsage(companyId, 'google_search');
 
   // `after()` keeps the serverless invocation alive until the pipeline
   // finishes, instead of letting the platform freeze/kill it once the
   // response below is sent (which would silently strand jobs at "running").
-  after(() => runPipeline(job.id, category, location, user.company_id!));
+  after(() => runPipeline(job.id, category, location, companyId));
 
   return NextResponse.json({ jobId: job.id });
 }

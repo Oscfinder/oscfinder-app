@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, getEffectiveCompanyId } from '@/lib/auth';
 import { getSentToday } from '@/lib/senders';
 
 // ── POST /api/senders/acknowledge-limit ───────────────────────────
@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
   if (senderError) return NextResponse.json({ error: senderError.message }, { status: 500 });
   if (!sender) return NextResponse.json({ error: 'Sender not found' }, { status: 404 });
 
-  if (user.role !== 'admin' && sender.company_id !== user.company_id)
+  const companyId = await getEffectiveCompanyId(user);
+  if (sender.company_id !== companyId)
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const sentAtTime = await getSentToday(sender.id);

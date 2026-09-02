@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth, requireActiveAccount } from '@/lib/auth';
+import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 import { getSender, getRemainingCeiling } from '@/lib/senders';
 import { getRecipientCounts } from '@/lib/campaignRecipients';
 import { queueCampaignSend } from '@/app/api/email/campaigns/route';
@@ -14,14 +14,13 @@ export async function GET(
   const { user, error } = await requireAuth();
   if (error) return error;
 
-  let campaignQuery = supabaseAdmin
+  const companyId = await getEffectiveCompanyId(user);
+
+  const campaignQuery = supabaseAdmin
     .from('email_campaigns')
     .select('*, template:email_templates(title, subject, tag)')
-    .eq('id', id);
-
-  if (user.role !== 'admin') {
-    campaignQuery = campaignQuery.eq('company_id', user.company_id);
-  }
+    .eq('id', id)
+    .eq('company_id', companyId);
 
   const { data: campaign, error: campaignError } = await campaignQuery.single();
 
@@ -39,8 +38,8 @@ export async function GET(
   const recipientCounts = counts.get(id) ?? { queued: 0, sent: 0, failed: 0 };
 
   let remainingCeiling: number | null = null;
-  if (user.role !== 'admin') {
-    const sender = await getSender((campaign as any).company_id);
+  if (companyId) {
+    const sender = await getSender(companyId);
     if (sender) remainingCeiling = await getRemainingCeiling(sender);
   }
 
@@ -73,6 +72,8 @@ export async function PATCH(
     if (accountError) return accountError;
   }
 
+  const companyId = await getEffectiveCompanyId(user);
+
   const body = await req.json();
   const { name, template_id, filters = {}, send_now = false, design_id } = body;
 
@@ -88,7 +89,7 @@ export async function PATCH(
         ...(design_id ? { design_id } : {}),
       })
       .eq('id', id)
-      .eq('company_id', user.company_id!)
+      .eq('company_id', companyId)
       .eq('status', 'draft')
       .select()
       .single();
@@ -101,7 +102,7 @@ export async function PATCH(
     return NextResponse.json({ campaign });
   }
 
-  return queueCampaignSend(user, {
+  return queueCampaignSend(companyId, {
     name: name.trim(),
     template_id,
     filters,
@@ -120,15 +121,14 @@ export async function DELETE(
   const { user, error } = await requireAuth();
   if (error) return error;
 
-  let query = supabaseAdmin
+  const companyId = await getEffectiveCompanyId(user);
+
+  const query = supabaseAdmin
     .from('email_campaigns')
     .delete()
     .eq('id', id)
-    .eq('status', 'draft');
-
-  if (user.role !== 'admin') {
-    query = query.eq('company_id', user.company_id);
-  }
+    .eq('status', 'draft')
+    .eq('company_id', companyId);
 
   const { error: deleteError } = await query;
   if (deleteError)

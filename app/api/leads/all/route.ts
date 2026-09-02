@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth, requireActiveAccount } from '@/lib/auth';
+import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   const { user, error } = await requireAuth();
@@ -10,6 +10,8 @@ export async function GET(req: NextRequest) {
     const accountError = await requireActiveAccount(user.company_id!);
     if (accountError) return accountError;
   }
+
+  const companyId = await getEffectiveCompanyId(user);
 
   const sp         = req.nextUrl.searchParams;
   const status     = sp.get('status')     ?? '';
@@ -28,12 +30,8 @@ export async function GET(req: NextRequest) {
   let query = supabaseAdmin
     .from('leads')
     .select('*', pageParam ? { count: 'exact' } : {})
+    .eq('company_id', companyId)
     .order('created_at', { ascending: false });
-
-  // Scope to company — admin sees all
-  if (user.role !== 'admin') {
-    query = query.eq('company_id', user.company_id);
-  }
 
   if (status)    query = query.eq('status', status);
   if (state)     query = query.eq('state', state);
@@ -70,16 +68,14 @@ export async function DELETE(req: NextRequest) {
     if (accountError) return accountError;
   }
 
+  const companyId = await getEffectiveCompanyId(user);
+
   const { ids } = await req.json() as { ids: string[] };
   if (!Array.isArray(ids) || ids.length === 0)
     return NextResponse.json({ error: 'ids array required' }, { status: 400 });
 
-  let query = supabaseAdmin.from('leads').delete().in('id', ids);
-
   // Prevent deleting another company's leads
-  if (user.role !== 'admin') {
-    query = query.eq('company_id', user.company_id);
-  }
+  const query = supabaseAdmin.from('leads').delete().in('id', ids).eq('company_id', companyId);
 
   const { error: dbError } = await query;
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });

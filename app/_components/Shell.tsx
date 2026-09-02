@@ -2,18 +2,23 @@
 import { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { ImpersonationBanner } from './ImpersonationBanner';
 import { cn } from '@/lib/utils';
+
+const BANNER_HEIGHT = 40;
 
 export function Shell({
   children,
   isAdmin   = false,
   userName  = '',
   userRole  = '',
+  impersonating = null,
 }: {
   children:  React.ReactNode;
   isAdmin?:  boolean;
   userName?: string;
   userRole?: string;
+  impersonating?: { company_id: string; company_name: string } | null;
 }) {
   const [collapsed, setCollapsed]   = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -26,8 +31,11 @@ export function Shell({
     setMobileOpen(v => !v);
   };
 
+  const topOffset = impersonating ? BANNER_HEIGHT : 0;
+
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
+      {impersonating && <ImpersonationBanner companyName={impersonating.company_name} />}
       <Sidebar
         collapsed={collapsed}
         mobileOpen={mobileOpen}
@@ -35,13 +43,15 @@ export function Shell({
         isAdmin={isAdmin}
         userName={userName}
         userRole={userRole}
+        topOffset={topOffset}
       />
-      <Header collapsed={collapsed} onToggleNav={toggleNav} />
+      <Header collapsed={collapsed} onToggleNav={toggleNav} topOffset={topOffset} />
       <main
         className={cn(
-          'pt-[64px] min-h-screen transition-all duration-300 ml-0',
+          'min-h-screen transition-all duration-300 ml-0',
           collapsed ? 'md:ml-[68px]' : 'md:ml-[240px]'
         )}
+        style={{ paddingTop: 64 + topOffset }}
       >
         <div className="p-4 md:p-6">{children}</div>
       </main>

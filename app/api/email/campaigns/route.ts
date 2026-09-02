@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth, requireActiveAccount, SessionUser } from '@/lib/auth';
+import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 import { checkLimit } from '@/lib/usage';
 import { getSender, getSentToday, getRemainingCeiling, hasAcknowledgmentForToday } from '@/lib/senders';
 import { getRecipientCounts } from '@/lib/campaignRecipients';
@@ -15,14 +15,13 @@ export async function GET() {
   const { user, error } = await requireAuth();
   if (error) return error;
 
-  let query = supabaseAdmin
+  const companyId = await getEffectiveCompanyId(user);
+
+  const query = supabaseAdmin
     .from('email_campaigns')
     .select('*, template:email_templates(title, subject, tag)')
+    .eq('company_id', companyId)
     .order('created_at', { ascending: false });
-
-  if (user.role !== 'admin') {
-    query = query.eq('company_id', user.company_id);
-  }
 
   const { data, error: dbError } = await query;
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });
@@ -30,13 +29,9 @@ export async function GET() {
   const campaigns = (data ?? []) as any[];
   const counts = await getRecipientCounts(campaigns.map(c => c.id));
 
-  // Admin views span every company — computing resumes_tomorrow correctly there would
-  // mean one sender lookup per distinct company. Admin isn't the one composing/sending
-  // campaigns, so this is skipped for admin requests rather than added; recipient
-  // counts (keyed by campaign id, not company) are unaffected either way.
   let remainingCeiling: number | null = null;
-  if (user.role !== 'admin' && user.company_id) {
-    const sender = await getSender(user.company_id);
+  if (companyId) {
+    const sender = await getSender(companyId);
     if (sender) remainingCeiling = await getRemainingCeiling(sender);
   }
 
@@ -63,6 +58,8 @@ export async function POST(req: NextRequest) {
     if (accountError) return accountError;
   }
 
+  const companyId = await getEffectiveCompanyId(user);
+
   const body = await req.json();
   const { name, template_id, filters = {}, send_now = false, design_id } = body;
 
@@ -74,7 +71,7 @@ export async function POST(req: NextRequest) {
     const { data: campaign, error: insertError } = await supabaseAdmin
       .from('email_campaigns')
       .insert({
-        company_id:  user.company_id,
+        company_id:  companyId,
         template_id: template_id ?? null,
         name:        name.trim(),
         status:      'draft',
@@ -90,15 +87,17 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Send Now (queues for the campaign worker — see app/api/campaigns/process) ──
-  return queueCampaignSend(user, { name: name.trim(), template_id, filters, design_id });
+  return queueCampaignSend(companyId, { name: name.trim(), template_id, filters, design_id });
 }
 
 // Shared by POST (new campaign) and PATCH /api/email/campaigns/[id] (sending an
 // existing draft) — everything from loading the template through enqueuing
 // campaign_recipients is identical either way; the only difference is whether a new
 // email_campaigns row is inserted or an existing draft row is updated in place.
+// `companyId` is the effective company (impersonation-aware) resolved by the caller —
+// this is the scope the campaign is sent under, admin's own or an impersonated one.
 export async function queueCampaignSend(
-  user: SessionUser,
+  companyId: string | null,
   opts: {
     name: string;
     template_id: string | null;
@@ -109,6 +108,9 @@ export async function queueCampaignSend(
 ): Promise<NextResponse> {
   const { name, template_id, filters, existingCampaignId, design_id } = opts;
 
+  if (!companyId)
+    return NextResponse.json({ error: 'No company associated with this account' }, { status: 403 });
+
   if (!template_id)
     return NextResponse.json({ error: 'Select a template before sending' }, { status: 400 });
 
@@ -117,19 +119,19 @@ export async function queueCampaignSend(
     .from('email_templates')
     .select('title, subject, body')
     .eq('id', template_id)
-    .eq('company_id', user.company_id!)
+    .eq('company_id', companyId)
     .single();
 
   if (tplError || !template)
     return NextResponse.json({ error: 'Template not found' }, { status: 404 });
 
   // 2. Sender must be verified before any campaign can be queued
-  const sender = await getSender(user.company_id!);
+  const sender = await getSender(companyId);
   if (!sender || sender.status !== 'verified')
     return NextResponse.json({ error: 'No verified sending mailbox configured' }, { status: 403 });
 
   // 3. Check plan's monthly email limit
-  const allowed = await checkLimit(user.company_id!, 'email_sent');
+  const allowed = await checkLimit(companyId, 'email_sent');
   if (!allowed)
     return NextResponse.json({ error: 'Email limit reached for this month' }, { status: 403 });
 
@@ -138,7 +140,7 @@ export async function queueCampaignSend(
   let leadQuery = supabaseAdmin
     .from('leads')
     .select('id, name, emails, category, state, local_govt, website')
-    .eq('company_id', user.company_id!);
+    .eq('company_id', companyId);
 
   if (filters.category) leadQuery = leadQuery.eq('category', filters.category);
   if (filters.state)    leadQuery = leadQuery.eq('state',    filters.state);
@@ -198,14 +200,14 @@ export async function queueCampaignSend(
           ...(design_id ? { design_id } : {}),
         })
         .eq('id', existingCampaignId)
-        .eq('company_id', user.company_id!)
+        .eq('company_id', companyId)
         .eq('status', 'draft') // can't re-send something that isn't (still) a draft
         .select()
         .single()
     : supabaseAdmin
         .from('email_campaigns')
         .insert({
-          company_id:       user.company_id,
+          company_id:       companyId,
           template_id,
           name,
           status:           'queued',
@@ -230,7 +232,7 @@ export async function queueCampaignSend(
     .insert(
       recipients.map(lead => ({
         campaign_id: campaign.id,
-        company_id:  user.company_id,
+        company_id:  companyId,
         lead_id:     lead.id,
         email:       lead.emails[0],
         status:      'queued',

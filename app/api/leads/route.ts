@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth, requireActiveAccount } from '@/lib/auth';
+import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   const { user, error } = await requireAuth();
@@ -11,18 +11,17 @@ export async function GET(req: NextRequest) {
     if (accountError) return accountError;
   }
 
+  const companyId = await getEffectiveCompanyId(user);
+
   const jobId = req.nextUrl.searchParams.get('jobId');
   if (!jobId) return NextResponse.json({ error: 'jobId required' }, { status: 400 });
 
-  let query = supabaseAdmin
+  const query = supabaseAdmin
     .from('leads')
     .select('*')
     .eq('job_id', jobId)
+    .eq('company_id', companyId)
     .order('created_at', { ascending: false });
-
-  if (user.role !== 'admin') {
-    query = query.eq('company_id', user.company_id);
-  }
 
   const { data, error: dbError } = await query;
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });
@@ -38,6 +37,8 @@ export async function POST(req: NextRequest) {
     if (accountError) return accountError;
   }
 
+  const companyId = await getEffectiveCompanyId(user);
+
   const body = await req.json();
   const { name, address, website, emails, phones, category, state, local_govt, city, area } = body;
 
@@ -47,13 +48,12 @@ export async function POST(req: NextRequest) {
   // Duplicate guard: same company name (case-insensitive) already on file for this
   // company — a lead is identified by its name alone, regardless of address/state/
   // email, so no two leads for the same company may share a name.
-  let dupeQuery = supabaseAdmin
+  const dupeQuery = supabaseAdmin
     .from('leads')
     .select('id')
     .ilike('name', name.trim())
+    .eq('company_id', companyId)
     .limit(1);
-
-  if (user.role !== 'admin') dupeQuery = dupeQuery.eq('company_id', user.company_id);
 
   const { data: dupes, error: dupeError } = await dupeQuery;
   if (dupeError) return NextResponse.json({ error: dupeError.message }, { status: 500 });
@@ -64,13 +64,12 @@ export async function POST(req: NextRequest) {
   // lead — an email address should only ever belong to one lead.
   const cleanEmails = Array.isArray(emails) ? emails.filter(Boolean) : [];
   if (cleanEmails.length > 0) {
-    let emailDupeQuery = supabaseAdmin
+    const emailDupeQuery = supabaseAdmin
       .from('leads')
       .select('id')
       .overlaps('emails', cleanEmails)
+      .eq('company_id', companyId)
       .limit(1);
-
-    if (user.role !== 'admin') emailDupeQuery = emailDupeQuery.eq('company_id', user.company_id);
 
     const { data: emailDupes, error: emailDupeError } = await emailDupeQuery;
     if (emailDupeError) return NextResponse.json({ error: emailDupeError.message }, { status: 500 });
@@ -81,7 +80,7 @@ export async function POST(req: NextRequest) {
   const { data, error: dbError } = await supabaseAdmin
     .from('leads')
     .insert({
-      company_id:  user.company_id,
+      company_id:  companyId,
       place_id:    `manual-${crypto.randomUUID()}`,
       name,
       address:     address ?? '',

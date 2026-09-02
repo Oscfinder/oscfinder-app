@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { AlertTriangle } from 'lucide-react';
-import { getSession, getCompanyStatus } from '@/lib/auth';
+import { getSession, getCompanyStatus, getImpersonation } from '@/lib/auth';
 import { Shell } from '@/app/_components/Shell';
 import { SuspendedSignOutLink } from '@/app/_components/SuspendedSignOutLink';
 
@@ -46,11 +46,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
     }
   }
 
+  const impersonation = session.role === 'admin' ? await getImpersonation() : null;
+
   return (
     <Shell
       isAdmin={session.role === 'admin'}
       userName={session.full_name ?? session.email}
       userRole={session.role === 'admin' ? 'Super Admin' : 'Company Admin'}
+      impersonating={impersonation}
     >
       {children}
     </Shell>

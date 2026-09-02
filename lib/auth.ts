@@ -1,5 +1,14 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { createSupabaseServerClient, supabaseAdmin } from './supabase-server';
+
+// Non-httpOnly so the client-side ImpersonationBanner can read it without a
+// round trip — the actual authorization gate is server-side (getEffectiveCompanyId
+// only ever honors this cookie for a session whose *authenticated* role is admin),
+// so a client user forging this cookie has no effect.
+export const IMPERSONATION_COOKIE = 'oscfinder_impersonate';
+
+export type Impersonation = { company_id: string; company_name: string };
 
 export type SessionUser = {
   id:                  string;
@@ -61,7 +70,49 @@ export async function requireAuth(): Promise<
   if (!user) {
     return { user: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
+
+  // Defense in depth: every client-facing route scopes its queries by company_id,
+  // so a user with none would otherwise silently query `company_id = null` and get
+  // back either nothing or (worse, if a future route forgets to scope) everything.
+  // Admin is exempt — admin-only routes (/api/admin/*) span companies by design,
+  // and admin's own company_id (set once, for their own use of client-facing pages)
+  // is unrelated to that.
+  if (!user.company_id && user.role !== 'admin') {
+    return {
+      user:  null,
+      error: NextResponse.json({ error: 'No company associated with this account' }, { status: 403 }),
+    };
+  }
+
   return { user, error: null };
+}
+
+// Reads the impersonation cookie (set by POST /api/admin/impersonate) without
+// checking role — callers decide whether it applies. Returns null if absent,
+// malformed, or missing a company_id.
+export async function getImpersonation(): Promise<Impersonation | null> {
+  const store = (await cookies()).get(IMPERSONATION_COOKIE)?.value;
+  if (!store) return null;
+  try {
+    const parsed = JSON.parse(store);
+    if (typeof parsed?.company_id === 'string' && parsed.company_id) {
+      return { company_id: parsed.company_id, company_name: parsed.company_name ?? '' };
+    }
+  } catch {
+    // malformed cookie — ignore
+  }
+  return null;
+}
+
+// The company_id every client-facing route should actually scope its queries and
+// writes to. For every non-admin user this is just their own company_id. For admin
+// it's their own company_id UNLESS they're impersonating (see /api/admin/impersonate),
+// in which case it's the target company's id — this is what makes "View as Company"
+// transparent to the 19 client-facing routes without each one special-casing admin.
+export async function getEffectiveCompanyId(user: SessionUser): Promise<string | null> {
+  if (user.role !== 'admin') return user.company_id;
+  const impersonation = await getImpersonation();
+  return impersonation?.company_id ?? user.company_id;
 }
 
 // Use this in admin-only API routes.

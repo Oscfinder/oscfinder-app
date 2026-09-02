@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth, requireActiveAccount } from '@/lib/auth';
+import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 
 const EDITABLE_FIELDS = ['name', 'address', 'website', 'emails', 'phones', 'category', 'state', 'local_govt'] as const;
 
@@ -16,6 +16,8 @@ export async function PATCH(
     if (accountError) return accountError;
   }
 
+  const companyId = await getEffectiveCompanyId(user);
+
   const { id } = await params;
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
@@ -30,14 +32,13 @@ export async function PATCH(
   // Same name-uniqueness guard as creating a lead — renaming into a collision with
   // another lead isn't allowed either.
   if (typeof fields.name === 'string' && fields.name.trim()) {
-    let dupeQuery = supabaseAdmin
+    const dupeQuery = supabaseAdmin
       .from('leads')
       .select('id')
       .ilike('name', fields.name.trim())
       .neq('id', id)
+      .eq('company_id', companyId)
       .limit(1);
-
-    if (user.role !== 'admin') dupeQuery = dupeQuery.eq('company_id', user.company_id);
 
     const { data: dupes, error: dupeError } = await dupeQuery;
     if (dupeError) return NextResponse.json({ error: dupeError.message }, { status: 500 });
@@ -50,14 +51,13 @@ export async function PATCH(
   if (Array.isArray(fields.emails)) {
     const cleanEmails = (fields.emails as unknown[]).filter(Boolean);
     if (cleanEmails.length > 0) {
-      let emailDupeQuery = supabaseAdmin
+      const emailDupeQuery = supabaseAdmin
         .from('leads')
         .select('id')
         .overlaps('emails', cleanEmails)
         .neq('id', id)
+        .eq('company_id', companyId)
         .limit(1);
-
-      if (user.role !== 'admin') emailDupeQuery = emailDupeQuery.eq('company_id', user.company_id);
 
       const { data: emailDupes, error: emailDupeError } = await emailDupeQuery;
       if (emailDupeError) return NextResponse.json({ error: emailDupeError.message }, { status: 500 });
@@ -66,12 +66,8 @@ export async function PATCH(
     }
   }
 
-  let query = supabaseAdmin.from('leads').update(fields).eq('id', id);
-
   // Prevent updating another company's lead
-  if (user.role !== 'admin') {
-    query = query.eq('company_id', user.company_id);
-  }
+  const query = supabaseAdmin.from('leads').update(fields).eq('id', id).eq('company_id', companyId);
 
   const { data, error: dbError } = await query.select().single();
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });
@@ -90,15 +86,13 @@ export async function DELETE(
     if (accountError) return accountError;
   }
 
+  const companyId = await getEffectiveCompanyId(user);
+
   const { id } = await params;
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-  let query = supabaseAdmin.from('leads').delete().eq('id', id);
-
   // Prevent deleting another company's lead
-  if (user.role !== 'admin') {
-    query = query.eq('company_id', user.company_id);
-  }
+  const query = supabaseAdmin.from('leads').delete().eq('id', id).eq('company_id', companyId);
 
   const { error: dbError } = await query;
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });

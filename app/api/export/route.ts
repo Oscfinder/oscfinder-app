@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth, requireActiveAccount } from '@/lib/auth';
+import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 import { checkLimit, logUsage } from '@/lib/usage';
 import * as XLSX from 'xlsx';
 
@@ -13,7 +13,11 @@ export async function GET(req: NextRequest) {
     if (accountError) return accountError;
   }
 
-  const allowed = await checkLimit(user.company_id!, 'export');
+  const companyId = await getEffectiveCompanyId(user);
+  if (!companyId)
+    return NextResponse.json({ error: 'No company associated with this account' }, { status: 403 });
+
+  const allowed = await checkLimit(companyId, 'export');
   if (!allowed)
     return NextResponse.json({ error: 'Export limit reached for this month' }, { status: 403 });
 
@@ -26,11 +30,7 @@ export async function GET(req: NextRequest) {
   const idsParam = sp.get('ids')      ?? '';
   const ids      = idsParam ? idsParam.split(',').filter(Boolean) : [];
 
-  let query = supabaseAdmin.from('leads').select('*');
-
-  if (user.role !== 'admin') {
-    query = query.eq('company_id', user.company_id);
-  }
+  let query = supabaseAdmin.from('leads').select('*').eq('company_id', companyId);
 
   // An explicit id list (from the Leads table's "Export Selected") takes precedence
   // over the filter dropdowns — exports exactly those rows, nothing else.
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
     'Lead Score':   l.lead_score ?? 0,
   }));
 
-  await logUsage(user.company_id!, 'export', 1, {
+  await logUsage(companyId, 'export', 1, {
     format,
     ...(ids.length > 0 ? { selected_ids: ids.length } : { category, state, status }),
     lead_count: rows.length,

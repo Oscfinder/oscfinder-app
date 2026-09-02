@@ -19,9 +19,11 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
 export function Header({
   collapsed,
   onToggleNav,
+  topOffset = 0,
 }: {
   collapsed: boolean;
   onToggleNav: () => void;
+  topOffset?: number;
 }) {
   const router   = useRouter();
   const pathname = usePathname();
@@ -31,9 +33,10 @@ export function Header({
   return (
     <header
       className={cn(
-        'fixed top-0 left-0 right-0 h-[64px] bg-white border-b border-[#E5E7EB] flex items-center justify-between px-4 md:px-6 z-30 transition-all duration-300',
+        'fixed left-0 right-0 h-[64px] bg-white border-b border-[#E5E7EB] flex items-center justify-between px-4 md:px-6 z-30 transition-all duration-300',
         collapsed ? 'md:left-[68px]' : 'md:left-[240px]'
       )}
+      style={{ top: topOffset }}
     >
       <div className="flex items-center gap-2 md:gap-4 min-w-0">
         <button

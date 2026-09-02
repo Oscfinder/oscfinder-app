@@ -1,19 +1,18 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, getEffectiveCompanyId } from '@/lib/auth';
 
 export async function GET() {
   const { user, error } = await requireAuth();
   if (error) return error;
 
-  let query = supabaseAdmin
+  const companyId = await getEffectiveCompanyId(user);
+
+  const query = supabaseAdmin
     .from('scrape_jobs')
     .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId)
     .in('status', ['pending', 'running']);
-
-  if (user.role !== 'admin') {
-    query = query.eq('company_id', user.company_id);
-  }
 
   const { count, error: dbError } = await query;
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });

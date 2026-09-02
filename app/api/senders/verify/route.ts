@@ -1,18 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth, requireActiveAccount } from '@/lib/auth';
+import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 import { decrypt } from '@/lib/crypto';
 import { createNotification } from '@/lib/notifications';
 
 // ── POST /api/senders/verify ──────────────────────────────────────
-// Body: { company_id? } — company_id only honored for admin callers.
-export async function POST(req: NextRequest) {
+// Verifies the caller's own company sender — or, if admin is impersonating,
+// the impersonated company's sender.
+export async function POST() {
   const { user, error } = await requireAuth();
   if (error) return error;
 
-  const body = await req.json().catch(() => ({}));
-  const companyId = user.role === 'admin' ? (body.company_id ?? null) : user.company_id;
+  const companyId = await getEffectiveCompanyId(user);
 
   if (!companyId)
     return NextResponse.json({ error: 'company_id is required' }, { status: 400 });

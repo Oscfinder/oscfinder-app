@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { requireAuth, requireActiveAccount } from '@/lib/auth';
+import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 import { encrypt } from '@/lib/crypto';
 import { getSentToday } from '@/lib/senders';
 
@@ -10,15 +10,13 @@ const SELECT_FIELDS =
 // smtp_password intentionally excluded — never returned by this route.
 
 // ── GET /api/senders ──────────────────────────────────────────────
-// Non-admin: returns the caller's own company sender.
-// Admin: pass ?company_id=<id> to view any company's sender.
-export async function GET(req: NextRequest) {
+// Returns the caller's own company sender — or, if admin is impersonating
+// (see /api/admin/impersonate), the impersonated company's sender.
+export async function GET() {
   const { user, error } = await requireAuth();
   if (error) return error;
 
-  const companyId = user.role === 'admin'
-    ? req.nextUrl.searchParams.get('company_id')
-    : user.company_id;
+  const companyId = await getEffectiveCompanyId(user);
 
   if (!companyId)
     return NextResponse.json({ error: 'company_id is required' }, { status: 400 });
@@ -38,9 +36,10 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ...sender, sent_today: sentToday });
 }
 
-// ── POST /api/senders ─────────────────────────────────────────────
-// Body: { display_name, email, smtp_host, smtp_port, smtp_username, smtp_password, reply_to, company_id? }
-// company_id in the body is only honored for admin callers.
+// ── POST /api/senders ──────────────────────────────────────────────
+// Body: { display_name, email, smtp_host, smtp_port, smtp_username, smtp_password, reply_to }
+// Writes to the caller's own company — or, if admin is impersonating, the
+// impersonated company.
 export async function POST(req: NextRequest) {
   const { user, error } = await requireAuth();
   if (error) return error;
@@ -51,7 +50,7 @@ export async function POST(req: NextRequest) {
     smtp_username, smtp_password, reply_to,
   } = body;
 
-  const companyId = user.role === 'admin' ? (body.company_id ?? null) : user.company_id;
+  const companyId = await getEffectiveCompanyId(user);
 
   if (!companyId)
     return NextResponse.json({ error: 'company_id is required' }, { status: 400 });

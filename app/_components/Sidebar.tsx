@@ -91,6 +91,7 @@ export function Sidebar({
   isAdmin,
   userName,
   userRole,
+  topOffset = 0,
 }: {
   collapsed: boolean;
   mobileOpen?: boolean;
@@ -98,6 +99,7 @@ export function Sidebar({
   isAdmin?: boolean;
   userName?: string;
   userRole?: string;
+  topOffset?: number;
 }) {
   const router   = useRouter();
   const pathname = usePathname();
@@ -135,8 +137,9 @@ export function Sidebar({
         />
       )}
       <aside
+        style={{ top: topOffset, height: `calc(100vh - ${topOffset}px)` }}
         className={cn(
-          'fixed top-0 left-0 h-screen bg-[#0A1628] flex flex-col z-50 w-[240px]',
+          'fixed left-0 bg-[#0A1628] flex flex-col z-50 w-[240px]',
           'transition-transform duration-300 md:transition-[width] md:duration-300',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
           'md:translate-x-0',
