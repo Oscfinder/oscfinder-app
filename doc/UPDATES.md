@@ -335,3 +335,100 @@
   read the docs; live test calls from them 401 exactly like hitting the real API
   would.
 - No existing route logic changed.
+
+---
+
+## 2026-07-19
+
+### Lead score filter
+- `app/(dashboard)/leads/page.tsx`: added a Score dropdown filter (High 80–100 /
+  Medium 60–79 / Low 0–59) alongside the existing State/LGA/Category/Status filters.
+- `app/api/leads/all/route.ts`: added `min_score`/`max_score` query params, applied as
+  `.gte('lead_score', ...)` / `.lte('lead_score', ...)`.
+
+### Middleware — forgot/reset-password redirect bugs
+- Split the old single "public paths" list into `guestOnlyPaths` (redirects away if
+  already logged in — now just `/login`) and `authOnlyPaths` (exempt from the
+  not-logged-in → `/login` redirect — `/login`, `/forgot-password`, `/reset-password`).
+- Root cause: `/reset-password` establishes a real session the moment
+  `verifyOtp`/`exchangeCodeForSession` runs, so the very next request was being treated
+  as "already logged in" and bounced to `/dashboard` before the password form ever
+  rendered — the user ended up logged in with no password ever set. Same bug hit
+  `/forgot-password` when clicking "Request a New Link" from an incomplete recovery
+  session.
+
+---
+
+## 2026-07-21 / 2026-07-22
+
+### Password reset/set flow overhaul
+- `lib/provisionUser.ts`: added shared `buildRecoveryLink(email)` — builds
+  `${NEXT_PUBLIC_APP_URL}/reset-password?token_hash=...&type=recovery` directly from
+  `generateLink()`'s `hashed_token`, deliberately never emailing
+  `linkData.properties.action_link` (Supabase's own `/auth/v1/verify` endpoint, which
+  gets consumed by email-security link scanners like Outlook Safe Links before a human
+  ever clicks, and falls back to redirecting to the bare Site URL on failure — logging
+  a visitor straight into the dashboard with no password set).
+- Added `sendPasswordResetEmail(email)` for self-serve forgot-password, mirroring the
+  admin-provisioned `sendPasswordSetEmail` — never throws, so the caller can always
+  respond success/failure identically regardless of whether the email is registered
+  (anti-enumeration).
+- New `app/api/auth/forgot-password/route.ts` — public POST, calls
+  `sendPasswordResetEmail(...).catch(() => {})`, always returns `{ success: true }`.
+- `app/(auth)/forgot-password/page.tsx`: now calls the new API route instead of
+  `supabase.auth.resetPasswordForEmail()` directly (that path emailed Supabase's own
+  `/verify` link, bypassing all of the above).
+- `app/(auth)/reset-password/page.tsx`: rewritten with a `verifying / ready / error`
+  state machine handling all three link shapes (`?code=` via `exchangeCodeForSession`,
+  `?token_hash=&type=` via `verifyOtp`, legacy `#access_token` hash fragment); a
+  `useRef` guard prevents React 18 strict-mode's double-invoked effect from consuming
+  the single-use token twice; redirects to `/login` after a successful password update.
+
+---
+
+## 2026-07-22
+
+### Feedback form link
+- New env var `NEXT_PUBLIC_FEEDBACK_FORM_URL` — both elements below are hidden
+  entirely when unset.
+- `app/_components/GettingStartedChecklist.tsx`: added a 6th "Share your feedback"
+  step — only appears once ≥3 of the 5 real steps are done, never auto-completes,
+  doesn't count toward the "N of 5" progress or block the all-complete celebration,
+  opens in a new tab; still shows underneath the congrats banner even after it's been
+  dismissed for the session.
+- `app/(dashboard)/help/page.tsx`: added a feedback section between the accordion and
+  the contact-support card.
+
+### `campaign_recipients` lead-delete FK cascade
+- `campaign_recipients.lead_id` (added in `013_email_smtp_senders.sql`) had no
+  `ON DELETE` behavior, defaulting to `RESTRICT` — deleting a lead that had ever been
+  part of a campaign threw a 500. Confirmed by grepping every migration that it's the
+  only FK referencing `leads.id` (`email_events` stores `email` as plain text, no
+  `lead_id` column).
+- Migration `supabase/migrations/020_lead_delete_cascade.sql` (originally numbered 019,
+  renamed after discovering `019_email_designs.sql` already existed under that number)
+  — alters the FK to `ON DELETE CASCADE`.
+
+---
+
+## 2026-07-24
+
+### New lead categories
+- `app/data/newCompaniesData.ts`: added **Agriculture & Agribusiness** and **Baby &
+  Childcare Products** to `COMPANY_CATEGORIES` (feeds the real Generate Leads category
+  dropdown), plus matching dummy entries in the (currently unused)
+  `DUMMY_SCRAPED_COMPANIES` fixture list.
+
+---
+
+## 2026-09-02
+
+### Admin scrape-limit bug fix
+- `app/api/scrape/route.ts`: `requireActiveAccount()` was already correctly skipped
+  for `role: 'admin'` (no `company_id`), but `checkLimit(user.company_id!, ...)` ran
+  unconditionally right after — with `company_id` null, the plan/usage lookup found
+  nothing, defaulted the limit to `0`, and `0 < 0` evaluated `false`, falsely blocking
+  every admin scrape with "Scrape limit reached for this month". Moved the limit check
+  inside the same `role !== 'admin'` branch, matching how `/api/usage/limits` already
+  treats admin as unlimited. No change to the check order or behavior for
+  `company_admin`/`client` accounts.
