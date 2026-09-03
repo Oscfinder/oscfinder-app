@@ -432,3 +432,26 @@
   inside the same `role !== 'admin'` branch, matching how `/api/usage/limits` already
   treats admin as unlimited. No change to the check order or behavior for
   `company_admin`/`client` accounts.
+
+---
+
+## 2026-09-03
+
+### Admin account given a real company (View as Company follow-up)
+- The earlier "View as Company" impersonation feature (`e1a2c78`, another session)
+  left the true Super Admin account (`role: 'admin'`, `company_id: null`) unable to
+  use `/leads`, `/dashboard`, `/templates`, etc. at all without impersonating some
+  other company first — `getEffectiveCompanyId()` had nowhere to fall back to.
+- Created a real company row **"OsCFinder Admin"** (`plan: enterprise`,
+  `status: active`) and set the admin user's `users.company_id` to it (also set
+  `onboarding_complete: true`). `getEffectiveCompanyId()` already falls back to
+  `user.company_id` when no impersonation cookie is set (`lib/auth.ts:112-116`), so no
+  code change was needed — this was a one-time data fix, run directly against
+  Supabase.
+- Impersonation ("View as this Company", on each company's detail page at
+  `app/(dashboard)/admin/companies/[id]/page.tsx`) remains solely for viewing *other*
+  companies' data; the admin's own dashboard now uses its own company like any
+  other account.
+- Note: this company also appears in **Admin → Companies** alongside real client
+  companies — that list has no filter excluding it (not addressed, flagged for
+  awareness only).
