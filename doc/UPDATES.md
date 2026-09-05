@@ -511,3 +511,20 @@
   object, or landing-page pricing section hardcodes these numbers (this app has no
   marketing/pricing page — it's the authenticated dashboard only). So the DB update
   above is the complete fix; no code changes were needed or made.
+
+### Plan limits — scrape/email/export numbers revised
+- Confirmed with the user before changing anything, since 1 `starter` and 3
+  `enterprise` companies are actively metered against these values today. Updated
+  `plan_limits.scrape_limit`/`email_limit`/`export_limit`:
+  - `demo`: 3/10/0 → **5/10/2**
+  - `starter`: 30/1000/20 → **50/1000/20**
+  - `business`: 80/3000/50 → **120/3000/NULL** (exports now unlimited)
+  - `enterprise`: 200/5000/NULL → **300/10000/NULL**
+  `max_leads` and `setup_fee`/`renewal_fee` untouched (already correct / not part of
+  this change).
+- Re-confirmed `plan_limits` has no `max_users`/`max_templates` columns and never has —
+  nothing in the app enforces per-plan user or template caps, so those two columns
+  from the task's proposed table don't apply to this schema.
+- No code changes: `lib/usage.ts`'s `checkLimit()` already reads these limits live
+  from `plan_limits` on every scrape/email/export action — no hardcoded constants
+  exist anywhere in the codebase (re-confirmed by grep).
