@@ -6,6 +6,8 @@ import { ArrowLeft, Plus, X, Mail, Eye } from 'lucide-react';
 import { AppUser, Company } from '@/types';
 import { cn } from '@/lib/utils';
 
+//
+
 const PLAN_BADGE: Record<string, string> = {
   starter:    'bg-[#e8edf4] text-[#1A3A5C]',
   business:   'bg-[#dff2f9] text-[#006285]',
