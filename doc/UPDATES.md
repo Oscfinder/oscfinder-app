@@ -489,3 +489,25 @@
   (same reasoning as the 2026-07-14 entry above re: stale domain names in these same
   files).
 - Typecheck (`tsc --noEmit`) and `npm run build` both clean.
+- **Correction (later same day):** the DB rename described above had actually *not*
+  happened — `plan_limits.plan` still had a row literally named `growth` (confirmed
+  live). Since the code above already treated `business` as a valid `companies.plan`
+  value, and `companies.plan` has a foreign key to `plan_limits.plan`, any new
+  Business-plan company created after this point would have failed with an FK
+  violation. Fixed by actually renaming the row: `UPDATE plan_limits SET plan =
+  'business' WHERE plan = 'growth'` (safe — confirmed no `companies` row referenced
+  `growth` at the time). See the leads-storage-limits entry below, run in the same
+  pass.
+
+### Leads storage limits per plan
+- Updated `plan_limits.max_leads`: `starter` `NULL → 600`, `business` `NULL → 3000`
+  (previously unset/unlimited for both, not `500`/`1500` as assumed going in — checked
+  live before changing anything). `enterprise` left `NULL` (unlimited), `demo`
+  untouched (`20`).
+- Checked the codebase for anywhere `max_leads` is read or enforced, or for hardcoded
+  `500`/`1500` lead caps: `max_leads` exists only as a field on the `PlanLimits` type
+  (`types/index.ts`) — no API route currently checks it against a company's actual
+  lead count, and no UI (settings, billing, usage) displays it. No `.env` var, config
+  object, or landing-page pricing section hardcodes these numbers (this app has no
+  marketing/pricing page — it's the authenticated dashboard only). So the DB update
+  above is the complete fix; no code changes were needed or made.
