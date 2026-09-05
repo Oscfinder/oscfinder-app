@@ -2,7 +2,7 @@
 
 > Multi-tenant B2B Lead Generation SaaS  
 > Built with Next.js 15 App Router, Supabase, Tailwind CSS  
-> Last updated: 2026-07-05 — reflects current production codebase
+> Last updated: 2026-09-05 — reflects current production codebase
 
 ---
 
@@ -229,7 +229,7 @@ CREATE TABLE companies (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name             text NOT NULL,
   email            text NOT NULL,
-  plan             text NOT NULL DEFAULT 'starter',  -- starter | growth | enterprise | demo
+  plan             text NOT NULL DEFAULT 'starter',  -- starter | business | enterprise | demo
   status           text NOT NULL DEFAULT 'inactive', -- inactive | active | suspended | expired
   is_demo          boolean NOT NULL DEFAULT false,
   setup_fee_paid   boolean NOT NULL DEFAULT false,
@@ -333,7 +333,7 @@ CREATE TABLE usage_logs (
 
 -- Plan limits
 CREATE TABLE plan_limits (
-  plan          text PRIMARY KEY,  -- starter | growth | enterprise | demo
+  plan          text PRIMARY KEY,  -- starter | business | enterprise | demo
   scrape_limit  int NOT NULL,
   email_limit   int NOT NULL,
   export_limit  int              -- NULL = unlimited

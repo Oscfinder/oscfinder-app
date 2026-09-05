@@ -455,3 +455,37 @@
 - Note: this company also appears in **Admin → Companies** alongside real client
   companies — that list has no filter excluding it (not addressed, flagged for
   awareness only).
+
+---
+
+## 2026-09-05
+
+### Plan rename — "growth" → "business"
+- The `plan_limits.plan` value (and `companies.plan`) was renamed from `growth` to
+  `business` directly in the database (not part of this change). Renamed every code
+  reference to match: `types/index.ts`'s `CompanyPlan` union; the `PLAN_BADGE`/
+  `PLAN_FEE` maps and plan `<select>` options in `app/(dashboard)/admin/page.tsx`,
+  `admin/companies/[id]/page.tsx`, and `admin/demos/page.tsx`; the `validPlans` array
+  and error message in `app/api/admin/companies/route.ts`; the fallback plan in
+  `app/(dashboard)/usage/page.tsx`; and the onboarding `PLAN_LIMITS` map in
+  `app/onboarding/page.tsx`. Also updated the generated `public/swagger.json` plan
+  enums (all 3 occurrences).
+- Admin's plan-selection dropdowns now read **"Business ⭐"** to mark it as the
+  recommended/most-popular tier (same limits/pricing, label only).
+- Left untouched, correctly: "Lead Growth" (the dashboard chart title/function name)
+  and the Help page's "lead growth over the last 7 days" description — both are
+  plain English, not the plan name.
+- `doc/ARCHITECTURE.md` (the actively-maintained current-state reference) and
+  `doc/TESTING_PHASE.md` (an actionable test runbook) had their `growth` plan
+  references corrected directly. `doc/TECHNICAL_ARCHITECTURE.md` is an intentionally
+  frozen original design spec with its own "known inaccuracies — do not follow these"
+  callout at the top (already the established pattern for that file); rather than
+  rewrite its body, added one more bullet there noting the rename. Left
+  `doc/SCALING_DOC.md`, `doc/0_ALL_DOC.md`, `doc/1_DATABASE_MIGRATION.md`,
+  `doc/6_NEW_UI.md`, `doc/8_ADMIN_PANEL.md`, `doc/9_Billing_System.md`,
+  `doc/10_CLIENT_ONBOARDING_FLOW.md`, `doc/11_USAGE_ALERTS.md`, and
+  `sql_dump/company_finder_backup.sql` untouched — these are historical
+  changelog/phase-implementation snapshots describing what the code said at the time
+  (same reasoning as the 2026-07-14 entry above re: stale domain names in these same
+  files).
+- Typecheck (`tsc --noEmit`) and `npm run build` both clean.

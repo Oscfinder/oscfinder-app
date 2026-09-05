@@ -73,7 +73,7 @@ Create the client company via the admin panel (Test 8.1) before testing client-s
 1. On `/onboarding`, check:
    - [ ] Step progress bar shows Step 1 active (blue), steps 2–4 grey
    - [ ] Company name appears in the welcome text
-   - [ ] Plan badge shows the correct plan (starter/growth/enterprise)
+   - [ ] Plan badge shows the correct plan (starter/business/enterprise)
    - [ ] Feature list shows the correct limits for that plan
 2. Click "Let's Get Started"
 3. **Expected:** Navigate to `/onboarding/industry`
@@ -241,7 +241,7 @@ Manually set `email_count` to plan limit → try to send → **Expected:** 403
 
 ### 8.1 — Create a new company
 1. Go to `/admin` → Companies tab → click "New Company"
-2. Fill in: Name, Email, Plan (growth), Setup Fee Paid (checked)
+2. Fill in: Name, Email, Plan (business), Setup Fee Paid (checked)
 3. Submit
 4. **Expected:** Company appears in the companies list with status `active`
 5. **Verify in Supabase:**

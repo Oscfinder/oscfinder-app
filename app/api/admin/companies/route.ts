@@ -47,9 +47,9 @@ export async function POST(req: NextRequest) {
   if (!name?.trim() || !email?.trim())
     return NextResponse.json({ error: 'name and email are required' }, { status: 400 });
 
-  const validPlans = ['starter', 'growth', 'enterprise'];
+  const validPlans = ['starter', 'business', 'enterprise'];
   if (!validPlans.includes(plan))
-    return NextResponse.json({ error: 'Invalid plan. Must be starter, growth, or enterprise' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid plan. Must be starter, business, or enterprise' }, { status: 400 });
 
   const startDate = plan_start_date ?? new Date().toISOString();
   const endDate   = plan_end_date   ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();

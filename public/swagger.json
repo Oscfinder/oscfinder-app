@@ -185,7 +185,7 @@
           "email": { "type": "string" },
           "industry": { "type": "string", "nullable": true },
           "location": { "type": "string", "nullable": true },
-          "plan": { "type": "string", "enum": ["starter", "growth", "enterprise", "demo"] },
+          "plan": { "type": "string", "enum": ["starter", "business", "enterprise", "demo"] },
           "status": { "type": "string", "enum": ["inactive", "active", "suspended", "churned"] },
           "setup_fee_paid": { "type": "boolean" },
           "renewal_fee_paid": { "type": "boolean" },
@@ -830,7 +830,7 @@
                 "properties": {
                   "name": { "type": "string" },
                   "email": { "type": "string" },
-                  "plan": { "type": "string", "enum": ["starter", "growth", "enterprise"], "default": "starter" },
+                  "plan": { "type": "string", "enum": ["starter", "business", "enterprise"], "default": "starter" },
                   "password": { "type": "string" },
                   "full_name": { "type": "string" },
                   "industry": { "type": "string" },
@@ -878,7 +878,7 @@
                 "description": "Any subset of these fields; unlisted fields are ignored",
                 "properties": {
                   "status": { "type": "string", "enum": ["inactive", "active", "suspended", "churned"] },
-                  "plan": { "type": "string", "enum": ["starter", "growth", "enterprise", "demo"] },
+                  "plan": { "type": "string", "enum": ["starter", "business", "enterprise", "demo"] },
                   "setup_fee_paid": { "type": "boolean" },
                   "renewal_fee_paid": { "type": "boolean" },
                   "plan_end_date": { "type": "string", "format": "date-time" },

@@ -44,7 +44,7 @@ export interface ScrapeJob {
 }
 
 // ── Company (Tenant) ─────────────────────────────────────────────
-export type CompanyPlan   = 'starter' | 'growth' | 'enterprise' | 'demo';
+export type CompanyPlan   = 'starter' | 'business' | 'enterprise' | 'demo';
 export type CompanyStatus = 'inactive' | 'active' | 'suspended' | 'churned';
 
 export interface Company {

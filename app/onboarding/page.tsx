@@ -6,7 +6,7 @@ import { StepProgress } from './StepProgress';
 
 const PLAN_LIMITS: Record<string, { scrapes: number; emails: number; exports: number | string }> = {
   starter:    { scrapes: 30,  emails: 1000,  exports: 20          },
-  growth:     { scrapes: 80,  emails: 10000, exports: 50          },
+  business:   { scrapes: 80,  emails: 10000, exports: 50          },
   enterprise: { scrapes: 200, emails: 50000, exports: 'Unlimited' },
   executive:  { scrapes: 200, emails: 50000, exports: 'Unlimited' },
   demo:       { scrapes: 3,   emails: 10,    exports: 0           },

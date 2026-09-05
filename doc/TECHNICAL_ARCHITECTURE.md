@@ -8,6 +8,7 @@
 > - Section 3 (users table SQL) shows `password_hash` — Supabase Auth manages passwords. The actual `public.users` table links to `auth.users(id)` as its primary key, never stores passwords, and has `onboarding_complete boolean NOT NULL DEFAULT false`.  
 > - Shell.tsx does NOT fetch user data client-side. It receives `isAdmin`, `userName`, `userRole` as props from `(dashboard)/layout.tsx`. See `ARCHITECTURE.md` and `2_AUTH.md`.  
 > - Middleware public paths include `/login`, `/forgot-password`, and `/reset-password` (not just `/login`).  
+> - The "Growth" plan tier throughout this document (including the plan_limits seed data and pricing tables below) was renamed to **"Business"** in the database and codebase on 2026-09-05 — same limits/pricing, name only. See `ARCHITECTURE.md` for the current plan names.  
 > - The DB schema SQL is the original design document; the migration was applied via `1_DATABASE_MIGRATION.md`.
 
 

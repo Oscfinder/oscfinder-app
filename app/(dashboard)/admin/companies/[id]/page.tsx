@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 
 const PLAN_BADGE: Record<string, string> = {
   starter:    'bg-[#e8edf4] text-[#1A3A5C]',
-  growth:     'bg-[#dff2f9] text-[#006285]',
+  business:   'bg-[#dff2f9] text-[#006285]',
   enterprise: 'bg-[#dff7ee] text-[#00A86B]',
 };
 

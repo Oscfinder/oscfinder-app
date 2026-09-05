@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 // ── Helpers ───────────────────────────────────────────────────────
 const PLAN_BADGE: Record<string, string> = {
   starter:    'bg-[#e8edf4] text-[#1A3A5C]',
-  growth:     'bg-[#dff2f9] text-[#006285]',
+  business:   'bg-[#dff2f9] text-[#006285]',
   enterprise: 'bg-[#dff7ee] text-[#00A86B]',
   demo:       'bg-[#fff3e0] text-[#e67e22]',
 };
@@ -33,7 +33,7 @@ const INVOICE_STATUS_BADGE: Record<string, string> = {
 
 const PLAN_FEE: Record<string, Record<string, number>> = {
   starter:    { setup: 700000,  renewal: 300000 },
-  growth:     { setup: 1200000, renewal: 500000 },
+  business:   { setup: 1200000, renewal: 500000 },
   enterprise: { setup: 1700000, renewal: 700000 },
 };
 
@@ -202,7 +202,7 @@ function NewCompanyModal({ onClose, onCreated }: { onClose: () => void; onCreate
               <div className="relative">
                 <select value={form.plan} onChange={e => set('plan', e.target.value)} className={selectCls}>
                   <option value="starter">Starter — ₦700,000</option>
-                  <option value="growth">Growth — ₦1,200,000</option>
+                  <option value="business">Business ⭐ — ₦1,200,000</option>
                   <option value="enterprise">Enterprise — ₦1,700,000</option>
                 </select>
                 <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
@@ -342,7 +342,7 @@ function EditCompanyModal({ companyId, onClose, onSaved }: {
                   <div className="relative">
                     <select value={form.plan} onChange={e => set('plan', e.target.value)} className={selectCls}>
                       <option value="starter">Starter</option>
-                      <option value="growth">Growth</option>
+                      <option value="business">Business ⭐</option>
                       <option value="enterprise">Enterprise</option>
                     </select>
                     <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />

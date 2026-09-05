@@ -63,7 +63,7 @@ export default function UsagePage() {
   });
   const { data: planInfo } = useCompanyPlan();
 
-  const plan   = limits?.plan ?? 'growth';
+  const plan   = limits?.plan ?? 'business';
   const company = planInfo?.company;
 
   const fmtDate = (d: string | null | undefined) =>

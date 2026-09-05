@@ -209,7 +209,7 @@ function DemoCard({ demo, onAction }: {
               className="w-full h-9 pl-3 pr-8 rounded-lg border border-[#E5E7EB] bg-white text-[13px] appearance-none focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] text-[#0A1628]"
             >
               <option value="starter">Starter</option>
-              <option value="growth">Growth</option>
+              <option value="business">Business ⭐</option>
               <option value="enterprise">Enterprise</option>
             </select>
             <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
