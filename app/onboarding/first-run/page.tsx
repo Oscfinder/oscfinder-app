@@ -58,7 +58,10 @@ export default function FirstRunPage() {
 
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        setStartError(d.error ?? 'Failed to start search.');
+        // No Shell/UpgradePlanModal on this route (onboarding uses its own minimal
+        // layout) — fall back to the human-readable `message` for a plan-limit 403
+        // instead of showing the raw 'plan_limit_exceeded' slug.
+        setStartError(d.error === 'plan_limit_exceeded' ? d.message : (d.error ?? 'Failed to start search.'));
         return;
       }
 

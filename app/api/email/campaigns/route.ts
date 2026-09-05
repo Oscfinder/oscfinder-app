@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
-import { checkLimit } from '@/lib/usage';
+import { checkLimit, planLimitExceededResponse } from '@/lib/usage';
 import { getSender, getSentToday, getRemainingCeiling, hasAcknowledgmentForToday } from '@/lib/senders';
 import { getRecipientCounts } from '@/lib/campaignRecipients';
 import { DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
@@ -133,7 +133,7 @@ export async function queueCampaignSend(
   // 3. Check plan's monthly email limit
   const allowed = await checkLimit(companyId, 'email_sent');
   if (!allowed)
-    return NextResponse.json({ error: 'Email limit reached for this month' }, { status: 403 });
+    return planLimitExceededResponse(companyId, 'email_sent');
 
   // 4. Build recipient list — needed up front now, since the soft-limit/ceiling
   // decision below depends on the batch size (N)

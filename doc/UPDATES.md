@@ -528,3 +528,49 @@
 - No code changes: `lib/usage.ts`'s `checkLimit()` already reads these limits live
   from `plan_limits` on every scrape/email/export action — no hardcoded constants
   exist anywhere in the codebase (re-confirmed by grep).
+
+---
+
+## 2026-09-05 (cont'd)
+
+### Upgrade modal on plan-limit 403s
+- New `lib/planLimits.ts` — shared `PLAN_TIERS`/`PLAN_LABELS`/`FEATURE_LABELS` and
+  `nextPlan()` (returns the tier one above a given plan, e.g. `demo` → `starter`).
+- `lib/usage.ts`: new `planLimitExceededResponse(companyId, action)` builds a
+  standardized 403 body — `{ error: 'plan_limit_exceeded', message, feature,
+  current_plan, required_plan }` — so the frontend can reliably detect this exact
+  case instead of string-matching error text. `feature` uses this app's real
+  `checkLimit()` action names (`google_search`/`export`/`email_sent`) rather than
+  invented per-feature slugs, since every plan already allows these actions at
+  different monthly quotas — none of them are a binary on/off feature gate.
+- Swapped into all 4 real plan-limit 403s: `app/api/scrape/route.ts`,
+  `app/api/export/route.ts`, `app/api/send-email/route.ts`,
+  `app/api/email/campaigns/route.ts`. Left untouched (different concern, not a
+  usage-quota gate): "No company associated with this account", "No verified
+  sending mailbox configured", and `requireActiveAccount()`'s
+  suspended/demo-expired/plan-expired 403s.
+- New `app/_components/UpgradePlanModal.tsx` + `lib/upgradeEvent.ts` — a plain
+  `window` `CustomEvent` (`showUpgradeModal()` / `asPlanLimitError()`), not React
+  context, so any page can trigger the modal without prop-drilling or rewriting
+  every `fetch()` call into a shared client wrapper. Mounted once in `Shell.tsx`.
+  CTA links to `/billing` — this app has no `/pricing` page, so that's the real
+  upgrade-relevant destination rather than an invented URL.
+- Wired the 4 frontend call sites that actually hit those routes:
+  `scrape/page.tsx`, `export/page.tsx`, `BulkSendModal.tsx`,
+  `RowActionModals.tsx`'s `MessageModal`, and `email/page.tsx`'s campaign submit —
+  each now shows the modal instead of a raw error string for this specific case.
+  `onboarding/first-run/page.tsx` has no Shell/modal on its route (onboarding uses
+  its own minimal layout), so it falls back to the human-readable `message` field
+  instead of the raw `plan_limit_exceeded` slug.
+- Grepped for any frontend code that string-matched the old ad-hoc error text
+  ("Scrape limit reached...", etc.) before changing it — none found, so nothing
+  regressed.
+- Not done: `plan_limits.max_leads`/would-be `max_users`/`max_templates` caps
+  aren't enforced anywhere in the backend (confirmed — `max_leads` is stored but
+  never checked against a company's actual lead count). Wiring the modal only
+  covers the 3 limits that actually gate anything today (scrapes, emails,
+  exports); adding lead/user/template caps would be new feature work.
+- `tsc --noEmit` and `npm run build` both clean. Not tested interactively in a
+  browser (no browser-automation tool available this session) — verified via code
+  review, response-shape reasoning, and confirmed no regressions to existing error
+  text matching.

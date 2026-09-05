@@ -7,6 +7,7 @@ import { SendLimitConsentModal } from './SendLimitConsentModal';
 import { cn } from '@/lib/utils';
 import { EMAIL_DESIGNS, DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
 import { SUGGESTED_DESIGN_BY_TITLE } from '@/lib/seedTemplateDesigns';
+import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
 
 interface BulkSendModalProps {
   selected: Lead[];
@@ -87,7 +88,13 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
           setError(`${sentIdsRef.current.length} sent — provider ceiling reached for today, resume tomorrow.`);
           break;
         } else if (res.status === 403) {
-          setError(data.error ?? 'Sending stopped');
+          const limit = asPlanLimitError(data);
+          if (limit) {
+            showUpgradeModal(limit);
+            setError(`${sentIdsRef.current.length} sent before the plan limit was reached.`);
+          } else {
+            setError(data.error ?? 'Sending stopped');
+          }
           break;
         }
       } catch {

@@ -5,6 +5,7 @@ import { Lead } from '@/types';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { ChevronDown, X } from 'lucide-react';
 import { DemoPlanBlockedCard } from '@/app/_components/DemoPlanBlockedCard';
+import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
 
 const FORMAT_OPTIONS = [
   { id: 'xlsx', label: 'Excel (.xlsx)', desc: 'Full data with all fields',    locked: false },
@@ -91,7 +92,9 @@ export default function ExportPage() {
       refetchHistory();
     } else {
       const data = await res.json().catch(() => ({}));
-      setDownloadError(data.error ?? 'Failed to export leads. Please try again.');
+      const limit = asPlanLimitError(data);
+      if (limit) { showUpgradeModal(limit); }
+      else       { setDownloadError(data.error ?? 'Failed to export leads. Please try again.'); }
     }
     setIsDownloading(false);
   };

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { supabaseAdmin }                                            from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
-import { checkLimit, logUsage }                                     from '@/lib/usage';
+import { checkLimit, logUsage, planLimitExceededResponse }          from '@/lib/usage';
 import { getCompanies, getPlaceDetails, parseAddressComponents }    from '@/services/googlePlaces';
 import { scrapeContactData, calculateLeadScore }                    from '@/services/scraper';
 import { createNotification }                                       from '@/lib/notifications';
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
     const allowed = await checkLimit(user.company_id!, 'google_search');
     if (!allowed)
-      return NextResponse.json({ error: 'Scrape limit reached for this month' }, { status: 403 });
+      return planLimitExceededResponse(user.company_id!, 'google_search');
   }
 
   const companyId = await getEffectiveCompanyId(user);

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { ImpersonationBanner } from './ImpersonationBanner';
+import { UpgradePlanModal } from './UpgradePlanModal';
 import { cn } from '@/lib/utils';
 
 const BANNER_HEIGHT = 40;
@@ -35,6 +36,7 @@ export function Shell({
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
+      <UpgradePlanModal />
       {impersonating && <ImpersonationBanner companyName={impersonating.company_name} />}
       <Sidebar
         collapsed={collapsed}

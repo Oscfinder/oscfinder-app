@@ -13,6 +13,7 @@ import { EmailPreviewModal } from '@/app/_components/EmailPreviewModal';
 import { DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
 import { SUGGESTED_DESIGN_BY_TITLE } from '@/lib/seedTemplateDesigns';
 import { personalize } from '@/lib/personalize';
+import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
 
 const SAMPLE_LEAD = { name: 'Acme Logistics', category: 'Logistics', state: 'Lagos', website: 'acmelogistics.com' };
 
@@ -135,7 +136,12 @@ function NewCampaignModal({
     setIsSending(false);
 
     if (res.status === 409 && data.requires_acknowledgment) { setPendingAck(data); return; }
-    if (!res.ok) { setFormError(data.error ?? 'Something went wrong'); return; }
+    if (!res.ok) {
+      const limit = asPlanLimitError(data);
+      if (limit) showUpgradeModal(limit);
+      else       setFormError(data.error ?? 'Something went wrong');
+      return;
+    }
 
     if (sendNow && data.deferred > 0) {
       onCreated();

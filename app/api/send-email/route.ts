@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
-import { checkLimit, logUsage } from '@/lib/usage';
+import { checkLimit, logUsage, planLimitExceededResponse } from '@/lib/usage';
 import { decrypt } from '@/lib/crypto';
 import { getSender, getSentToday, getRemainingCeiling, hasAcknowledgmentForToday, incrementDailyUsage } from '@/lib/senders';
 import { buildEmailHtml } from '@/lib/emailHtml';
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   const allowed = await checkLimit(companyId, 'email_sent');
   if (!allowed)
-    return NextResponse.json({ error: 'Email limit reached for this month' }, { status: 403 });
+    return planLimitExceededResponse(companyId, 'email_sent');
 
   // Soft daily_limit / hard technical_ceiling — this route sends synchronously with
   // no queue behind it, so there's no "defer to tomorrow" here: either it sends now

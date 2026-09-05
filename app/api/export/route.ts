@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
-import { checkLimit, logUsage } from '@/lib/usage';
+import { checkLimit, logUsage, planLimitExceededResponse } from '@/lib/usage';
 import * as XLSX from 'xlsx';
 
 export async function GET(req: NextRequest) {
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   const allowed = await checkLimit(companyId, 'export');
   if (!allowed)
-    return NextResponse.json({ error: 'Export limit reached for this month' }, { status: 403 });
+    return planLimitExceededResponse(companyId, 'export');
 
   const sp       = req.nextUrl.searchParams;
   const format   = sp.get('format') ?? 'xlsx';

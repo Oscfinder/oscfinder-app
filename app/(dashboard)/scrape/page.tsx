@@ -10,6 +10,7 @@ import { NIGERIAN_LGAS_BY_STATE } from '@/app/data/nigeriaLgas';
 import { useScrapeJob } from '@/hooks/useScrapeJob';
 import { useLeads } from '@/hooks/useLeads';
 import { useQuery } from '@tanstack/react-query';
+import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
 import { DemoPlanBlockedCard } from '@/app/_components/DemoPlanBlockedCard';
 
 const MAX_RESULTS_OPTIONS = ['50', '100', '200'];
@@ -141,6 +142,8 @@ export default function ScrapePage() {
     });
     const data = await res.json();
     if (!res.ok) {
+      const limit = asPlanLimitError(data);
+      if (limit) { showUpgradeModal(limit); return; }
       setSearchError(data.error ?? 'Failed to start search. Please try again.');
       return;
     }

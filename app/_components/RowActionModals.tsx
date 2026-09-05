@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { NIGERIAN_LGAS_BY_STATE } from '@/app/data/nigeriaLgas';
 import { EMAIL_DESIGNS, DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
+import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
 
 // ─── shared backdrop + shell ───────────────────────────────────────────────
 function Modal({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
@@ -188,7 +189,13 @@ export function MessageModal({ lead, onSent, onClose }: MessageModalProps) {
       const res = await doSend();
       const data = await res.json();
       if (res.status === 409 && data.requires_acknowledgment) { setSending(false); setPendingAck(data); return; }
-      if (!res.ok) { setSendError(data.error ?? 'Failed to send email'); setSending(false); return; }
+      if (!res.ok) {
+        const limit = asPlanLimitError(data);
+        if (limit) showUpgradeModal(limit);
+        else       setSendError(data.error ?? 'Failed to send email');
+        setSending(false);
+        return;
+      }
       setSending(false);
       setDone(true);
       await new Promise(r => setTimeout(r, 700));
