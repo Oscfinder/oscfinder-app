@@ -691,3 +691,32 @@
   score), campaign sending/senders/worker, lead CRUD itself (create/edit/
   delete), admin panel, auth/RLS on other tables, usage tracking.
 - `tsc --noEmit` and `npm run build` both clean.
+
+### Migration run + live verification (same day)
+- User ran `022_lead_contacts.sql` in Supabase. Verified live against the real
+  database with a throwaway test lead (cleaned up after): cascade delete
+  (deleting the lead removed its `lead_contacts` rows), the exact
+  `lead_contacts(count)` PostgREST embed used by the Leads table's Contacts
+  column, and the dedupe-by-normalized-name update path — all confirmed
+  working as written.
+- **Tightened the team-page heuristic after finding real false positives.**
+  Ran `extractTeamPageContacts`'s heading and image-alt-text matchers against
+  3 real company sites (none had an actual `/team` page at the guessed paths,
+  so all fell through to their generic `/about` page). Before the fix, both
+  heuristics misread ordinary marketing copy as people — "Foundation Years",
+  "Ecosystem Growth" (section headings) and "Spark Capital" (a VC firm's name
+  in an unrelated image's `alt` text) all passed the name-shape regex with no
+  job title attached. Fixed by requiring a title-keyword match on the
+  nearby/sibling text before accepting a heading or image-alt candidate at
+  all (a real person listing is almost always name+title together; marketing
+  headings aren't), and requiring both a name line *and* a title line in the
+  card/grid heuristic (previously title-optional there too). Re-ran against
+  the same 3 real sites: 0 false positives. Verified true positives still
+  match with a synthetic page built to mirror a real team-page structure
+  (name in h3 + title in next `<p>`, name in `img[alt]` + title in a sibling
+  `<span>`) — all 3 correctly extracted, the unrelated "Our Mission
+  Statement" heading correctly rejected. `tsc --noEmit` + `npm run build`
+  re-confirmed clean after the change.
+- Google search (Method 2) and Facebook (Method 3, still a stub) were not
+  re-tested live this pass — Method 2 remains best-effort per the spec's own
+  caveat, and Method 3 is unimplemented by design (see above).

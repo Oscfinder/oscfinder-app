@@ -137,9 +137,16 @@ export async function extractTeamPageContacts(
     const name = page(el).text().trim();
     if (!looksLikeName(name)) return;
     const siblingText = page(el).next().text().trim() || page(el).parent().find('p, span').first().text().trim();
+    // Require a title-keyword match to accept the candidate at all — tested
+    // live against real company /about pages (no dedicated /team page) and
+    // without this, generic marketing headings like "Foundation Years" or
+    // "Ecosystem Growth" pass the name-shape regex and get misread as people.
+    // A real person heading is almost always immediately followed by their
+    // job title; a marketing section heading is followed by prose.
+    if (!looksLikeTitle(siblingText)) return;
     found.push({
       name,
-      title: looksLikeTitle(siblingText) ? siblingText : null,
+      title: siblingText,
       email: null, phone: null, linkedin_url: null,
       linkedin_search_url: buildLinkedinSearchUrl(name, companyName),
       source: 'team_page',
@@ -151,9 +158,13 @@ export async function extractTeamPageContacts(
     const alt = (page(el).attr('alt') ?? '').trim();
     if (!looksLikeName(alt)) return;
     const nearby = page(el).parent().text().replace(alt, '').trim();
+    // Same reasoning as heading candidates above — real test run found a VC
+    // firm's name ("Spark Capital") in an unrelated image's alt text passing
+    // the name-shape regex with no title context; require one now.
+    if (!looksLikeTitle(nearby)) return;
     found.push({
       name: alt,
-      title: looksLikeTitle(nearby) ? nearby.slice(0, 60) : null,
+      title: nearby.slice(0, 60),
       email: null, phone: null, linkedin_url: null,
       linkedin_search_url: buildLinkedinSearchUrl(alt, companyName),
       source: 'team_page',
@@ -169,9 +180,12 @@ export async function extractTeamPageContacts(
     const lines = block.text().split('\n').map(l => l.trim()).filter(Boolean);
     const nameLine  = lines.find(l => looksLikeName(l));
     const titleLine = lines.find(l => looksLikeTitle(l));
-    if (nameLine) {
+    // Require both — a container whose class merely contains "team" (e.g. a
+    // "team" CSS utility class unrelated to staff) shouldn't produce a
+    // contact just because some line in it happens to look name-shaped.
+    if (nameLine && titleLine) {
       found.push({
-        name: nameLine, title: titleLine ?? null, email: null, phone: null,
+        name: nameLine, title: titleLine, email: null, phone: null,
         linkedin_url: null, linkedin_search_url: buildLinkedinSearchUrl(nameLine, companyName),
         source: 'team_page',
       });
