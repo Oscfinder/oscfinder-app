@@ -574,3 +574,46 @@
   browser (no browser-automation tool available this session) — verified via code
   review, response-shape reasoning, and confirmed no regressions to existing error
   text matching.
+
+---
+
+## 2026-09-05 (cont'd, again)
+
+### Demo expiry banner — 4 urgency tiers, layout-level, demo_expired wired into the upgrade modal
+- `DemoExpiryBanner` already existed from an earlier session (`fb4a0d5`, 2026-07-21)
+  reading `companies.demo_expires_at`/`is_demo` (correctly per-company, not
+  per-user as this task assumed — a demo trial belongs to the company, not an
+  individual login) via the existing `useCompanyPlan()` hook → `GET /api/billing`.
+  It only had 2 tiers (amber/red) and rendered on just the dashboard home and
+  usage pages, not every page. Rebuilt rather than replaced:
+  - 4 tiers matching the requested table exactly (verified by simulating the exact
+    `Math.ceil` day-math at 14/8/7/4/3/1/0/-1/-5 day offsets): **info** (8–14
+    days, blue, dismissable), **warning** (4–7, amber), **urgent** (1–3, red),
+    **expired** (≤0, red).
+  - Dismissal (info tier only) is sessionStorage, keyed by tier name — so
+    dismissing at the info tier doesn't suppress a later, more urgent tier when
+    the days-remaining count drops.
+  - CTA now links to `/billing` (this app's real plan page — there's no
+    `/pricing` route) for info/warning/urgent; `expired` keeps a `mailto:` to
+    support, matching its "Contact Sales" copy.
+  - Moved from being rendered per-page (`app/(dashboard)/page.tsx` and
+    `app/(dashboard)/usage/page.tsx`, both had their own copy) into `Shell.tsx`
+    once, above `{children}`, so it now shows on every dashboard page as the
+    task asked, not just two of them. Removed the duplicate renders (and now-dead
+    `useCompanyPlan`/`DemoExpiryBanner` imports) from both pages.
+- **Backend "soft lock" (Step 5) already existed** — `requireActiveAccount()` in
+  `lib/auth.ts` already 403s every gated action (scrape/export/send-email/
+  campaigns all call it) once `demo_expires_at` is in the past. Not new; just
+  restyled its response body to match `planLimitExceededResponse()`'s shape
+  (`error: 'demo_expired'`, `message`, `feature: 'account'`, `current_plan:
+  'demo'`, `required_plan: 'starter'`) instead of a bare `{ error: string }`, and
+  extended `lib/upgradeEvent.ts`'s `asPlanLimitError()` to recognize
+  `demo_expired` alongside `plan_limit_exceeded` — so the exact same
+  `UpgradePlanModal` (from the previous entry) now also catches an expired demo
+  on any of those 4 routes, with its own "Your demo has expired" / "Contact
+  Sales" copy branch instead of the "upgrade for a higher limit" one.
+- Confirmed live: every demo company (`is_demo = true`) already has
+  `demo_expires_at` populated — 0 rows missing it — so no backfill was needed.
+- `tsc --noEmit` and `npm run build` both clean. Tier-boundary math verified by
+  script (see above); full interactive login-as-demo-user click-through not done
+  (no browser-automation tool this session).

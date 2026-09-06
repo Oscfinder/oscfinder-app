@@ -7,6 +7,7 @@
 export const UPGRADE_EVENT = 'oscf:plan-limit-exceeded';
 
 export interface PlanLimitDetail {
+  error:         'plan_limit_exceeded' | 'demo_expired';
   message:       string;
   feature:       string;
   current_plan:  string;
@@ -18,13 +19,11 @@ export function showUpgradeModal(detail: PlanLimitDetail) {
 }
 
 // Returns the detail to pass to showUpgradeModal() if `data` is a
-// plan_limit_exceeded response body, otherwise null — so callers can do
-// `const limit = asPlanLimitError(data); if (limit) { showUpgradeModal(limit); return; }`
+// plan_limit_exceeded OR demo_expired response body, otherwise null — so callers
+// can do `const limit = asPlanLimitError(data); if (limit) { showUpgradeModal(limit); return; }`
 export function asPlanLimitError(data: unknown): PlanLimitDetail | null {
-  if (
-    data && typeof data === 'object' &&
-    (data as Record<string, unknown>).error === 'plan_limit_exceeded'
-  ) {
+  const err = data && typeof data === 'object' ? (data as Record<string, unknown>).error : null;
+  if (err === 'plan_limit_exceeded' || err === 'demo_expired') {
     return data as PlanLimitDetail;
   }
   return null;

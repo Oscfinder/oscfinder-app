@@ -1,7 +1,6 @@
 'use client';
 import { useQuery } from '@tanstack/react-query';
 import { UsageLog } from '@/types';
-import { DemoExpiryBanner } from '@/app/_components/DemoExpiryBanner';
 import { useCompanyPlan } from '@/hooks/useCompanyPlan';
 
 type Summary = { scrape_count: number; email_count: number; export_count: number };
@@ -71,11 +70,6 @@ export default function UsagePage() {
 
   return (
     <div className="max-w-screen-xl mx-auto space-y-6">
-
-      <DemoExpiryBanner
-        isDemo={company?.is_demo}
-        demoExpiresAt={company?.demo_expires_at}
-      />
 
       {/* Current Plan */}
       {company && (

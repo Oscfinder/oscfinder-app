@@ -4,6 +4,8 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { ImpersonationBanner } from './ImpersonationBanner';
 import { UpgradePlanModal } from './UpgradePlanModal';
+import { DemoExpiryBanner } from './DemoExpiryBanner';
+import { useCompanyPlan } from '@/hooks/useCompanyPlan';
 import { cn } from '@/lib/utils';
 
 const BANNER_HEIGHT = 40;
@@ -23,6 +25,7 @@ export function Shell({
 }) {
   const [collapsed, setCollapsed]   = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { data: planInfo } = useCompanyPlan();
 
   // One toggle drives both: desktop uses `collapsed` (icon-rail), mobile uses
   // `mobileOpen` (off-canvas drawer) -- only the CSS for the active breakpoint
@@ -55,7 +58,15 @@ export function Shell({
         )}
         style={{ paddingTop: 64 + topOffset }}
       >
-        <div className="p-4 md:p-6">{children}</div>
+        <div className="p-4 md:p-6">
+          <div className="max-w-screen-xl mx-auto">
+            <DemoExpiryBanner
+              isDemo={planInfo?.company?.is_demo}
+              demoExpiresAt={planInfo?.company?.demo_expires_at}
+            />
+          </div>
+          {children}
+        </div>
       </main>
     </div>
   );

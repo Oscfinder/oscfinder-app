@@ -167,8 +167,18 @@ export async function requireActiveAccount(companyId: string): Promise<NextRespo
   if (!data || data.status !== 'active')
     return NextResponse.json({ error: 'Account suspended. Contact support.' }, { status: 403 });
 
+  // Shaped like planLimitExceededResponse() (lib/usage.ts) — 'demo_expired' is a
+  // distinct error code from 'plan_limit_exceeded', but the frontend's upgrade
+  // modal (lib/upgradeEvent.ts's asPlanLimitError) recognizes both and renders
+  // the same shared UpgradePlanModal, just with different copy.
   if (data.is_demo && data.demo_expires_at && new Date(data.demo_expires_at) < new Date())
-    return NextResponse.json({ error: 'Demo expired. Contact sales to upgrade.' }, { status: 403 });
+    return NextResponse.json({
+      error:         'demo_expired',
+      message:       'Your demo has expired.',
+      feature:       'account',
+      current_plan:  'demo',
+      required_plan: 'starter',
+    }, { status: 403 });
 
   if (!data.is_demo && data.plan_end_date && new Date(data.plan_end_date) < new Date())
     return NextResponse.json({ error: 'Plan expired. Please renew.' }, { status: 403 });

@@ -19,7 +19,8 @@ export function UpgradePlanModal() {
 
   if (!detail) return null;
 
-  const featureLabel = FEATURE_LABELS[detail.feature] ?? detail.feature;
+  const isExpired     = detail.error === 'demo_expired';
+  const featureLabel  = FEATURE_LABELS[detail.feature] ?? detail.feature;
   const currentLabel  = PLAN_LABELS[detail.current_plan]  ?? detail.current_plan;
   const requiredLabel = PLAN_LABELS[detail.required_plan] ?? detail.required_plan;
 
@@ -36,11 +37,12 @@ export function UpgradePlanModal() {
         </div>
         <div className="px-6 pt-4 pb-2">
           <h2 className="text-[16px] font-bold text-[#0A1628]">
-            {featureLabel} is limited on the {currentLabel} plan
+            {isExpired ? 'Your demo has expired' : `${featureLabel} is limited on the ${currentLabel} plan`}
           </h2>
           <p className="text-[13px] text-[#1A3A5C] mt-2 leading-relaxed">
-            {detail.message} Upgrade to {requiredLabel} or above to unlock a higher
-            monthly limit and more.
+            {isExpired
+              ? `${detail.message} Upgrade to ${requiredLabel} or above to restore access to your account and data.`
+              : `${detail.message} Upgrade to ${requiredLabel} or above to unlock a higher monthly limit and more.`}
           </p>
         </div>
         <div className="flex items-center gap-2.5 px-6 py-5">
@@ -50,13 +52,23 @@ export function UpgradePlanModal() {
           >
             Not now
           </button>
-          <Link
-            href="/billing"
-            onClick={() => setDetail(null)}
-            className="flex-1 h-10 rounded-lg bg-[#0099CC] hover:bg-[#006285] text-white text-[13px] font-bold flex items-center justify-center transition-colors"
-          >
-            View Plans
-          </Link>
+          {isExpired ? (
+            <a
+              href="mailto:support@oscfinder.com"
+              onClick={() => setDetail(null)}
+              className="flex-1 h-10 rounded-lg bg-[#0099CC] hover:bg-[#006285] text-white text-[13px] font-bold flex items-center justify-center transition-colors"
+            >
+              Contact Sales
+            </a>
+          ) : (
+            <Link
+              href="/billing"
+              onClick={() => setDetail(null)}
+              className="flex-1 h-10 rounded-lg bg-[#0099CC] hover:bg-[#006285] text-white text-[13px] font-bold flex items-center justify-center transition-colors"
+            >
+              View Plans
+            </Link>
+          )}
         </div>
       </div>
     </div>

@@ -6,8 +6,6 @@ import {
 } from 'recharts';
 import { Lead, UsageLog } from '@/types';
 import { GettingStartedChecklist } from '@/app/_components/GettingStartedChecklist';
-import { DemoExpiryBanner } from '@/app/_components/DemoExpiryBanner';
-import { useCompanyPlan } from '@/hooks/useCompanyPlan';
 
 function buildLeadGrowth(leads: Lead[]) {
   const days: { date: string; count: number; isToday: boolean }[] = [];
@@ -45,7 +43,6 @@ export default function DashboardPage() {
     queryKey: ['usage-summary'],
     queryFn:  () => fetch('/api/usage/summary').then(r => r.json()),
   });
-  const { data: planInfo } = useCompanyPlan();
 
   // True only on the very first load (no cached data yet) -- background refetches
   // (focus, the 5s job-count poll, manual invalidation) leave this false, so the
@@ -106,11 +103,6 @@ export default function DashboardPage() {
     <div className="max-w-screen-xl mx-auto space-y-5">
 
       <GettingStartedChecklist />
-
-      <DemoExpiryBanner
-        isDemo={planInfo?.company?.is_demo}
-        demoExpiresAt={planInfo?.company?.demo_expires_at}
-      />
 
       {/* 4 Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
