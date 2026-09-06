@@ -18,9 +18,31 @@ export interface ExtractedContact {
 }
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+const randomDelay = (minMs: number, maxMs: number) => delay(minMs + Math.random() * (maxMs - minMs));
 
 export function buildLinkedinSearchUrl(name: string, companyName: string): string {
   return `https://www.google.com/search?q=${encodeURIComponent(`${name} ${companyName} LinkedIn`)}`;
+}
+
+// Company-level "find anyone at this company on LinkedIn" link (Method B) —
+// stored on the lead itself, not on a contact, so there's always a one-click
+// fallback even when nothing was extracted automatically.
+export function buildCompanyLinkedinSearchUrl(companyName: string): string {
+  return `https://www.google.com/search?q=${encodeURIComponent(`"${companyName}" site:linkedin.com/in/`)}`;
+}
+
+// Shared across every company in one scrape job (see app/api/scrape/route.ts)
+// so a 20-lead job can't fire 40-60 Google requests back to back. Once
+// `blocked` is set (a CAPTCHA/block response was seen) or `remaining` hits 0,
+// every further Google search in the job is skipped — team-page extraction
+// and the always-available search-URL fallback are unaffected.
+export interface GoogleSearchBudget {
+  remaining: number;
+  blocked:   boolean;
+}
+
+export function createGoogleSearchBudget(maxRequests = 10): GoogleSearchBudget {
+  return { remaining: maxRequests, blocked: false };
 }
 
 // Generic role-account or placeholder names that show up in team-page markup
@@ -73,6 +95,39 @@ function dedupeByName(contacts: ExtractedContact[]): ExtractedContact[] {
   return out;
 }
 
+// Team-page contacts are always treated as more trustworthy than a Google
+// snippet guess (the source is the company's own site, not a third party's
+// summary of it) — team page wins on conflicting fields, Google only fills
+// in what team page didn't have (chiefly linkedin_url).
+function mergeContacts(
+  teamPageContacts: ExtractedContact[],
+  googleContacts:   ExtractedContact[],
+): ExtractedContact[] {
+  const merged = new Map<string, ExtractedContact>();
+
+  for (const c of teamPageContacts) merged.set(normalizedName(c.name), c);
+
+  for (const g of googleContacts) {
+    const key = normalizedName(g.name);
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, g);
+      continue;
+    }
+    // Same person found by both — keep the team-page record (source stays
+    // 'team_page'), just fill in whatever it was missing from Google's find.
+    merged.set(key, {
+      ...existing,
+      title:        existing.title        ?? g.title,
+      linkedin_url: existing.linkedin_url ?? g.linkedin_url,
+      email:        existing.email        ?? g.email,
+      phone:        existing.phone        ?? g.phone,
+    });
+  }
+
+  return [...merged.values()];
+}
+
 async function fetchPage(url: string, timeoutMs: number) {
   try {
     const { data, status } = await axios.get(url, {
@@ -93,28 +148,13 @@ const TEAM_PAGE_PATHS = [
   '/about/team', '/about-us/team', '/leadership',
 ];
 
-export async function extractTeamPageContacts(
-  website: string,
-  companyName: string,
-): Promise<ExtractedContact[]> {
-  const base = website.replace(/\/+$/, '');
+function extractFromPage($: cheerio.CheerioAPI, companyName: string): ExtractedContact[] {
   const found: ExtractedContact[] = [];
 
-  // Max 3 URL attempts per company, stop at the first page that loads.
-  let $: cheerio.CheerioAPI | null = null;
-  for (const path of TEAM_PAGE_PATHS.slice(0, 3)) {
-    $ = await fetchPage(`${base}${path}`, 5000);
-    if ($) break;
-    await delay(1200);
-  }
-  if (!$) return [];
-
-  const page = $;
-
   // Heuristic A — structured data (schema.org Person)
-  page('script[type="application/ld+json"]').each((_, el) => {
+  $('script[type="application/ld+json"]').each((_, el) => {
     try {
-      const json = JSON.parse(page(el).text());
+      const json = JSON.parse($(el).text());
       const items = Array.isArray(json) ? json : [json];
       for (const item of items) {
         const type = item?.['@type'];
@@ -132,97 +172,138 @@ export async function extractTeamPageContacts(
     } catch { /* not valid JSON-LD, skip */ }
   });
 
-  // Heuristic B — headings (h2/h3/h4) followed by a title-bearing sibling
-  page('h2, h3, h4').each((_, el) => {
-    const name = page(el).text().trim();
+  // Heuristic B — headings (h2/h3/h4) followed by a title-bearing sibling.
+  // Requires a title-keyword match to accept the candidate at all — tested
+  // live against real company /about pages and without this, generic
+  // marketing headings like "Foundation Years" or "Ecosystem Growth" pass
+  // the name-shape regex and get misread as people. A real person heading is
+  // almost always immediately followed by their job title; a marketing
+  // section heading is followed by prose.
+  $('h2, h3, h4').each((_, el) => {
+    const name = $(el).text().trim();
     if (!looksLikeName(name)) return;
-    const siblingText = page(el).next().text().trim() || page(el).parent().find('p, span').first().text().trim();
-    // Require a title-keyword match to accept the candidate at all — tested
-    // live against real company /about pages (no dedicated /team page) and
-    // without this, generic marketing headings like "Foundation Years" or
-    // "Ecosystem Growth" pass the name-shape regex and get misread as people.
-    // A real person heading is almost always immediately followed by their
-    // job title; a marketing section heading is followed by prose.
+    const siblingText = $(el).next().text().trim() || $(el).parent().find('p, span').first().text().trim();
     if (!looksLikeTitle(siblingText)) return;
     found.push({
-      name,
-      title: siblingText,
-      email: null, phone: null, linkedin_url: null,
+      name, title: siblingText, email: null, phone: null, linkedin_url: null,
       linkedin_search_url: buildLinkedinSearchUrl(name, companyName),
       source: 'team_page',
     });
   });
 
-  // Heuristic C — image alt text ("John Doe" style headshots)
-  page('img[alt]').each((_, el) => {
-    const alt = (page(el).attr('alt') ?? '').trim();
+  // Heuristic C — image alt text ("John Doe" style headshots). Same
+  // title-required reasoning as above — a real test run found a VC firm's
+  // name ("Spark Capital") in an unrelated image's alt text passing the
+  // name-shape regex with no title context.
+  $('img[alt]').each((_, el) => {
+    const alt = ($(el).attr('alt') ?? '').trim();
     if (!looksLikeName(alt)) return;
-    const nearby = page(el).parent().text().replace(alt, '').trim();
-    // Same reasoning as heading candidates above — real test run found a VC
-    // firm's name ("Spark Capital") in an unrelated image's alt text passing
-    // the name-shape regex with no title context; require one now.
+    const nearby = $(el).parent().text().replace(alt, '').trim();
     if (!looksLikeTitle(nearby)) return;
     found.push({
-      name: alt,
-      title: nearby.slice(0, 60),
-      email: null, phone: null, linkedin_url: null,
+      name: alt, title: nearby.slice(0, 60), email: null, phone: null, linkedin_url: null,
       linkedin_search_url: buildLinkedinSearchUrl(alt, companyName),
       source: 'team_page',
     });
   });
 
-  // Heuristic D — card/grid/list containers with a "team"-ish class or id
-  page('[class*="team" i], [class*="staff" i], [class*="member" i], [class*="employee" i], [id*="team" i]').each((_, el) => {
-    const block = page(el);
+  // Heuristic D — card/grid/list containers with a "team"-ish class or id.
+  // Requires both a name line and a title line — a container whose class
+  // merely contains "team" (e.g. an unrelated CSS utility class) shouldn't
+  // produce a contact just because some line in it happens to look
+  // name-shaped.
+  $('[class*="team" i], [class*="staff" i], [class*="member" i], [class*="employee" i], [id*="team" i]').each((_, el) => {
+    const block = $(el);
     // Only treat as a single "card" if it's reasonably small — a whole team
     // *section* wrapping 20 cards would otherwise be misread as one giant name.
     if (block.text().trim().length > 200) return;
     const lines = block.text().split('\n').map(l => l.trim()).filter(Boolean);
     const nameLine  = lines.find(l => looksLikeName(l));
     const titleLine = lines.find(l => looksLikeTitle(l));
-    // Require both — a container whose class merely contains "team" (e.g. a
-    // "team" CSS utility class unrelated to staff) shouldn't produce a
-    // contact just because some line in it happens to look name-shaped.
     if (nameLine && titleLine) {
       found.push({
-        name: nameLine, title: titleLine, email: null, phone: null,
-        linkedin_url: null, linkedin_search_url: buildLinkedinSearchUrl(nameLine, companyName),
+        name: nameLine, title: titleLine, email: null, phone: null, linkedin_url: null,
+        linkedin_search_url: buildLinkedinSearchUrl(nameLine, companyName),
         source: 'team_page',
       });
     }
   });
 
-  // Cap: if more than 20 raw matches, keep only the first 10 (most senior /
-  // first-listed, per spec) — dedupe first so repeats across heuristics don't
-  // eat into that cap.
-  const deduped = dedupeByName(found);
-  return deduped.slice(0, deduped.length > 20 ? 10 : deduped.length).slice(0, 10);
+  return dedupeByName(found);
 }
 
-// ── Method 2: Google search fallback ────────────────────────────────────
-// Fragile by nature (parsing Google's own results page HTML, no official
-// API key configured for this project) — wrapped so any failure, CAPTCHA
-// redirect, or layout change just yields zero results instead of throwing.
-// Per spec: only runs when team-page scraping found nothing, one attempt,
-// never retried.
-export async function extractGoogleSearchContacts(
+export async function extractTeamPageContacts(
+  website: string,
   companyName: string,
 ): Promise<ExtractedContact[]> {
+  const base = website.replace(/\/+$/, '');
+
+  // Max 3 URL attempts per company. Don't stop at the first page that merely
+  // *loads* — a company's /about might return 200 but just be a company
+  // description with no people on it. Keep trying candidate paths until one
+  // actually yields extracted people, or the attempt budget runs out.
+  for (const path of TEAM_PAGE_PATHS.slice(0, 3)) {
+    const $ = await fetchPage(`${base}${path}`, 5000);
+    if ($) {
+      const contacts = extractFromPage($, companyName);
+      if (contacts.length > 0) {
+        // Cap at 20 raw matches → keep the first 10 (most senior/first-listed).
+        return contacts.slice(0, 10);
+      }
+    }
+    await delay(1200);
+  }
+  return [];
+}
+
+// ── Method 2: Google search — now runs for every lead, not just as a
+// fallback ─────────────────────────────────────────────────────────────
+// Fragile by nature (parsing Google's own results page HTML, no official API
+// key configured for this project) — wrapped so any failure, CAPTCHA
+// redirect, or layout change just yields zero results instead of throwing.
+// Never visits linkedin.com directly — only reads Google's own results page.
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0',
+];
+const randomUserAgent = () => USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+
+function isBlockedResponse(status: number, data: unknown): boolean {
+  if (status === 429 || status === 403) return true;
+  if (typeof data !== 'string') return false;
+  return data.includes('/sorry/') || data.includes('detected unusual traffic') || data.includes('unusual traffic from your computer');
+}
+
+// One query against Google, parsed for linkedin.com/in/ result links.
+// Consumes exactly one unit of `budget` regardless of outcome (a failed
+// request still costs a request, same as a real rate limiter).
+async function runOneGoogleQuery(
+  query:  string,
+  companyName: string,
+  budget: GoogleSearchBudget,
+): Promise<ExtractedContact[]> {
+  if (budget.blocked || budget.remaining <= 0) return [];
+  budget.remaining -= 1;
+
   try {
-    await delay(3000 + Math.random() * 2000); // 3-5s, deliberately slow
-
-    const query = `"${companyName}" "Managing Director" OR "CEO" OR "Founder" OR "Head of" site:linkedin.com`;
-    const url   = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-
+    const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
     const { data, status } = await axios.get(url, {
-      timeout: 5000,
-      validateStatus: s => s === 200,
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      timeout: 6000,
+      validateStatus: () => true, // inspect status ourselves — a 429/403 is meaningful, not just an error to swallow
+      headers: { 'User-Agent': randomUserAgent() },
     });
+
+    if (isBlockedResponse(status, data)) {
+      // Don't retry, don't burn any more of the job's budget on Google —
+      // one confirmed block means further attempts are equally likely to fail.
+      budget.blocked = true;
+      return [];
+    }
     if (status !== 200 || typeof data !== 'string') return [];
-    // A CAPTCHA/consent interstitial page won't contain real result markup —
-    // detect the common tell and bail rather than misparsing it.
-    if (data.includes('/sorry/') || data.includes('detected unusual traffic')) return [];
 
     const $ = cheerio.load(data);
     const found: ExtractedContact[] = [];
@@ -244,7 +325,7 @@ export async function extractGoogleSearchContacts(
 
       found.push({
         name,
-        title: parts[1] && looksLikeTitle(parts[1]) ? parts[1] : (parts[1] ?? null),
+        title: parts[1] ?? null,
         email: null, phone: null,
         linkedin_url,
         linkedin_search_url: buildLinkedinSearchUrl(name, companyName),
@@ -252,10 +333,34 @@ export async function extractGoogleSearchContacts(
       });
     });
 
-    return dedupeByName(found);
+    return found;
   } catch {
     return [];
   }
+}
+
+export async function extractGoogleSearchContacts(
+  companyName: string,
+  budget:      GoogleSearchBudget,
+): Promise<ExtractedContact[]> {
+  if (budget.blocked || budget.remaining <= 0) return [];
+
+  // Two separate, simpler queries instead of one long OR-chain — each is
+  // more likely to match cleanly, at the cost of one extra request.
+  const queries = [
+    `"${companyName}" CEO OR "Managing Director" OR founder site:linkedin.com`,
+    `"${companyName}" director OR manager OR "head of" site:linkedin.com`,
+  ];
+
+  const results: ExtractedContact[] = [];
+  for (const query of queries) {
+    if (budget.blocked || budget.remaining <= 0) break;
+    await randomDelay(5000, 15000); // 5-15s — deliberately slow, this is the step that gets IPs blocked
+    const found = await runOneGoogleQuery(query, companyName, budget);
+    results.push(...found);
+  }
+
+  return dedupeByName(results).slice(0, 5);
 }
 
 // ── Method 3: Facebook page — intentionally not implemented ─────────────
@@ -273,25 +378,33 @@ export async function extractFacebookContacts(
 }
 
 // ── Orchestrator ──────────────────────────────────────────────────────────
-// Runs the fallback chain (team page → Google search → Facebook), each step
-// only firing if every prior step found nothing. Every step is already
-// individually failure-safe; this wraps the whole chain in one more try/catch
-// as a final backstop so contact extraction can never take down a scrape job.
+// Team page and Google search now BOTH run for every lead (Google search is
+// no longer fallback-only, since most Nigerian SME sites have no team page
+// at all) and their results are merged/deduped by name. `budget` is shared
+// across an entire scrape job (created once in app/api/scrape/route.ts) so a
+// multi-lead job can't fire dozens of Google requests back to back.
 export async function runContactExtraction(
   website:     string | null,
   companyName: string,
+  budget:      GoogleSearchBudget,
 ): Promise<ExtractedContact[]> {
+  let teamPageContacts: ExtractedContact[] = [];
   try {
-    if (website) {
-      const teamPageContacts = await extractTeamPageContacts(website, companyName);
-      if (teamPageContacts.length > 0) return teamPageContacts;
-    }
-
-    const googleContacts = await extractGoogleSearchContacts(companyName);
-    if (googleContacts.length > 0) return googleContacts;
-
-    return await extractFacebookContacts(website, companyName);
+    if (website) teamPageContacts = await extractTeamPageContacts(website, companyName);
   } catch {
-    return [];
+    // best-effort — fall through with whatever (if anything) was found
+  }
+
+  let googleContacts: ExtractedContact[] = [];
+  try {
+    googleContacts = await extractGoogleSearchContacts(companyName, budget);
+  } catch {
+    // best-effort
+  }
+
+  try {
+    return mergeContacts(teamPageContacts, googleContacts);
+  } catch {
+    return teamPageContacts;
   }
 }

@@ -4,7 +4,7 @@ import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/
 import { checkLimit, logUsage, planLimitExceededResponse }          from '@/lib/usage';
 import { getCompanies, getPlaceDetails, parseAddressComponents }    from '@/services/googlePlaces';
 import { scrapeContactData, calculateLeadScore }                    from '@/services/scraper';
-import { runContactExtraction }                                     from '@/services/contactExtraction';
+import { runContactExtraction, createGoogleSearchBudget, buildCompanyLinkedinSearchUrl } from '@/services/contactExtraction';
 import { saveLeadContacts }                                         from '@/lib/leadContacts';
 import { createNotification }                                       from '@/lib/notifications';
 
@@ -52,6 +52,12 @@ async function runPipeline(jobId: string, category: string, location: string, co
   try {
     const companies = await getCompanies(category, location);
     const visited   = new Set<string>();
+    // Shared across every company in this job — caps total Google searches
+    // per scrape job (not per lead) so a 20-lead run can't fire 40-60 Google
+    // requests back to back and guarantee a CAPTCHA. Once blocked (or the
+    // request budget is spent), later leads in the same job just skip Google
+    // and rely on team-page extraction only.
+    const googleBudget = createGoogleSearchBudget(10);
 
     await supabaseAdmin
       .from('scrape_jobs')
@@ -80,31 +86,37 @@ async function runPipeline(jobId: string, category: string, location: string, co
         // ─────────────────────────────────────────────────────────
 
         const { data: savedLead } = await supabaseAdmin.from('leads').upsert({
-          job_id:       jobId,
-          company_id:   companyId,
-          place_id:     company.placeId,
-          name:         company.name,
-          address:      company.address,
+          job_id:              jobId,
+          company_id:          companyId,
+          place_id:            company.placeId,
+          name:                company.name,
+          address:             company.address,
           website,
           emails,
           phones,
-          status:       'new',
+          status:              'new',
           category,
           location,
-          state:        state ?? location,
-          local_govt:   local_govt ?? null,
-          linkedin_url: linkedin_url ?? null,
+          state:               state ?? location,
+          local_govt:          local_govt ?? null,
+          linkedin_url:        linkedin_url ?? null,
+          // Method B — always generated regardless of whether person-level
+          // extraction below finds anything, so there's always a one-click
+          // "find someone at this company" fallback.
+          linkedin_search_url: buildCompanyLinkedinSearchUrl(company.name),
           lead_score,
-          source:       'google_places',
+          source:              'google_places',
         }, { onConflict: 'place_id' }).select('id').single();
 
-        // Person-level contact discovery (team page → Google search → Facebook
-        // fallback chain, all inside runContactExtraction's own try/catch) —
-        // isolated in its own try/catch here too so a failure can never take
-        // down the lead that was just successfully saved above.
+        // Person-level contact discovery (team page AND Google search now
+        // both run for every lead — most Nigerian SME sites have no team
+        // page at all, so Google can no longer be fallback-only; results are
+        // merged/deduped inside runContactExtraction) — isolated in its own
+        // try/catch here too so a failure can never take down the lead that
+        // was just successfully saved above.
         if (savedLead) {
           try {
-            const contacts = await runContactExtraction(website, company.name);
+            const contacts = await runContactExtraction(website, company.name, googleBudget);
             await saveLeadContacts(savedLead.id, companyId, contacts);
           } catch {
             // contact extraction is best-effort — never blocks the scrape

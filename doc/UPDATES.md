@@ -720,3 +720,62 @@
 - Google search (Method 2) and Facebook (Method 3, still a stub) were not
   re-tested live this pass — Method 2 remains best-effort per the spec's own
   caveat, and Method 3 is unimplemented by design (see above).
+
+---
+
+## 2026-09-07
+
+### Contact extraction — Google search runs for every lead, not just as fallback
+- `services/contactExtraction.ts`: `runContactExtraction()` now runs team-page
+  scraping AND Google search for every lead (previously Google only ran if
+  the team page found nothing) and merges the two result sets by normalized
+  name — `mergeContacts()` keeps the team-page record's `source`/`title` on a
+  match (the company's own site outranks a third party's summary of it) and
+  only fills in what it was missing (chiefly `linkedin_url` from Google).
+  Verified in isolation: same person found by both, different
+  casing/whitespace, merges into one record with the team-page title and
+  Google's LinkedIn URL kept.
+- Google search rewritten: two separate simpler queries per lead instead of
+  one long OR-chain, a rotating pool of 6 realistic User-Agents, and a new
+  **shared `GoogleSearchBudget`** (`createGoogleSearchBudget(10)`, created
+  once per scrape job in `app/api/scrape/route.ts` and threaded through every
+  company) that caps total Google *requests* per job (not per lead) —
+  matches the spec's "stop after N requests per job" ask directly, since 2
+  queries/lead × 10 requests ≈ 5 leads get a Google search per job before
+  later leads in the same job skip it automatically. A detected block (HTTP
+  429/403, or a 200 "unusual traffic" interstitial) sets `budget.blocked` so
+  every remaining Google request in the job is skipped outright rather than
+  burning more of the budget on requests equally likely to fail. Delay
+  between Google requests widened from the old fixed 3-5s to a random 5-15s.
+- **New `buildCompanyLinkedinSearchUrl()`** (Method B) — a zero-cost,
+  always-succeeds Google-to-LinkedIn search link built from the company name
+  alone, no network request. Stored on the lead itself via a new
+  `leads.linkedin_search_url` column (migration
+  `023_lead_linkedin_search_url.sql` — **not yet run, needs manual execution
+  in Supabase SQL Editor**), generated for every lead in
+  `app/api/scrape/route.ts`'s upsert regardless of whether person-level
+  extraction finds anyone. Distinct from `lead_contacts.linkedin_search_url`,
+  which is per-person.
+- `services/contactExtraction.ts`'s team-page method no longer stops at the
+  first candidate path that merely returns 200 — a company's `/about` can
+  load fine while having zero people on it. It now keeps trying the next
+  candidate path (`/team`, `/our-team`, etc., still capped at 3 attempts)
+  until one actually yields extracted contacts.
+- `lib/leadContacts.ts`'s `saveLeadContacts()` reworked with a source-rank
+  system (`manual` > `team_page` > `google_search`/`facebook`): a manual
+  correction is never overwritten by re-extraction; a re-scrape that only
+  turns up a weaker source than what's already stored just fills in missing
+  fields on the existing record instead of downgrading it; a stronger
+  incoming source fully replaces the existing record.
+- **Honest live test of the Google search path**: a single, first-ever
+  request from this environment to Google (matching the exact query/headers
+  the code sends) was blocked immediately — HTTP 429 with a "detected
+  unusual traffic" response, not after repeated requests. This is typical for
+  cloud/serverless IP ranges (which is how this app is hosted) and means, in
+  practice, Google search may contribute close to nothing once deployed —
+  the code's own block-detection correctly identified this exact response
+  shape and would set `budget.blocked`, so it fails exactly as designed
+  (gracefully, no crash, no wasted retries) rather than working reliably.
+  Method B (`buildCompanyLinkedinSearchUrl`) needs no network request at all
+  and is the one piece of this feature guaranteed to always work.
+- `tsc --noEmit` and `npm run build` both clean.

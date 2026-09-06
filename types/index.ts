@@ -18,6 +18,7 @@ export interface Lead {
   phones:       string[];
   category:     string;
   linkedin_url: string;
+  linkedin_search_url?: string | null;
   source:       string;
   status:       LeadStatus;
   lead_score:   number;
