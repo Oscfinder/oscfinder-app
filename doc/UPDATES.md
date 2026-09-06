@@ -617,3 +617,77 @@
 - `tsc --noEmit` and `npm run build` both clean. Tier-boundary math verified by
   script (see above); full interactive login-as-demo-user click-through not done
   (no browser-automation tool this session).
+
+---
+
+## 2026-09-06
+
+### Person-level contacts (name/title/LinkedIn) per lead
+- **Migration `supabase/migrations/022_lead_contacts.sql` — not yet run, needs
+  manual execution in Supabase SQL Editor** (this project's standing
+  convention; no linked Supabase CLI). New `lead_contacts` table (`lead_id`,
+  `company_id`, `name`, `title`, `email`, `phone`, `linkedin_url`,
+  `linkedin_search_url`, `source` — `team_page`/`google_search`/`facebook`/
+  `manual`), cascade-deletes with its parent lead, RLS with the same
+  `company_id = (select company_id from public.users where id = auth.uid())`
+  pattern as every other table (the originally proposed `company_id =
+  auth.uid()::uuid` policy was wrong — that compares a company id to a user id
+  — fixed to match the established convention). Because this hasn't run yet,
+  none of the below has been tested against the real database — verified via
+  `tsc --noEmit` + `npm run build` only.
+- New `services/contactExtraction.ts` — the 3-method fallback chain, each
+  method independently wrapped so a failure/timeout/CAPTCHA never throws past
+  its own function:
+  - **Team page** (`extractTeamPageContacts`): tries up to 3 of
+    `/about(-us)`, `/team`, `/our-team`, `/staff`, `/management`, `/leadership`
+    etc., stopping at the first that loads; parses schema.org `Person` JSON-LD,
+    heading+sibling pairs, image alt text, and team/staff/member-class card
+    blocks; filters out generic role names ("Admin", "Support Team", ...) and
+    anything that doesn't look like a real 2-4-word name; dedupes by
+    normalized name; caps at 10 results.
+  - **Google search** (`extractGoogleSearchContacts`): only runs when the team
+    page found nothing; one attempt, 3-5s pre-delay, parses `linkedin.com/in/`
+    result links and their title text; bails cleanly on a CAPTCHA/"unusual
+    traffic" interstitial. Explicitly best-effort per the spec's own
+    instruction not to let this fragile method delay the feature — no Google
+    Custom Search API key is configured for this project, so it's a plain HTML
+    fetch-and-parse, which **will** break if Google changes result markup.
+  - **Facebook** (`extractFacebookContacts`): **shipped as a no-op stub**, per
+    the spec's explicit permission ("okay to ship without it"). Facebook
+    login-walls almost all page content from an unauthenticated fetch, so a
+    real implementation would fail on nearly every call — not worth building
+    now. The pipeline slot exists so a real implementation later doesn't
+    require touching the orchestrator.
+- New `lib/leadContacts.ts` — `saveLeadContacts()`, called from the scrape
+  pipeline: dedupes by normalized name per lead (updates the existing row
+  instead of inserting a duplicate on a re-scrape of the same company).
+- `app/api/scrape/route.ts`: after each lead is upserted, runs
+  `runContactExtraction()` + `saveLeadContacts()` in their own try/catch —
+  a contact-extraction failure can never take down the lead save that already
+  succeeded, or the rest of the scrape job.
+- New CRUD routes, company-scoped like every other lead route (`requireAuth`
+  → `requireActiveAccount` for non-admin → `getEffectiveCompanyId`, and every
+  query additionally filtered by the lead's own `company_id`):
+  `GET/POST /api/leads/[id]/contacts`, `PATCH/DELETE
+  /api/leads/[id]/contacts/[contactId]`. Manual contacts always get `source:
+  'manual'` and an auto-generated `linkedin_search_url`.
+- New `app/_components/LeadContactsSection.tsx` — Contacts list (name, title,
+  source badge, LinkedIn/Edit/Delete actions) + always-visible "Add Contact"
+  inline form, wired into the existing lead `ViewModal`
+  (`RowActionModals.tsx`) only — per spec, no other lead CRUD modal touched.
+  Widened the shared `Modal` shell to `max-h-[85vh] overflow-y-auto` so a
+  lead with several contacts doesn't overflow the dialog.
+- `app/(dashboard)/leads/page.tsx`: new "Contacts" column ("3 contacts",
+  clickable → opens the same `ViewModal`; grey "—" for zero, not "0").
+  `app/api/leads/all/route.ts`: added `lead_contacts(count)` to the select — a
+  single embedded-resource count query, not one query per row.
+- `app/api/export/route.ts`: Excel/CSV export now includes Contact
+  Name/Title/Email/Phone/LinkedIn columns — one row per contact (company
+  fields repeated), matching the spec's stated preference; a lead with no
+  contacts still gets exactly one row with blank contact columns.
+  `logUsage`'s `lead_count` still counts leads, not exploded contact rows —
+  usage tracking/plan limits are unaffected, per spec.
+- Not touched, per spec: existing company-level scrape logic (emails/phones/
+  score), campaign sending/senders/worker, lead CRUD itself (create/edit/
+  delete), admin panel, auth/RLS on other tables, usage tracking.
+- `tsc --noEmit` and `npm run build` both clean.

@@ -9,13 +9,14 @@ import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData
 import { NIGERIAN_LGAS_BY_STATE } from '@/app/data/nigeriaLgas';
 import { EMAIL_DESIGNS, DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
 import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
+import { LeadContactsSection } from './LeadContactsSection';
 
 // ─── shared backdrop + shell ───────────────────────────────────────────────
 function Modal({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto flex flex-col">
         {children}
       </div>
     </div>
@@ -79,6 +80,8 @@ export function ViewModal({ lead, onClose }: { lead: Lead; onClose: () => void }
             </span>
           </div>
         </div>
+
+        <LeadContactsSection leadId={lead.id} />
       </div>
       <div className="px-6 py-3 border-t border-gray-100 flex justify-end">
         <Button variant="outline" onClick={onClose}>Close</Button>

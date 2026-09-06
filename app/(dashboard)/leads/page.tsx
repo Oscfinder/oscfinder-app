@@ -409,7 +409,7 @@ export default function LeadsPage() {
                     className="w-4 h-4 rounded accent-[#006285] cursor-pointer"
                   />
                 </th>
-                {['#', 'Company', 'Address', 'Website', 'Category', 'State', 'LGA', 'Email', 'Status', 'Score', 'Actions'].map(h => (
+                {['#', 'Company', 'Address', 'Website', 'Category', 'State', 'LGA', 'Email', 'Status', 'Score', 'Contacts', 'Actions'].map(h => (
                   <th key={h} className="px-3.5 py-2.5 text-left text-[11px] font-bold tracking-[0.8px] uppercase text-[#888888] border-b border-[#E5E7EB] whitespace-nowrap">
                     {h}
                   </th>
@@ -418,13 +418,13 @@ export default function LeadsPage() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={12} className="px-4 py-14 text-center text-[13px] text-[#888888]">
+                <tr><td colSpan={13} className="px-4 py-14 text-center text-[13px] text-[#888888]">
                   <div className="flex items-center justify-center gap-2">
                     <span className="spinner-mini" /> Loading leads...
                   </div>
                 </td></tr>
               ) : leads.length === 0 ? (
-                <tr><td colSpan={12} className="px-4 py-12 text-center text-[13px] text-[#888888]">
+                <tr><td colSpan={13} className="px-4 py-12 text-center text-[13px] text-[#888888]">
                   No leads match the selected filters.
                 </td></tr>
               ) : leads.map((lead, i) => {
@@ -493,6 +493,18 @@ export default function LeadsPage() {
                     </td>
                     <td className="px-3.5 py-3 font-mono text-[13px] font-bold">
                       <span className={scoreColor}>{score}</span>
+                    </td>
+                    <td className="px-3.5 py-3 text-[13px] whitespace-nowrap">
+                      {(lead.lead_contacts?.[0]?.count ?? 0) > 0 ? (
+                        <button
+                          onClick={() => open('view', lead)}
+                          className="text-[#006285] hover:text-[#0099CC] font-semibold transition-colors"
+                        >
+                          {lead.lead_contacts![0].count} contact{lead.lead_contacts![0].count === 1 ? '' : 's'}
+                        </button>
+                      ) : (
+                        <span className="text-[#888888]">—</span>
+                      )}
                     </td>
                     <td className="px-3.5 py-3">
                       <div className="flex items-center gap-1">

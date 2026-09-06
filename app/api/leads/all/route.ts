@@ -27,9 +27,12 @@ export async function GET(req: NextRequest) {
   // complete list to compute stats/filters/audiences correctly.
   const pageParam  = sp.get('page');
 
+  // lead_contacts(count) is a PostgREST embedded-resource count (one query, no
+  // N+1) — comes back as `lead_contacts: [{ count: number }]` per row, which
+  // the frontend reads via row.lead_contacts?.[0]?.count for the Contacts column.
   let query = supabaseAdmin
     .from('leads')
-    .select('*', pageParam ? { count: 'exact' } : {})
+    .select('*, lead_contacts(count)', pageParam ? { count: 'exact' } : {})
     .eq('company_id', companyId)
     .order('created_at', { ascending: false });
 

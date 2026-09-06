@@ -4,6 +4,8 @@ import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/
 import { checkLimit, logUsage, planLimitExceededResponse }          from '@/lib/usage';
 import { getCompanies, getPlaceDetails, parseAddressComponents }    from '@/services/googlePlaces';
 import { scrapeContactData, calculateLeadScore }                    from '@/services/scraper';
+import { runContactExtraction }                                     from '@/services/contactExtraction';
+import { saveLeadContacts }                                         from '@/lib/leadContacts';
 import { createNotification }                                       from '@/lib/notifications';
 
 export async function POST(req: NextRequest) {
@@ -77,7 +79,7 @@ async function runPipeline(jobId: string, category: string, location: string, co
         });
         // ─────────────────────────────────────────────────────────
 
-        await supabaseAdmin.from('leads').upsert({
+        const { data: savedLead } = await supabaseAdmin.from('leads').upsert({
           job_id:       jobId,
           company_id:   companyId,
           place_id:     company.placeId,
@@ -94,7 +96,20 @@ async function runPipeline(jobId: string, category: string, location: string, co
           linkedin_url: linkedin_url ?? null,
           lead_score,
           source:       'google_places',
-        }, { onConflict: 'place_id' });
+        }, { onConflict: 'place_id' }).select('id').single();
+
+        // Person-level contact discovery (team page → Google search → Facebook
+        // fallback chain, all inside runContactExtraction's own try/catch) —
+        // isolated in its own try/catch here too so a failure can never take
+        // down the lead that was just successfully saved above.
+        if (savedLead) {
+          try {
+            const contacts = await runContactExtraction(website, company.name);
+            await saveLeadContacts(savedLead.id, companyId, contacts);
+          } catch {
+            // contact extraction is best-effort — never blocks the scrape
+          }
+        }
 
       } catch {
         // skip failed company, continue pipeline

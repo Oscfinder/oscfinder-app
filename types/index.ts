@@ -24,6 +24,24 @@ export interface Lead {
   mail_sent:    boolean;
   enriched_at:  string | null;
   created_at:   string;
+  // Embedded PostgREST count from app/api/leads/all's `lead_contacts(count)`
+  // select — only present on rows returned by that route.
+  lead_contacts?: { count: number }[];
+}
+
+// ── Lead Contact (person-level data) ────────────────────────────────
+export interface LeadContact {
+  id:                  string;
+  lead_id:             string;
+  company_id:          string;
+  name:                string;
+  title:               string | null;
+  email:               string | null;
+  phone:               string | null;
+  linkedin_url:        string | null;
+  linkedin_search_url: string | null;
+  source:              'team_page' | 'google_search' | 'facebook' | 'manual';
+  created_at:          string;
 }
 
 // ── Scrape Job ───────────────────────────────────────────────────
