@@ -900,3 +900,22 @@
 - No backend changes, no new API routes, no database changes — every link is a
   plain `<a target="_blank">`/`window.open` to a Google search URL.
 - `tsc --noEmit` and `npm run build` clean.
+
+### Leads table: removed Score column, added a company LinkedIn button
+- Removed the "Score" column and its High/Medium/Low filter dropdown from
+  `app/(dashboard)/leads/page.tsx` — `lead_score` is still calculated during
+  scraping, stored on every lead, and available in exports; it just isn't
+  shown in the table anymore. Deleted `filterScore`/`SCORE_OPTIONS` and their
+  wiring (queryParams, `hasFilters`, `clearFilters`, the debounce-reset effect)
+  since nothing in the UI could set them anymore. Left `min_score`/`max_score`
+  untouched in `app/api/leads/all/route.ts` — the API capability stays live for
+  later reuse.
+- Added a company-level LinkedIn button in the Actions column, separate from
+  the existing "Find People" dropdown (which searches for individual people —
+  `linkedin.com/in/...`). This one opens the company's own page:
+  `getCompanyLinkedInUrl(lead)` returns `lead.linkedin_url` directly when the
+  scraper already found one, otherwise falls back to a Google search scoped to
+  `site:linkedin.com/company/`. Tooltip reads "View on LinkedIn" vs. "Find on
+  LinkedIn" depending on which path it took.
+- No backend or database changes.
+- `tsc --noEmit` and `npm run build` clean.

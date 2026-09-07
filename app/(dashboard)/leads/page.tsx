@@ -71,11 +71,10 @@ type ModalType = 'view' | 'edit' | 'message' | 'delete' | 'add' | 'bulk-send' | 
 
 const STATUS_OPTIONS = ['new', 'contacted', 'qualified', 'ignored'] as const;
 
-const SCORE_OPTIONS: { label: string; value: string; min: number; max: number }[] = [
-  { label: '80–100 (High)',   value: '80-100', min: 80, max: 100 },
-  { label: '60–79 (Medium)',  value: '60-79',  min: 60, max: 79 },
-  { label: 'Below 60 (Low)',  value: '0-59',   min: 0,  max: 59 },
-];
+function getCompanyLinkedInUrl(lead: Lead): string {
+  if (lead.linkedin_url) return lead.linkedin_url;
+  return `https://www.google.com/search?q=${encodeURIComponent(`"${lead.name}" site:linkedin.com/company/`)}`;
+}
 
 const STATUS_BADGE: Record<string, string> = {
   contacted: 'bg-[#dff2f9] text-[#006285]',
@@ -106,7 +105,6 @@ export default function LeadsPage() {
   const [filterLga, setFilterLga]             = useState('');
   const [filterCategory, setFilterCategory]   = useState('');
   const [filterStatus, setFilterStatus]       = useState('');
-  const [filterScore, setFilterScore]         = useState('');
   const [modal, setModal]                     = useState<ModalType>(null);
   const [active, setActive]                   = useState<Lead | null>(null);
   const [page, setPage]                       = useState(1);
@@ -128,12 +126,8 @@ export default function LeadsPage() {
     if (filterCategory)  p.set('category', filterCategory);
     if (filterStatus)    p.set('status', filterStatus);
     if (debouncedSearch) p.set('search', debouncedSearch);
-    if (filterScore) {
-      const bucket = SCORE_OPTIONS.find(s => s.value === filterScore);
-      if (bucket) { p.set('min_score', String(bucket.min)); p.set('max_score', String(bucket.max)); }
-    }
     return p.toString();
-  }, [page, perPage, filterState, filterLga, filterCategory, filterStatus, filterScore, debouncedSearch]);
+  }, [page, perPage, filterState, filterLga, filterCategory, filterStatus, debouncedSearch]);
 
   const handlePerPageChange = (n: number) => {
     setPerPage(n);
@@ -168,7 +162,7 @@ export default function LeadsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [filterState, filterLga, filterCategory, filterStatus, filterScore, debouncedSearch]);
+  }, [filterState, filterLga, filterCategory, filterStatus, debouncedSearch]);
 
   const pageIds        = leads.map(l => l.id);
   const allPageChecked = pageIds.length > 0 && pageIds.every(id => selected.has(id));
@@ -262,10 +256,10 @@ export default function LeadsPage() {
     close();
   };
 
-  const hasFilters = filterState || filterLga || filterCategory || filterStatus || filterScore || search;
+  const hasFilters = filterState || filterLga || filterCategory || filterStatus || search;
 
   const clearFilters = () => {
-    setFilterState(''); setFilterLga(''); setFilterCategory(''); setFilterStatus(''); setFilterScore(''); setSearch('');
+    setFilterState(''); setFilterLga(''); setFilterCategory(''); setFilterStatus(''); setSearch('');
   };
 
   const handleExportSelected = () => {
@@ -355,19 +349,6 @@ export default function LeadsPage() {
               {STATUS_OPTIONS.map(s => (
                 <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>
               ))}
-            </select>
-            <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
-          </div>
-
-          {/* Score */}
-          <div className="relative">
-            <select
-              value={filterScore}
-              onChange={e => setFilterScore(e.target.value)}
-              className="h-9 pl-3 pr-8 rounded-lg border border-[#E5E7EB] bg-white text-[13px] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] text-[#0A1628]"
-            >
-              <option value="">All Scores</option>
-              {SCORE_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
             <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
           </div>
@@ -483,7 +464,7 @@ export default function LeadsPage() {
                     className="w-4 h-4 rounded accent-[#006285] cursor-pointer"
                   />
                 </th>
-                {['#', 'Company', 'Address', 'Website', 'Category', 'State', 'LGA', 'Email', 'Status', 'Score', 'Contacts', 'Actions'].map(h => (
+                {['#', 'Company', 'Address', 'Website', 'Category', 'State', 'LGA', 'Email', 'Status', 'Contacts', 'Actions'].map(h => (
                   <th key={h} className="px-3.5 py-2.5 text-left text-[11px] font-bold tracking-[0.8px] uppercase text-[#888888] border-b border-[#E5E7EB] whitespace-nowrap">
                     {h}
                   </th>
@@ -492,22 +473,17 @@ export default function LeadsPage() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={13} className="px-4 py-14 text-center text-[13px] text-[#888888]">
+                <tr><td colSpan={12} className="px-4 py-14 text-center text-[13px] text-[#888888]">
                   <div className="flex items-center justify-center gap-2">
                     <span className="spinner-mini" /> Loading leads...
                   </div>
                 </td></tr>
               ) : leads.length === 0 ? (
-                <tr><td colSpan={13} className="px-4 py-12 text-center text-[13px] text-[#888888]">
+                <tr><td colSpan={12} className="px-4 py-12 text-center text-[13px] text-[#888888]">
                   No leads match the selected filters.
                 </td></tr>
               ) : leads.map((lead, i) => {
                 const isChecked  = selected.has(lead.id);
-                const score      = lead.lead_score ?? 0;
-                const scoreColor =
-                  score >= 80 ? 'text-[#00A86B]' :
-                  score >= 60 ? 'text-[#006285]' :
-                                'text-[#888888]';
                 const badgeCls   = STATUS_BADGE[lead.status] ?? STATUS_BADGE.new;
                 return (
                   <tr
@@ -565,9 +541,6 @@ export default function LeadsPage() {
                         {lead.status}
                       </span>
                     </td>
-                    <td className="px-3.5 py-3 font-mono text-[13px] font-bold">
-                      <span className={scoreColor}>{score}</span>
-                    </td>
                     <td className="px-3.5 py-3 text-[13px] whitespace-nowrap">
                       {(lead.lead_contacts?.[0]?.count ?? 0) > 0 ? (
                         <button
@@ -590,6 +563,12 @@ export default function LeadsPage() {
                         <ActionBtn icon={Eye}     label="View"    color="text-[#006285] hover:bg-[#dff2f9]" onClick={() => open('view', lead)}    />
                         <ActionBtn icon={Pencil}  label="Edit"    color="text-[#e67e22] hover:bg-[#fff3e0]" onClick={() => open('edit', lead)}    />
                         <ActionBtn icon={Mail}    label="Message" color="text-[#00A86B] hover:bg-[#dff7ee]" onClick={() => open('message', lead)} />
+                        <ActionBtn
+                          icon={Linkedin}
+                          label={lead.linkedin_url ? 'View on LinkedIn' : 'Find on LinkedIn'}
+                          color="text-[#0077b5] hover:bg-[#e8f4fa]"
+                          onClick={() => window.open(getCompanyLinkedInUrl(lead), '_blank', 'noopener,noreferrer')}
+                        />
                         <FindPeopleMenu companyName={lead.name} />
                         <ActionBtn icon={Trash2}  label="Delete"  color="text-red-500 hover:bg-red-50"      onClick={() => open('delete', lead)}  />
                       </div>
