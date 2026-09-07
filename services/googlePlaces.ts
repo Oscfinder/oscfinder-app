@@ -29,6 +29,49 @@ export async function getCompanies(category: string, location: string) {
   }));
 }
 
+export interface PlaceSearchResult {
+  placeId:  string;
+  name:     string;
+  address:  string;
+  category: string | null;
+  rating:   number | null;
+}
+
+// Google almost always leads a business's `types` array with generic noise
+// ("establishment", "point_of_interest") rather than anything descriptive —
+// skip those and humanize the first genuinely specific type, if any.
+const GENERIC_PLACE_TYPES = new Set(['establishment', 'point_of_interest', 'premise', 'subpremise']);
+
+function humanizePlaceType(types?: string[]): string | null {
+  const specific = types?.find(t => !GENERIC_PLACE_TYPES.has(t));
+  if (!specific) return null;
+  return specific.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Free-text company-name search for the "Search Single Company" mode —
+// unlike getCompanies() this isn't scoped to a category+location query, and
+// returns the extra fields (category, rating) needed by that UI's result
+// cards. Capped at `limit` results since Google Places text search can
+// return far more than the UI needs to show.
+export async function searchPlacesByText(query: string, limit = 5): Promise<PlaceSearchResult[]> {
+  const res  = await fetch(
+    `${BASE}/textsearch/json?query=${encodeURIComponent(query)}&key=${getApiKey()}`
+  );
+  const data = await res.json();
+
+  if (!OK_STATUSES.has(data.status)) {
+    throw new Error(`Google Places textsearch failed: ${data.status} — ${data.error_message ?? 'no details'}`);
+  }
+
+  return (data.results ?? []).slice(0, limit).map((p: any) => ({
+    placeId:  p.place_id,
+    name:     p.name,
+    address:  p.formatted_address,
+    category: humanizePlaceType(p.types),
+    rating:   p.rating ?? null,
+  }));
+}
+
 export async function getPlaceDetails(placeId: string) {
   // address_components added so we can extract real state + LGA
   const res  = await fetch(

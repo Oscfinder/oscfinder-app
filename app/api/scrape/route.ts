@@ -2,10 +2,9 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { supabaseAdmin }                                            from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 import { checkLimit, logUsage, planLimitExceededResponse }          from '@/lib/usage';
-import { getCompanies, getPlaceDetails, parseAddressComponents }    from '@/services/googlePlaces';
-import { scrapeContactData, calculateLeadScore }                    from '@/services/scraper';
-import { runContactExtraction, createGoogleSearchBudget, buildCompanyLinkedinSearchUrl } from '@/services/contactExtraction';
-import { saveLeadContacts }                                         from '@/lib/leadContacts';
+import { getCompanies, getPlaceDetails }                            from '@/services/googlePlaces';
+import { createGoogleSearchBudget }                                 from '@/services/contactExtraction';
+import { enrichAndSaveLead }                                        from '@/lib/leadEnrichment';
 import { createNotification }                                       from '@/lib/notifications';
 
 export async function POST(req: NextRequest) {
@@ -67,61 +66,24 @@ async function runPipeline(jobId: string, category: string, location: string, co
     for (let i = 0; i < companies.length; i++) {
       const company = companies[i];
       try {
+        // Fetched once here (rather than inside enrichAndSaveLead) so the
+        // website-based dedup check below doesn't cost a second identical
+        // Places Details API call for the same company.
         const details = await getPlaceDetails(company.placeId);
         const website = details?.website;
 
         if (!website || visited.has(website)) continue;
         visited.add(website);
 
-        // ── Enrichment ────────────────────────────────────────────
-        const { emails, phones, linkedin_url } = await scrapeContactData(website);
-        const { state, local_govt }             = parseAddressComponents(details?.address_components);
-        const lead_score                        = calculateLeadScore({
-          emails,
-          phones,
-          website,
-          linkedin_url,
-          category,
-        });
-        // ─────────────────────────────────────────────────────────
-
-        const { data: savedLead } = await supabaseAdmin.from('leads').upsert({
-          job_id:              jobId,
-          company_id:          companyId,
-          place_id:            company.placeId,
-          name:                company.name,
-          address:             company.address,
-          website,
-          emails,
-          phones,
-          status:              'new',
+        await enrichAndSaveLead({
+          companyId,
+          jobId,
           category,
           location,
-          state:               state ?? location,
-          local_govt:          local_govt ?? null,
-          linkedin_url:        linkedin_url ?? null,
-          // Method B — always generated regardless of whether person-level
-          // extraction below finds anything, so there's always a one-click
-          // "find someone at this company" fallback.
-          linkedin_search_url: buildCompanyLinkedinSearchUrl(company.name),
-          lead_score,
-          source:              'google_places',
-        }, { onConflict: 'place_id' }).select('id').single();
-
-        // Person-level contact discovery (team page AND Google search now
-        // both run for every lead — most Nigerian SME sites have no team
-        // page at all, so Google can no longer be fallback-only; results are
-        // merged/deduped inside runContactExtraction) — isolated in its own
-        // try/catch here too so a failure can never take down the lead that
-        // was just successfully saved above.
-        if (savedLead) {
-          try {
-            const contacts = await runContactExtraction(website, company.name, googleBudget);
-            await saveLeadContacts(savedLead.id, companyId, contacts);
-          } catch {
-            // contact extraction is best-effort — never blocks the scrape
-          }
-        }
+          company:      { placeId: company.placeId, name: company.name, address: company.address },
+          googleBudget,
+          placeDetails: details,
+        });
 
       } catch {
         // skip failed company, continue pipeline

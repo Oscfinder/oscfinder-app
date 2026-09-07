@@ -919,3 +919,63 @@
   LinkedIn" depending on which path it took.
 - No backend or database changes.
 - `tsc --noEmit` and `npm run build` clean.
+
+### Search & scrape a single company from the Generate Leads page
+- Added a second mode to `/scrape` for when the user already knows which
+  company they want, instead of only supporting bulk category+location
+  discovery. A tab switcher ("Search by Category" / "Search Single Company")
+  sits above the existing form; category mode is unchanged and selected by
+  default.
+- **`services/googlePlaces.ts`** — new `searchPlacesByText(query, limit=5)`,
+  a free-text Places textsearch (unscoped to a category+location combo,
+  unlike the existing `getCompanies()`) returning place_id/name/address plus
+  `category` and `rating`, which `getCompanies()` never needed. Google's
+  `types` array almost always leads with generic noise
+  (`establishment`/`point_of_interest`) rather than anything descriptive —
+  confirmed live against real searches ("Dangote Group Lagos" → every result
+  led with `establishment, point_of_interest`) — so `humanizePlaceType()`
+  skips those and humanizes the first genuinely specific type, falling back
+  to `null` (hidden in the UI) when there isn't one.
+- **`lib/leadEnrichment.ts`** (new) — extracted the batch pipeline's
+  per-company enrichment (website scraping, `parseAddressComponents`,
+  `calculateLeadScore`, the `leads` upsert, `runContactExtraction` +
+  `saveLeadContacts`) out of `app/api/scrape/route.ts` into a shared
+  `enrichAndSaveLead()`, so the new single-company route calls the exact
+  same logic instead of a re-implementation. Accepts an optional
+  pre-fetched `placeDetails` so the batch route's existing website-dedup
+  check (which already calls `getPlaceDetails` once per company) doesn't
+  cost a second identical Places Details API call — `app/api/scrape/route.ts`
+  now just does that one check and delegates the rest. Also accepts
+  `withContactsCount` (batch mode omits it — it never reads the return value
+  across up to ~100 companies per job — the single route sets it to get an
+  accurate post-merge contact count for its response).
+- **`GET /api/scrape/search`** (new) — auth'd, free (no scrape-limit check),
+  no scraping. Runs `searchPlacesByText`, cross-references the top 5
+  place_ids against this company's existing `leads` in one query, and
+  returns each result with `already_saved`/`existing_lead_id`.
+- **`POST /api/scrape/single`** (new) — auth'd, checks `requireActiveAccount`
+  + `checkLimit('google_search')` same as the batch route, 409s immediately
+  if the place_id is already a lead for this company (never charges a
+  credit for a duplicate), otherwise calls `enrichAndSaveLead()` and charges
+  1 scrape unit whether or not a website was found (charged for the attempt,
+  matching the batch route's per-job rather than per-result charging model).
+  Returns 422 with a plain-English message when the company has no public
+  website on Google — nothing to scrape, matching the batch pipeline's
+  existing skip-if-no-website behavior rather than silently doing nothing.
+- **`app/_components/SingleCompanySearch.tsx`** (new) — search bar, up to 5
+  result cards (name/address/category/rating), per-row state machine
+  (idle → loading → success-with-summary / error-with-retry) so scraping one
+  result never disturbs the others, "Already in your leads" + View link for
+  duplicates, and the existing `asPlanLimitError`/`showUpgradeModal` wiring
+  so a demo account out of scrapes gets the same upgrade modal as every
+  other blocked action.
+- `app/(dashboard)/scrape/page.tsx` — added the tab switcher; category mode's
+  form, progress card, and results modal are untouched and only rendered
+  when that tab is active.
+- Verified live end-to-end (search → duplicate-check → enrich → save →
+  cleanup) against the real Google Places API and the real `leads` table
+  using the admin account's company, bypassing the need for a full browser
+  login: searched "Konga Nigeria", scraped the top result, confirmed
+  `emails_found`/`phones_found`/`lead_score` came back populated exactly
+  like a batch-scraped lead, then deleted the test row.
+- `tsc --noEmit` and `npm run build` clean.

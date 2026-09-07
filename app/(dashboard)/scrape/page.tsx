@@ -4,7 +4,9 @@ import { MapPin, Briefcase, Search, ChevronDown } from 'lucide-react';
 import { ScrapedResultsModal } from '@/app/_components/ScrapedResultsModal';
 import { ScrapeProgress } from '@/app/_components/ScrapeProgress';
 import { Button } from '@/app/_components/Button';
+import { SingleCompanySearch } from '@/app/_components/SingleCompanySearch';
 import { Lead } from '@/types';
+import { cn } from '@/lib/utils';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { NIGERIAN_LGAS_BY_STATE } from '@/app/data/nigeriaLgas';
 import { useScrapeJob } from '@/hooks/useScrapeJob';
@@ -12,6 +14,8 @@ import { useLeads } from '@/hooks/useLeads';
 import { useQuery } from '@tanstack/react-query';
 import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
 import { DemoPlanBlockedCard } from '@/app/_components/DemoPlanBlockedCard';
+
+type SearchMode = 'category' | 'single';
 
 const MAX_RESULTS_OPTIONS = ['50', '100', '200'];
 
@@ -80,6 +84,7 @@ type UsageSummary = { scrape_count: number; email_count: number; export_count: n
 type UsageLimits  = { plan: string; scrape_limit: number | null; email_limit: number | null; export_limit: number | null };
 
 export default function ScrapePage() {
+  const [mode,        setMode]      = useState<SearchMode>('category');
   const [category,   setCategory]   = useState('');
   const [state,      setState]      = useState('');
   const [city,       setCity]       = useState('');
@@ -191,10 +196,44 @@ export default function ScrapePage() {
 
           {/* Form card */}
           <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#E5E7EB]">
-              <h2 className="text-[14px] font-bold text-[#0A1628]">Search Parameters</h2>
-              <p className="text-[12px] text-[#888888] mt-0.5">Fill in the fields below to start a scrape</p>
+            <div className="px-5 pt-4 border-b border-[#E5E7EB]">
+              <h2 className="text-[14px] font-bold text-[#0A1628]">
+                {mode === 'category' ? 'Search Parameters' : 'Search Single Company'}
+              </h2>
+              <p className="text-[12px] text-[#888888] mt-0.5 mb-3">
+                {mode === 'category'
+                  ? 'Fill in the fields below to start a scrape'
+                  : 'Find one company by name and add it to your leads directly'}
+              </p>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setMode('category')}
+                  className={cn(
+                    'h-8 px-3.5 rounded-t-lg text-[12px] font-semibold transition-colors',
+                    mode === 'category'
+                      ? 'bg-[#F8FAFC] text-[#006285] border border-b-0 border-[#E5E7EB]'
+                      : 'text-[#888888] hover:text-[#0A1628]'
+                  )}
+                >
+                  Search by Category
+                </button>
+                <button
+                  onClick={() => setMode('single')}
+                  className={cn(
+                    'h-8 px-3.5 rounded-t-lg text-[12px] font-semibold transition-colors',
+                    mode === 'single'
+                      ? 'bg-[#F8FAFC] text-[#006285] border border-b-0 border-[#E5E7EB]'
+                      : 'text-[#888888] hover:text-[#0A1628]'
+                  )}
+                >
+                  Search Single Company
+                </button>
+              </div>
             </div>
+
+            {mode === 'single' ? (
+              <SingleCompanySearch />
+            ) : (
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <SelectField
@@ -282,10 +321,11 @@ export default function ScrapePage() {
                 </Button>
               ) : null}
             </div>
+            )}
           </div>
 
           {/* Progress */}
-          {job && (isRunning || isComplete) && <ScrapeProgress job={job} />}
+          {mode === 'category' && job && (isRunning || isComplete) && <ScrapeProgress job={job} />}
 
           {/* Usage mini-card */}
           <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
