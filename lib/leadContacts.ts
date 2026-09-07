@@ -1,5 +1,5 @@
 import { supabaseAdmin } from './supabase-server';
-import { ExtractedContact } from '@/services/contactExtraction';
+import { ExtractedContact, isValidContactName } from '@/services/contactExtraction';
 
 const SOURCE_RANK: Record<string, number> = { manual: 3, team_page: 2, google_search: 1, facebook: 1 };
 
@@ -18,6 +18,12 @@ export async function saveLeadContacts(
   companyId:  string,
   contacts:   ExtractedContact[],
 ): Promise<void> {
+  // Defense-in-depth: reject anything that isn't actually a person's name, or
+  // whose name is just its own title copied verbatim (the exact shape of the
+  // Ouranos Technologies bug — "Non-Executive Director"/"Company Secretary"
+  // saved as both name and title) — even if a future extraction heuristic
+  // reintroduces the bug, it can never reach the database.
+  contacts = contacts.filter(c => isValidContactName(c.name, c.title));
   if (contacts.length === 0) return;
 
   const { data: existing } = await supabaseAdmin

@@ -63,21 +63,35 @@ function looksLikeGenericName(name: string): boolean {
   return GENERIC_NAME_PARTS.some(w => lower.includes(w));
 }
 
-// A real person's name: 2-4 capitalized words, letters/hyphens/apostrophes only,
-// nothing that reads like a sentence or a nav-menu label.
+const TITLE_KEYWORDS = [
+  'ceo', 'md', 'managing director', 'non-executive director', 'founder',
+  'co-founder', 'director', 'manager', 'head of', 'lead', 'chief', 'partner',
+  'principal', 'supervisor', 'coordinator', 'officer', 'president', 'vp',
+  'vice president', 'secretary', 'accountant', 'admin',
+];
+
+// Whole-word/phrase match only (never a raw substring test) — a raw
+// `.includes('lead')` would reject a real name like "Leadbetter", but
+// `(^|\s)lead($|\s)` only matches "lead" as its own standalone word.
+function containsTitleKeyword(text: string): boolean {
+  const lower = text.trim().toLowerCase();
+  return TITLE_KEYWORDS.some(kw => new RegExp(`(^|\\s)${kw}($|\\s)`, 'i').test(lower));
+}
+
+// A real person's name: 2-4 capitalized words, letters/hyphens/apostrophes
+// only, nothing that reads like a sentence or a nav-menu label — and, found
+// live against Ouranos Technologies' team page, nothing that IS a job title.
+// "Non-Executive Director" and "Company Secretary" both structurally match
+// the "2-4 capitalized words" shape (hyphens/no punctuation), so the regex
+// alone can't tell a title-only listing (no name given) from a real person —
+// this second check is what actually rejects them.
 function looksLikeName(text: string): boolean {
   const t = text.trim();
   if (t.length < 4 || t.length > 45) return false;
   if (looksLikeGenericName(t)) return false;
+  if (containsTitleKeyword(t)) return false;
   return /^[A-Z][a-zA-Z'-]+(\s+[A-Z][a-zA-Z'-]+){1,3}$/.test(t);
 }
-
-const TITLE_KEYWORDS = [
-  'ceo', 'md', 'managing director', 'founder', 'co-founder', 'director',
-  'manager', 'head of', 'lead', 'chief', 'partner', 'principal', 'supervisor',
-  'coordinator', 'officer', 'president', 'vp', 'vice president', 'secretary',
-  'accountant', 'admin',
-];
 
 function looksLikeTitle(text: string): boolean {
   const lower = text.trim().toLowerCase();
@@ -87,6 +101,17 @@ function looksLikeTitle(text: string): boolean {
 
 function normalizedName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// Defense-in-depth, checked again at the persistence layer (lib/leadContacts.ts)
+// in case a future heuristic reintroduces the same class of bug — a contact
+// is only ever real if its name actually looks like a name, and isn't just
+// its own title field copied verbatim (the exact shape of the Ouranos bug:
+// "Company Secretary" saved as both name and title).
+export function isValidContactName(name: string, title?: string | null): boolean {
+  if (!looksLikeName(name)) return false;
+  if (title && normalizedName(name) === normalizedName(title)) return false;
+  return true;
 }
 
 function dedupeByName(contacts: ExtractedContact[]): ExtractedContact[] {
@@ -278,10 +303,24 @@ const USER_AGENTS = [
 ];
 const randomUserAgent = () => USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
+// Confirmed live (2026-09) against real queries from this server: Google no
+// longer always shows the classic "/sorry/" CAPTCHA page to a plain HTTP
+// client. Instead it returns a normal HTTP 200 whose body is a
+// `/httpservice/retry/enablejs` "please enable JavaScript" redirect gate —
+// no CAPTCHA keyword anywhere, but also zero real result markup. Verified
+// against 3 different companies and 2 different User-Agents: 200 status,
+// no '/sorry/'/'unusual traffic' text, yet 0 'linkedin.com/in/' links every
+// time — this gate, not rate-limiting, is why the old detection saw "success"
+// while silently parsing nothing.
 function isBlockedResponse(status: number, data: unknown): boolean {
   if (status === 429 || status === 403) return true;
   if (typeof data !== 'string') return false;
-  return data.includes('/sorry/') || data.includes('detected unusual traffic') || data.includes('unusual traffic from your computer');
+  return (
+    data.includes('/sorry/') ||
+    data.includes('detected unusual traffic') ||
+    data.includes('unusual traffic from your computer') ||
+    data.includes('/httpservice/retry/enablejs')
+  );
 }
 
 // One query against Google, parsed for linkedin.com/in/ result links.

@@ -816,3 +816,53 @@
   (`app/api/scrape/route.ts`'s outer try/catch), not something introduced by
   this feature, so left untouched.
 - `tsc --noEmit` and `npm run build` re-confirmed clean after the fix.
+
+---
+
+## 2026-09-07
+
+### Contact extraction: ghost names + confirmed root cause of Google search returning zero
+- **Ghost names** — Ouranos Technologies' team page listed some roles ("Non-Executive
+  Director", "Company Secretary") with no personal name given, just the title. Those
+  titles are 1-2 capitalized words with no punctuation, so they structurally matched
+  `looksLikeName()`'s "2-4 capitalized words" regex — nothing previously stopped a
+  title-shaped string from being accepted as a name. `services/contactExtraction.ts`:
+  `looksLikeName()` now also rejects any candidate whose text contains a whole-word
+  match against `TITLE_KEYWORDS` (word-boundary regex, not a raw substring test, so a
+  real name like "Leadbetter" isn't falsely rejected just for containing "lead").
+  Verified: "Non-Executive Director"/"Company Secretary" now correctly rejected, all
+  13 real names from the same page still pass.
+- Added `isValidContactName(name, title)` (exported) and used it as a second,
+  independent guard in `lib/leadContacts.ts`'s `saveLeadContacts()` — rejects any
+  contact reaching the persistence layer whose name fails `looksLikeName()` or whose
+  name equals its own title verbatim, so even a future extraction-heuristic bug of
+  this same shape can't reach the database.
+- Cleaned up the 2 existing bad rows directly in Supabase (`Non-Executive Director`,
+  `Company Secretary`, both on the Ouranos Technologies lead) — confirmed 0 remaining
+  `name === title` rows afterward.
+- **Google search returning 0 contacts across 17 leads — root cause confirmed, not
+  just suspected.** Fetched Google's actual response directly (bypassing the scrape
+  pipeline) for 3 different real company names with 2 different User-Agents: every
+  request came back HTTP 200, with none of the old CAPTCHA tells ("/sorry/",
+  "unusual traffic") — but the response body was actually a
+  `/httpservice/retry/enablejs` "please enable JavaScript" redirect gate, not real
+  result markup, every single time. This is a structural block on plain non-JS HTTP
+  requests, not a rate-limiting issue — no amount of delay or User-Agent rotation
+  fixes it, which is why the previous fix's slower delays and UA rotation made no
+  difference. `isBlockedResponse()` now also detects this exact signal
+  (`/httpservice/retry/enablejs`), so a job's `GoogleSearchBudget` is marked
+  `blocked` after the very first query confirms it — every subsequent lead in the
+  job skips Google entirely instead of wasting its 5-15s delay on a request that was
+  already proven futile for this job.
+- Deliberately did not rip out `extractGoogleSearchContacts()` (Option A from the
+  spec) — kept the attempt (now failing fast) rather than switching fully to
+  Option B, since production runs from Vercel's IPs rather than this sandbox and
+  could plausibly get a different result; either way, Method B's per-lead
+  `leads.linkedin_search_url` (added in the prior session, always set regardless of
+  extraction success) remains the reliable fallback in practice today, as the spec's
+  own "Option B is probably the right call for now" anticipated.
+- Verified live post-fix: 13 `team_page` contacts across 3 leads, 0 `google_search`
+  (expected, per the confirmed block above), 0 ghost rows.
+- `tsc --noEmit` and `npm run build` clean (also cleared a corrupted `.next/dev/types`
+  artifact left behind by a dev server that had been running concurrently with an
+  earlier `tsc` invocation — unrelated to this fix, just build-tool housekeeping).
