@@ -779,3 +779,40 @@
   Method B (`buildCompanyLinkedinSearchUrl`) needs no network request at all
   and is the one piece of this feature guaranteed to always work.
 - `tsc --noEmit` and `npm run build` both clean.
+
+### Real end-to-end scrape test (same day, after both migrations run)
+- Ran a real "Law Firms" / "Lagos, Nigeria" search (Google Places → team-page
+  + Google-search extraction → save), calling the actual service functions
+  directly rather than a reimplementation, against the first 10 real results.
+  Saved as real leads under AnchorHMO (same as a normal scrape would
+  produce) rather than throwaway test data.
+- **Google search**: blocked on the very first request of the run — budget
+  went from 10 to 9 remaining and `blocked` flipped `true` immediately, and
+  every one of the following 9 leads correctly skipped Google entirely
+  (0 further requests consumed). Confirms the per-job budget and
+  block-detection work exactly as designed under real conditions, not just in
+  a single manual test.
+- **Team page**: found real, correct contacts for a real company — 9 actual
+  partners at **G Elias** (a real Lagos law firm) extracted from their real
+  team page, each with the correct "Partner" title. The other 8 companies in
+  the batch yielded zero contacts (no team page at the guessed paths, or one
+  that didn't parse) — expected, matches the "most Nigerian SME sites don't
+  have one" premise this whole fix started from.
+- **Found and fixed a second real false positive**: the same G Elias page
+  also produced a bogus contact named "Senior Associate" (title "Partner") —
+  a section subheading grouping several people, not a person itself, that
+  passed the name-shape regex. Fixed by adding role/seniority words
+  (`associate`, `senior`, `junior`, `partner`, `counsel`, `solicitor`,
+  `attorney`, `consultant`) to the generic-name filter. Re-ran extraction
+  against the same live G Elias page after the fix: the bogus row is gone,
+  all 9 real partners still correctly extracted. Deleted the one bad
+  `lead_contacts` row that had already been saved before the fix; the 9
+  correct ones and the other 9 real law-firm leads were left in place as
+  genuine data.
+- Also observed one `TypeError: fetch failed` on a single company
+  (transient network blip on that company's own lookup) — caught cleanly by
+  the surrounding try/catch with no effect on the rest of the batch; this is
+  the existing scrape pipeline's pre-existing per-company error handling
+  (`app/api/scrape/route.ts`'s outer try/catch), not something introduced by
+  this feature, so left untouched.
+- `tsc --noEmit` and `npm run build` re-confirmed clean after the fix.

@@ -47,9 +47,15 @@ export function createGoogleSearchBudget(maxRequests = 10): GoogleSearchBudget {
 
 // Generic role-account or placeholder names that show up in team-page markup
 // but aren't a real person — "Admin", "Support Team", "Customer Service", etc.
+// Also role/seniority words on their own — a real live test against a law
+// firm's actual team page found "Senior Associate" (a section subheading
+// grouping several people, not a person) passing the name-shape regex and
+// getting paired with a nearby "Partner" title.
 const GENERIC_NAME_PARTS = [
   'admin', 'support', 'team', 'staff', 'sales', 'info', 'contact', 'customer',
   'service', 'general', 'enquiries', 'inquiries', 'hr', 'careers', 'office',
+  'associate', 'senior', 'junior', 'partner', 'counsel', 'solicitor',
+  'attorney', 'consultant',
 ];
 
 function looksLikeGenericName(name: string): boolean {
