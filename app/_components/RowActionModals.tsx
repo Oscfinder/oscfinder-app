@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { X, Globe, Mail, Phone, MapPin, Briefcase, Trash2, Send, AlertTriangle, PlusCircle, CheckCheck, ChevronDown } from 'lucide-react';
+import { X, Globe, Mail, Phone, MapPin, Briefcase, Trash2, Send, AlertTriangle, PlusCircle, CheckCheck, ChevronDown, Search } from 'lucide-react';
 import { Lead, RequiresAcknowledgment } from '@/types';
 import { Button } from './Button';
 import { SendLimitConsentModal } from './SendLimitConsentModal';
@@ -9,6 +9,7 @@ import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData
 import { NIGERIAN_LGAS_BY_STATE } from '@/app/data/nigeriaLgas';
 import { EMAIL_DESIGNS, DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
 import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
+import { buildFindEmailUrl, buildFindPhoneUrl } from '@/lib/findPeopleLinks';
 import { LeadContactsSection } from './LeadContactsSection';
 
 // ─── shared backdrop + shell ───────────────────────────────────────────────
@@ -34,6 +35,22 @@ function ModalHeader({ title, subtitle, onClose }: { title: string; subtitle?: s
         <X size={16} className="text-gray-500" />
       </button>
     </div>
+  );
+}
+
+// Same visual pattern as the leads table's "Find Email"/"Find People" links —
+// a subtle, clickable next step in place of a dead value when the scraper
+// found nothing.
+function SearchLink({ label, url }: { label: string; url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center gap-1 text-[#006285] hover:text-[#0099CC] font-medium transition-colors"
+    >
+      <Search size={12} /> {label}
+    </a>
   );
 }
 
@@ -63,8 +80,16 @@ export function ViewModal({ lead, onClose }: { lead: Lead; onClose: () => void }
             ? <a href={lead.website} target="_blank" rel="noreferrer" className="text-[#006285] underline">{lead.website}</a>
             : null
         } />
-        <DetailRow icon={Mail}      label="Emails"   value={lead.emails?.join(', ')} />
-        <DetailRow icon={Phone}     label="Phones"   value={lead.phones?.join(', ')} />
+        <DetailRow icon={Mail}      label="Emails"   value={
+          lead.emails?.length
+            ? lead.emails.join(', ')
+            : <SearchLink label="Search for email" url={buildFindEmailUrl(lead.name)} />
+        } />
+        <DetailRow icon={Phone}     label="Phones"   value={
+          lead.phones?.length
+            ? lead.phones.join(', ')
+            : <SearchLink label="Search for phone" url={buildFindPhoneUrl(lead.name)} />
+        } />
         <DetailRow icon={Briefcase} label="Category" value={lead.category} />
         <DetailRow icon={MapPin}    label="Location" value={[lead.local_govt, lead.state].filter(Boolean).join(', ')} />
         <div className="flex items-start gap-3 py-2.5">

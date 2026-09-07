@@ -11,7 +11,7 @@ import { Lead } from '@/types';
 import { cn } from '@/lib/utils';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { ViewModal, EditModal, MessageModal, DeleteModal, AddModal } from '@/app/_components/RowActionModals';
-import { buildFindPeopleLinks } from '@/lib/findPeopleLinks';
+import { buildFindPeopleLinks, buildFindEmailUrl } from '@/lib/findPeopleLinks';
 
 const FIND_PEOPLE_ICON = [Linkedin, Search, Facebook];
 
@@ -534,7 +534,16 @@ export default function LeadsPage() {
                       {lead.local_govt || '—'}
                     </td>
                     <td className="px-3.5 py-3 text-[13px] text-[#0A1628] max-w-[180px] truncate">
-                      {lead.emails?.[0] || '—'}
+                      {lead.emails?.[0] || (
+                        <a
+                          href={buildFindEmailUrl(lead.name)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 text-[#888888] hover:text-[#006285] font-medium transition-colors"
+                        >
+                          <Search size={12} /> Find Email
+                        </a>
+                      )}
                     </td>
                     <td className="px-3.5 py-3">
                       <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full capitalize ${badgeCls}`}>

@@ -1060,3 +1060,22 @@
   run manually in Supabase SQL Editor before the plan/term fields will
   persist — until then, `POST /api/admin/invoices` will fail on insert for
   any setup/renewal invoice (the columns don't exist yet).
+
+### "Find Email" / "Find Phone" search links for leads with no contact info
+- Same pattern as the existing "Find People" links — a lead with no email or
+  phone previously showed a dead "—" with no next step. Added
+  `buildFindEmailUrl(companyName)` and `buildFindPhoneUrl(companyName)` to
+  `lib/findPeopleLinks.ts` (alongside the existing `buildFindPeopleLinks`,
+  sharing its `googleSearchUrl()` helper) — plain Google search URLs opened
+  in a new tab, no API calls or database changes.
+- `app/(dashboard)/leads/page.tsx` — the Email column now shows a clickable
+  "Find Email" link in place of "—" when a lead has no email. There's no
+  separate Phone column in this table (checked — Phone was never one of the
+  table's columns), so that half of the request doesn't apply here.
+- `app/_components/RowActionModals.tsx` — the ViewModal's Emails and Phones
+  detail rows now show inline "Search for email"/"Search for phone" links in
+  place of "—" when empty, via a small shared `SearchLink` component reusing
+  the existing `DetailRow` shell rather than a bolted-on section. Skipped the
+  optional inline pencil-edit affordance — the existing Edit action already
+  covers it, and the task itself marked this a skippable nice-to-have.
+- `tsc --noEmit` and `npm run build` clean.
