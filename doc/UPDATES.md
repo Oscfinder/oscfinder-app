@@ -979,3 +979,84 @@
   `emails_found`/`phones_found`/`lead_score` came back populated exactly
   like a batch-scraped lead, then deleted the test row.
 - `tsc --noEmit` and `npm run build` clean.
+
+## 2026-09-08
+
+### 1-month subscription term support for billing
+- The pasted task assumed a schema that doesn't exist here — `plan_name`,
+  `subscription_start`/`subscription_end` columns, and invoices driving
+  arbitrary plan assignment from scratch. The real schema
+  (`doc/ARCHITECTURE.md`) already has `companies.plan_start_date`/
+  `plan_end_date` (from way before this task) and `invoices.invoice_type`
+  (setup | renewal | overage) — but **invoices had no plan or term of their
+  own at all**: `mark_paid` for a "renewal" invoice always extended
+  `plan_end_date` by a hardcoded +1 year no matter what was actually paid
+  for, and a "setup" invoice never touched `plan_end_date` at all (only
+  `plan_start_date`/`plan_end_date` set at company creation, defaulting to
+  +365 days). Adapted the task to that real system instead of adding a
+  parallel schema: extended the existing invoice/mark-paid flow to actually
+  know what term it's for, rather than introducing
+  `subscription_start`/`subscription_end` columns that would duplicate
+  `plan_start_date`/`plan_end_date`.
+- **`supabase/migrations/024_subscription_terms.sql`** (needs to be run in
+  Supabase SQL Editor) — adds `invoices.plan` and `invoices.term` (both
+  nullable, so every invoice created before this migration keeps working
+  exactly as it did), and `companies.subscription_term` (a display label
+  only — `plan_end_date` remains the one source of truth for expiry).
+  Recreates `admin_company_overview` to surface the new company column,
+  following the append-only pattern from `017_company_phone.sql` (Postgres
+  won't let `CREATE OR REPLACE VIEW` reorder or insert a column mid-list).
+- **`lib/subscriptionTerms.ts`** (new) — `SUBSCRIPTION_TERMS`/`TERM_LABELS`
+  ('1_month'/'3_months'/'6_months'/'1_year'), `SUGGESTED_PRICING` (the
+  plan × term table from the spec, hint-only — never enforced, since the
+  admin may negotiate custom pricing), and `addTerm(from, term)`. Caught a
+  real date-math bug while testing this against real dates before wiring it
+  in: naive `date.setMonth(m + n)` on a month-end date like Jan 31 overflows
+  into the following month (Feb has no 31st, so `setMonth` rolls it to Mar
+  3) — a subscription starting on the 31st would silently get a few free
+  extra days every renewal. Fixed by pinning to day 1 before adding months,
+  then clamping to the target month's actual last day. Verified: Jan 31 +
+  1 month → Feb 28 (Feb 29 in a leap year), + 3 months → Apr 30, matching
+  what "1 month" should mean in plain English.
+- **`app/api/admin/invoices/route.ts`** — `POST` now accepts `plan`/`term`,
+  required (and validated against the real enum) for `setup`/`renewal`
+  invoices, optional for `overage` (a one-off charge that doesn't touch the
+  subscription).
+- **`app/api/admin/invoices/[id]/route.ts`** — `mark_paid`'s `setup` branch
+  now also sets `plan`/`plan_start_date`/`plan_end_date` (= today + term)/
+  `subscription_term` when the invoice carries them, and clears
+  `is_demo`/`demo_expires_at` if the company was a demo (this path isn't
+  reachable through the current invoice-creation UI, which excludes demo
+  companies from the picker — kept anyway as a correct, low-risk guard for
+  direct API use or if that's opened up later). The `renewal` branch now
+  extends `plan_end_date` by the invoice's actual `term` instead of an
+  unconditional +1 year, and updates the company's `plan` too (a renewal can
+  be an upgrade, not just an extension) — an older invoice from before this
+  migration has neither field, so it falls back to the exact original
+  +1-year behavior, unchanged.
+- **Admin UI (`app/(dashboard)/admin/page.tsx`)**:
+  - New Invoice form: added Plan and Subscription Term dropdowns (shown for
+    setup/renewal, hidden for overage), defaulting Plan to the selected
+    company's current plan. The suggested-amount hint next to Amount now
+    reads from the plan × term table and is applied only on click — the
+    Amount field stays manually entered either way.
+  - Billing tab: each invoice row now shows its plan + term under the type
+    (e.g. "Setup — Starter · 1 month") when present.
+  - Companies tab: the Plan Expires cell now shows the subscription term
+    underneath the date when set.
+  - Renewals Due tab: a 1-month subscription's entire term is shorter than
+    the original 30-day reminder window, which would otherwise surface it
+    with almost no runway to invoice and collect payment before it lapses —
+    those now surface 7 days out instead of 30; every other term keeps the
+    original 30-day window. Added a Term column.
+- **Usage limits**: verified, no code change needed — `checkLimit()`
+  (`lib/usage.ts`) already reads live from `plan_limits` keyed by
+  `companies.plan`, so once activation sets the correct plan, scrape/email/
+  export limits switch automatically.
+- **Landing page pricing**: no landing/marketing page with a pricing section
+  exists in this repo to update — skipped per the task's own fallback
+  ("if you're keeping Custom/Get a Quote language, no code change needed").
+- `tsc --noEmit` and `npm run build` clean. Migration 024 still needs to be
+  run manually in Supabase SQL Editor before the plan/term fields will
+  persist — until then, `POST /api/admin/invoices` will fail on insert for
+  any setup/renewal invoice (the columns don't exist yet).

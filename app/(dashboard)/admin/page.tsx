@@ -8,6 +8,7 @@ import {
   CompanyPlan, InvoiceType,
 } from '@/types';
 import { cn } from '@/lib/utils';
+import { SUBSCRIPTION_TERMS, TERM_LABELS, SUGGESTED_PRICING, SubscriptionTerm } from '@/lib/subscriptionTerms';
 
 // ── Helpers ───────────────────────────────────────────────────────
 const PLAN_BADGE: Record<string, string> = {
@@ -29,12 +30,6 @@ const INVOICE_STATUS_BADGE: Record<string, string> = {
   paid:      'bg-[#dff7ee] text-[#00A86B]',
   overdue:   'bg-[#ffeaea] text-[#e74c3c]',
   cancelled: 'bg-[#f3f4f6] text-[#888888]',
-};
-
-const PLAN_FEE: Record<string, Record<string, number>> = {
-  starter:    { setup: 700000,  renewal: 300000 },
-  business:   { setup: 1200000, renewal: 500000 },
-  enterprise: { setup: 1700000, renewal: 700000 },
 };
 
 function fmt(n: number | null | undefined) {
@@ -419,6 +414,7 @@ function NewInvoiceModal({
 }) {
   const [form, setForm] = useState({
     company_id: '', invoice_type: 'setup' as InvoiceType,
+    plan: 'starter' as CompanyPlan, term: '1_year' as SubscriptionTerm,
     amount: '', due_date: '', notes: '', reference: '',
   });
   const [saving,  setSaving]  = useState(false);
@@ -426,17 +422,29 @@ function NewInvoiceModal({
 
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
 
-  const selectedCompany = companies.find(c => c.id === form.company_id);
-  const suggestedAmount = selectedCompany
-    ? (PLAN_FEE[selectedCompany.plan]?.[form.invoice_type] ?? null)
+  const needsPlanAndTerm = form.invoice_type !== 'overage';
+  const suggestedAmount = needsPlanAndTerm && form.plan in SUGGESTED_PRICING
+    ? SUGGESTED_PRICING[form.plan as 'starter' | 'business' | 'enterprise'][form.term]
     : null;
+
+  // Default the Plan dropdown to the selected company's current plan (still
+  // editable — a renewal invoice can also be an upgrade).
+  const selectCompany = (id: string) => {
+    const company = companies.find(c => c.id === id);
+    setForm(f => ({ ...f, company_id: id, plan: company?.plan ?? f.plan }));
+  };
 
   const submit = async () => {
     if (!form.company_id || !form.amount) { setFormErr('Company and amount are required'); return; }
     setSaving(true);
     const res  = await fetch('/api/admin/invoices', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body:   JSON.stringify({ ...form, amount: Number(form.amount) }),
+      body:   JSON.stringify({
+        ...form,
+        plan:   needsPlanAndTerm ? form.plan : null,
+        term:   needsPlanAndTerm ? form.term : null,
+        amount: Number(form.amount),
+      }),
     });
     const data = await res.json();
     setSaving(false);
@@ -459,7 +467,7 @@ function NewInvoiceModal({
           <div>
             <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Company *</label>
             <div className="relative">
-              <select value={form.company_id} onChange={e => set('company_id', e.target.value)} className={selectCls}>
+              <select value={form.company_id} onChange={e => selectCompany(e.target.value)} className={selectCls}>
                 <option value="">Select company...</option>
                 {companies.filter(c => !c.is_demo).map(c => (
                   <option key={c.id} value={c.id}>{c.name} ({c.plan})</option>
@@ -468,33 +476,55 @@ function NewInvoiceModal({
               <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Type *</label>
-              <div className="relative">
-                <select value={form.invoice_type} onChange={e => set('invoice_type', e.target.value)} className={selectCls}>
-                  <option value="setup">Setup</option>
-                  <option value="renewal">Renewal</option>
-                  <option value="overage">Overage</option>
-                </select>
-                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
+          <div>
+            <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Type *</label>
+            <div className="relative">
+              <select value={form.invoice_type} onChange={e => set('invoice_type', e.target.value)} className={selectCls}>
+                <option value="setup">Setup</option>
+                <option value="renewal">Renewal</option>
+                <option value="overage">Overage</option>
+              </select>
+              <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
+            </div>
+          </div>
+          {needsPlanAndTerm && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Plan *</label>
+                <div className="relative">
+                  <select value={form.plan} onChange={e => set('plan', e.target.value)} className={selectCls}>
+                    <option value="starter">Starter</option>
+                    <option value="business">Business ⭐</option>
+                    <option value="enterprise">Enterprise</option>
+                  </select>
+                  <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">Subscription Term *</label>
+                <div className="relative">
+                  <select value={form.term} onChange={e => set('term', e.target.value)} className={selectCls}>
+                    {SUBSCRIPTION_TERMS.map(t => <option key={t} value={t}>{TERM_LABELS[t]}</option>)}
+                  </select>
+                  <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
+                </div>
               </div>
             </div>
-            <div>
-              <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">
-                Amount (₦) *
-                {suggestedAmount && (
-                  <button
-                    type="button"
-                    onClick={() => set('amount', String(suggestedAmount))}
-                    className="ml-1.5 text-[#0099CC] font-normal hover:underline"
-                  >
-                    use {fmt(suggestedAmount)}
-                  </button>
-                )}
-              </label>
-              <input type="number" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="700000" className={inputCls} />
-            </div>
+          )}
+          <div>
+            <label className="block text-[12px] font-semibold text-[#1A3A5C] mb-1">
+              Amount (₦) *
+              {suggestedAmount && (
+                <button
+                  type="button"
+                  onClick={() => set('amount', String(suggestedAmount))}
+                  className="ml-1.5 text-[#0099CC] font-normal hover:underline"
+                >
+                  Suggested: {fmt(suggestedAmount)}
+                </button>
+              )}
+            </label>
+            <input type="number" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="700000" className={inputCls} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -631,11 +661,16 @@ export default function AdminPage() {
     }
   };
 
-  // Renewals: companies expiring within 30 days (computed client-side)
+  // Renewals: companies expiring soon (computed client-side). A 1-month
+  // subscription's whole term is shorter than the standard 30-day reminder
+  // window, so it would otherwise surface with almost no runway left to
+  // invoice and collect payment before it lapses — those get a 7-day window
+  // instead, everyone else keeps the original 30 days.
   const renewalsDue = companies.filter(c => {
     if (!c.plan_end_date || c.is_demo) return false;
-    const days = Math.ceil((new Date(c.plan_end_date).getTime() - Date.now()) / 86400000);
-    return days >= 0 && days <= 30;
+    const days      = Math.ceil((new Date(c.plan_end_date).getTime() - Date.now()) / 86400000);
+    const threshold = c.subscription_term === '1_month' ? 7 : 30;
+    return days >= 0 && days <= threshold;
   }).sort((a, b) => new Date(a.plan_end_date!).getTime() - new Date(b.plan_end_date!).getTime());
 
   const tabs: { key: Tab; label: string }[] = [
@@ -734,6 +769,11 @@ export default function AdminPage() {
                         </td>
                         <td className={cn(tdCls, 'text-[12px] text-[#888888] whitespace-nowrap')}>
                           {fmtDate(c.plan_end_date)}
+                          {c.subscription_term && (
+                            <p className="text-[11px] text-[#0099CC] font-medium">
+                              {TERM_LABELS[c.subscription_term as SubscriptionTerm] ?? c.subscription_term}
+                            </p>
+                          )}
                         </td>
                         <td className={tdCls}>
                           {c.setup_fee_paid
@@ -819,7 +859,14 @@ export default function AdminPage() {
                           <p className="text-[13px] font-semibold text-[#0A1628]">{(inv as any).company?.name ?? '—'}</p>
                           <p className="text-[11px] text-[#888888] capitalize">{(inv as any).company?.plan}</p>
                         </td>
-                        <td className={cn(tdCls, 'text-[12px] text-[#1A3A5C] capitalize font-medium')}>{inv.invoice_type}</td>
+                        <td className={cn(tdCls, 'text-[12px] text-[#1A3A5C] capitalize font-medium')}>
+                          {inv.invoice_type}
+                          {inv.plan && inv.term && (
+                            <p className="text-[11px] text-[#888888] capitalize font-normal">
+                              {inv.plan} · {TERM_LABELS[inv.term as SubscriptionTerm] ?? inv.term}
+                            </p>
+                          )}
+                        </td>
                         <td className={cn(tdCls, 'font-mono text-[13px] font-bold text-[#0A1628]')}>{fmt(inv.amount)}</td>
                         <td className={tdCls}>
                           <span className={cn('text-[11px] font-bold px-2.5 py-0.5 rounded-full capitalize', INVOICE_STATUS_BADGE[inv.status])}>
@@ -862,21 +909,24 @@ export default function AdminPage() {
       {tab === 'renewals' && (
         <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
           <div className="px-5 py-4 border-b border-[#E5E7EB] bg-[#F8FAFC]">
-            <h2 className="text-[14px] font-bold text-[#0A1628]">Plans Expiring Within 30 Days</h2>
-            <p className="text-[12px] text-[#888888] mt-0.5">Create a renewal invoice for each company to extend their plan.</p>
+            <h2 className="text-[14px] font-bold text-[#0A1628]">Plans Expiring Soon</h2>
+            <p className="text-[12px] text-[#888888] mt-0.5">
+              Create a renewal invoice for each company to extend their plan. 1-month
+              subscriptions surface 7 days out; every other term surfaces 30 days out.
+            </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="bg-[#F8FAFC]">
-                  {['Company', 'Plan', 'Plan Expires', 'Days Left', 'Renewal Paid', 'Actions'].map(h => (
+                  {['Company', 'Plan', 'Term', 'Plan Expires', 'Days Left', 'Renewal Paid', 'Actions'].map(h => (
                     <th key={h} className={thCls}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {renewalsDue.length === 0 ? (
-                  <tr><td colSpan={6} className="py-12 text-center text-[13px] text-[#888888]">No renewals due in the next 30 days.</td></tr>
+                  <tr><td colSpan={7} className="py-12 text-center text-[13px] text-[#888888]">No renewals due.</td></tr>
                 ) : (
                   renewalsDue.map(c => {
                     const days = Math.ceil((new Date(c.plan_end_date!).getTime() - Date.now()) / 86400000);
@@ -890,6 +940,9 @@ export default function AdminPage() {
                           <span className={cn('text-[11px] font-bold px-2.5 py-0.5 rounded-full capitalize', PLAN_BADGE[c.plan])}>
                             {c.plan}
                           </span>
+                        </td>
+                        <td className={cn(tdCls, 'text-[12px] text-[#1A3A5C]')}>
+                          {c.subscription_term ? TERM_LABELS[c.subscription_term as SubscriptionTerm] ?? c.subscription_term : '—'}
                         </td>
                         <td className={cn(tdCls, 'text-[12px] text-[#888888] whitespace-nowrap')}>{fmtDate(c.plan_end_date)}</td>
                         <td className={tdCls}>

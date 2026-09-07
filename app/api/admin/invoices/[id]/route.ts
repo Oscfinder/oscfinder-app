@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAdmin, logAdminAction } from '@/lib/auth';
+import { addTerm, SubscriptionTerm } from '@/lib/subscriptionTerms';
 
 // ── PATCH /api/admin/invoices/[id] ───────────────────────────────
 // Body: { action: 'mark_paid' | 'cancel' | 'revert_to_pending', payment_method?, reference?, paid_date? }
 //
 // mark_paid side-effects:
-//   setup   invoice → company.setup_fee_paid = true, status = 'active'
-//   renewal invoice → plan_end_date + 1 year,  renewal_fee_paid = true, status = 'active'
+//   setup   invoice → company.setup_fee_paid = true, status = 'active';
+//           if the invoice carries a plan/term (required on every invoice
+//           created after 024_subscription_terms.sql), also sets the
+//           company's plan, plan_start_date = today, plan_end_date = today + term,
+//           and clears demo status if it was a demo conversion.
+//   renewal invoice → plan_end_date extended by the invoice's term (falling
+//           back to the pre-migration hardcoded +1 year for any older
+//           invoice that predates the plan/term columns and so has neither),
+//           renewal_fee_paid = true, status = 'active'; also updates the
+//           company's plan if the invoice's plan differs (a renewal can be
+//           an upgrade, not just an extension).
 //
 // revert_to_pending is a superadmin correction tool for a mistaken mark_paid — it
 // only flips the invoice row itself back to 'pending' and clears the paid_date/
@@ -81,10 +91,27 @@ export async function PATCH(
     .eq('id', id);
 
   if (invoice.invoice_type === 'setup') {
-    await supabaseAdmin
-      .from('companies')
-      .update({ setup_fee_paid: true, status: 'active' })
-      .eq('id', invoice.company_id);
+    const updates: Record<string, unknown> = { setup_fee_paid: true, status: 'active' };
+
+    if (invoice.plan && invoice.term) {
+      const start = new Date();
+      updates.plan               = invoice.plan;
+      updates.plan_start_date    = start.toISOString();
+      updates.plan_end_date      = addTerm(start, invoice.term as SubscriptionTerm).toISOString();
+      updates.subscription_term  = invoice.term;
+
+      const { data: co } = await supabaseAdmin
+        .from('companies')
+        .select('is_demo')
+        .eq('id', invoice.company_id)
+        .single();
+      if (co?.is_demo) {
+        updates.is_demo         = false;
+        updates.demo_expires_at = null;
+      }
+    }
+
+    await supabaseAdmin.from('companies').update(updates).eq('id', invoice.company_id);
   }
 
   if (invoice.invoice_type === 'renewal') {
@@ -99,17 +126,22 @@ export async function PATCH(
       ? new Date(co.plan_end_date)
       : new Date();
 
-    const newEnd = new Date(base);
-    newEnd.setFullYear(newEnd.getFullYear() + 1);
+    // Every invoice created after 024_subscription_terms.sql carries a term;
+    // an older invoice created before that migration won't, so it falls back
+    // to the original hardcoded +1 year to keep pre-existing invoices working.
+    const newEnd = invoice.term
+      ? addTerm(base, invoice.term as SubscriptionTerm)
+      : new Date(base.getFullYear() + 1, base.getMonth(), base.getDate());
 
-    await supabaseAdmin
-      .from('companies')
-      .update({
-        renewal_fee_paid: true,
-        plan_end_date:    newEnd.toISOString(),
-        status:           'active',
-      })
-      .eq('id', invoice.company_id);
+    const updates: Record<string, unknown> = {
+      renewal_fee_paid: true,
+      plan_end_date:    newEnd.toISOString(),
+      status:           'active',
+    };
+    if (invoice.plan) updates.plan = invoice.plan;
+    if (invoice.term) updates.subscription_term = invoice.term;
+
+    await supabaseAdmin.from('companies').update(updates).eq('id', invoice.company_id);
   }
 
   await logAdminAction(admin.id, 'mark_invoice_paid', invoice.company_id, {

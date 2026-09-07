@@ -79,6 +79,7 @@ export interface Company {
   renewal_fee_paid:   boolean;
   plan_start_date:    string;
   plan_end_date:      string;
+  subscription_term:  string | null;
   is_demo:            boolean;
   demo_expires_at:    string | null;
   demo_converted:     boolean;
@@ -162,6 +163,8 @@ export interface Invoice {
   id:             string;
   company_id:     string;
   invoice_type:   InvoiceType;
+  plan:           CompanyPlan | null;
+  term:           string | null;
   amount:         number;
   currency:       string;
   status:         InvoiceStatus;
@@ -190,6 +193,7 @@ export interface AdminCompanyOverview {
   demo_expires_at:    string | null;
   demo_converted:     boolean;
   plan_end_date:      string | null;
+  subscription_term:  string | null;
   setup_fee_paid:     boolean;
   renewal_fee_paid:   boolean;
   scrapes_this_month: number;
