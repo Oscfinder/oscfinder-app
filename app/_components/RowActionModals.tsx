@@ -81,7 +81,7 @@ export function ViewModal({ lead, onClose }: { lead: Lead; onClose: () => void }
           </div>
         </div>
 
-        <LeadContactsSection leadId={lead.id} />
+        <LeadContactsSection leadId={lead.id} companyName={lead.name} />
       </div>
       <div className="px-6 py-3 border-t border-gray-100 flex justify-end">
         <Button variant="outline" onClick={onClose}>Close</Button>

@@ -1,9 +1,12 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, Pencil, Trash2, Plus, User } from 'lucide-react';
+import { Search, Pencil, Trash2, Plus, User, UserSearch, Linkedin, Facebook } from 'lucide-react';
 import { LeadContact } from '@/types';
 import { cn } from '@/lib/utils';
+import { buildFindPeopleLinks } from '@/lib/findPeopleLinks';
+
+const FIND_PEOPLE_ICON = [Linkedin, Search, Facebook];
 
 const SOURCE_LABEL: Record<string, string> = {
   team_page:     'Team page',
@@ -21,7 +24,8 @@ interface ContactForm {
 
 const EMPTY_FORM: ContactForm = { name: '', title: '', email: '', phone: '' };
 
-export function LeadContactsSection({ leadId }: { leadId: string }) {
+export function LeadContactsSection({ leadId, companyName }: { leadId: string; companyName: string }) {
+  const findPeopleLinks = buildFindPeopleLinks(companyName);
   const queryClient = useQueryClient();
   const [adding, setAdding]           = useState(false);
   const [addForm, setAddForm]         = useState<ContactForm>(EMPTY_FORM);
@@ -101,6 +105,28 @@ export function LeadContactsSection({ leadId }: { leadId: string }) {
 
   return (
     <div className="pt-3 mt-1 border-t border-gray-100">
+      <div className="rounded-lg border border-[#006285]/15 bg-[#006285]/5 px-3 py-2.5 mb-3">
+        <p className="flex items-center gap-1.5 text-[12px] font-semibold text-[#006285] mb-2">
+          <UserSearch size={13} /> Find people at this company
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {findPeopleLinks.map((link, i) => {
+            const Icon = FIND_PEOPLE_ICON[i];
+            return (
+              <a
+                key={link.label}
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white border border-[#006285]/20 text-[12px] font-semibold text-[#006285] hover:bg-[#006285] hover:text-white hover:border-[#006285] transition-colors"
+              >
+                <Icon size={12} /> {link.label.replace('Search on ', '')}
+              </a>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Contacts</p>
         {!adding && (

@@ -1,8 +1,9 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Search, X, Send, Trash2, Eye, Pencil, Mail, ChevronDown, Plus, Download, ExternalLink, Linkedin,
+  UserSearch, Facebook,
 } from 'lucide-react';
 import { Pagination } from '@/app/_components/Pagination';
 import { BulkSendModal } from '@/app/_components/BulkSendModal';
@@ -10,6 +11,61 @@ import { Lead } from '@/types';
 import { cn } from '@/lib/utils';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { ViewModal, EditModal, MessageModal, DeleteModal, AddModal } from '@/app/_components/RowActionModals';
+import { buildFindPeopleLinks } from '@/lib/findPeopleLinks';
+
+const FIND_PEOPLE_ICON = [Linkedin, Search, Facebook];
+
+function FindPeopleMenu({ companyName, align = 'left' }: { companyName: string; align?: 'left' | 'right' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const links = buildFindPeopleLinks(companyName);
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Find People"
+        className="flex items-center justify-center w-7 h-7 rounded-lg text-[#006285] hover:bg-[#dff2f9] transition-colors"
+      >
+        <UserSearch size={13} />
+      </button>
+      {open && (
+        <div
+          className={cn(
+            'absolute z-20 top-8 w-48 rounded-lg border border-[#E5E7EB] bg-white shadow-lg py-1',
+            align === 'right' ? 'right-0' : 'left-0'
+          )}
+        >
+          {links.map((link, i) => {
+            const Icon = FIND_PEOPLE_ICON[i];
+            return (
+              <a
+                key={link.label}
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 text-[12px] font-medium text-[#0A1628] hover:bg-[#F8FAFC] transition-colors"
+              >
+                <Icon size={13} className="text-[#006285]" /> {link.label}
+              </a>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 type ModalType = 'view' | 'edit' | 'message' | 'delete' | 'add' | 'bulk-send' | null;
 
@@ -357,6 +413,24 @@ export default function LeadsPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => {
+                // Google truncates very long queries — cap at 5 companies per
+                // search and open extra tabs in batches of 5 if more are selected.
+                const names = selectedLeads.map(l => l.name);
+                for (let i = 0; i < names.length; i += 5) {
+                  const batch = names.slice(i, i + 5).map(n => `"${n}"`).join(' OR ');
+                  window.open(
+                    `https://www.google.com/search?q=${encodeURIComponent(`${batch} site:linkedin.com/in/`)}`,
+                    '_blank',
+                    'noopener,noreferrer'
+                  );
+                }
+              }}
+              className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-white text-[#006285] text-[12px] font-semibold hover:bg-white/90 transition-colors"
+            >
+              <UserSearch size={12} /> Find People
+            </button>
+            <button
               onClick={() => setModal('bulk-send')}
               className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-white text-[#006285] text-[12px] font-semibold hover:bg-white/90 transition-colors"
             >
@@ -503,7 +577,12 @@ export default function LeadsPage() {
                           {lead.lead_contacts![0].count} contact{lead.lead_contacts![0].count === 1 ? '' : 's'}
                         </button>
                       ) : (
-                        <span className="text-[#888888]">—</span>
+                        <button
+                          onClick={() => open('view', lead)}
+                          className="flex items-center gap-1 text-[#888888] hover:text-[#006285] font-medium transition-colors"
+                        >
+                          <UserSearch size={12} /> Find People
+                        </button>
                       )}
                     </td>
                     <td className="px-3.5 py-3">
@@ -511,16 +590,7 @@ export default function LeadsPage() {
                         <ActionBtn icon={Eye}     label="View"    color="text-[#006285] hover:bg-[#dff2f9]" onClick={() => open('view', lead)}    />
                         <ActionBtn icon={Pencil}  label="Edit"    color="text-[#e67e22] hover:bg-[#fff3e0]" onClick={() => open('edit', lead)}    />
                         <ActionBtn icon={Mail}    label="Message" color="text-[#00A86B] hover:bg-[#dff7ee]" onClick={() => open('message', lead)} />
-                        <ActionBtn
-                          icon={Linkedin}
-                          label="Find on LinkedIn"
-                          color="text-[#0077b5] hover:bg-[#e8f4fa]"
-                          onClick={() => window.open(
-                            `https://www.google.com/search?q=${encodeURIComponent(`${lead.name} LinkedIn`)}`,
-                            '_blank',
-                            'noopener,noreferrer'
-                          )}
-                        />
+                        <FindPeopleMenu companyName={lead.name} />
                         <ActionBtn icon={Trash2}  label="Delete"  color="text-red-500 hover:bg-red-50"      onClick={() => open('delete', lead)}  />
                       </div>
                     </td>

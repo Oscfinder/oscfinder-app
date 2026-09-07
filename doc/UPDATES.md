@@ -866,3 +866,37 @@
 - `tsc --noEmit` and `npm run build` clean (also cleared a corrupted `.next/dev/types`
   artifact left behind by a dev server that had been running concurrently with an
   earlier `tsc` invocation — unrelated to this fix, just build-tool housekeeping).
+
+### "Find People" manual-discovery links (client-side only, no backend changes)
+- Automated contact extraction (team-page scraping + Google search) only finds
+  people for a minority of leads — most Nigerian SME sites have no team page, and
+  Google's search endpoint structurally blocks plain HTTP requests (see the entry
+  above). For every other lead, the Contacts column previously just showed "—"
+  with no next step. Added a manual-discovery workflow instead: pre-built Google
+  search links the user opens in their own browser (which isn't blocked, since
+  it's a real browser session) to find a name/title, then adds it via the
+  existing "Add Contact" form.
+- `lib/findPeopleLinks.ts` (new) — `buildFindPeopleLinks(companyName)`, a
+  client-safe helper (no server imports) returning 3 links: LinkedIn
+  (`"Company" site:linkedin.com/in/`), Google (`"Company" staff OR team OR CEO OR
+  "Managing Director" OR founder`), Facebook (`"Company" site:facebook.com`) —
+  each a `google.com/search` URL, company name URL-encoded and quoted.
+- `app/_components/LeadContactsSection.tsx` — added a "Find people at this
+  company" card above the contacts list with all 3 links as inline buttons;
+  now takes a `companyName` prop (passed as `lead.name` from
+  `RowActionModals.tsx`'s `ViewModal`).
+- `app/(dashboard)/leads/page.tsx`:
+  - Contacts column: leads with 0 contacts now show a clickable "Find People"
+    link (opens the ViewModal, which leads straight to the new card) instead of
+    a dead "—". Leads with 1+ contacts keep the existing "N contacts" link.
+  - Replaced the old single "Find on LinkedIn" row action (which only opened one
+    fixed LinkedIn-flavored Google search) with a new `FindPeopleMenu` dropdown
+    exposing all 3 links, with an outside-click-to-close handler matching the
+    existing pattern in `NotificationBell.tsx`.
+  - Added "Find People" as a bulk action next to "Send Template" — opens a
+    Google LinkedIn search across all selected companies, capped at 5 company
+    names per query (Google truncates very long queries) with additional tabs
+    opened in batches of 5 if more are selected.
+- No backend changes, no new API routes, no database changes — every link is a
+  plain `<a target="_blank">`/`window.open` to a Google search URL.
+- `tsc --noEmit` and `npm run build` clean.
