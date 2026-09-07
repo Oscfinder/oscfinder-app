@@ -1079,3 +1079,24 @@
   optional inline pencil-edit affordance — the existing Edit action already
   covers it, and the task itself marked this a skippable nice-to-have.
 - `tsc --noEmit` and `npm run build` clean.
+
+### Expanded COMPANY_CATEGORIES list
+- `app/data/newCompaniesData.ts`'s `COMPANY_CATEGORIES` grew from 17 to 24
+  entries (alphabetized) — added Accounting & Audit Firms, Cleaning &
+  Facility Management, Digital Marketing Agencies, Event Management
+  Companies, Printing & Branding Companies, Recruitment & Staffing
+  Agencies, and Training & Development Companies.
+- Checked for a database-side categories table or other place industries are
+  hardcoded — there isn't one; every page that offers a category dropdown
+  (`leads`, `scrape`, `email`, `export`, `RowActionModals`) imports this
+  same array, so all of them picked up the new entries automatically with
+  this one change.
+- The onboarding industry-selection wizard (`app/onboarding/industry/page.tsx`)
+  has its own separate `INDUSTRIES` list, deliberately untouched here — same
+  as the earlier decision on this list (Agriculture/Baby Products): out of
+  scope unless asked, since it's a different, coarser-grained list than the
+  lead-search category dropdown.
+- No landing/marketing page with an industries footer exists in this repo to
+  update (confirmed the same when this came up during the subscription-terms
+  task) — the task's own wording made this optional.
+- `tsc --noEmit` and `npm run build` clean.
