@@ -11,6 +11,8 @@ import { EMAIL_DESIGNS, DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
 import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
 import { buildFindEmailUrl, buildFindPhoneUrl } from '@/lib/findPeopleLinks';
 import { LeadContactsSection } from './LeadContactsSection';
+import { LeadActivityLog } from './LeadActivityLog';
+import { StatusDropdown } from './StatusDropdown';
 
 // ─── shared backdrop + shell ───────────────────────────────────────────────
 function Modal({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
@@ -161,10 +163,17 @@ export function ViewModal({ lead, onClose, onUpdated }: { lead: Lead; onClose: (
   // background but doesn't wait on.
   const [emails, setEmails] = useState(lead.emails ?? []);
   const [phones, setPhones] = useState(lead.phones ?? []);
+  const [status, setStatus] = useState(lead.status);
 
   return (
     <Modal onClose={onClose}>
       <ModalHeader title={lead.name} subtitle="Company details" onClose={onClose} />
+      <div className="px-6 pt-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">Status:</span>
+          <StatusDropdown leadId={lead.id} status={status} onChanged={s => { setStatus(s); onUpdated?.(); }} />
+        </div>
+      </div>
       <div className="px-6 py-4 space-y-0.5">
         <DetailRow icon={MapPin}    label="Address"  value={lead.address} />
         <DetailRow icon={Globe}     label="Website"  value={
@@ -203,6 +212,8 @@ export function ViewModal({ lead, onClose, onUpdated }: { lead: Lead; onClose: (
             </span>
           </div>
         </div>
+
+        <LeadActivityLog leadId={lead.id} />
 
         <LeadContactsSection leadId={lead.id} companyName={lead.name} />
       </div>

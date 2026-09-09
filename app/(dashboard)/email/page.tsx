@@ -14,6 +14,7 @@ import { DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
 import { SUGGESTED_DESIGN_BY_TITLE } from '@/lib/seedTemplateDesigns';
 import { personalize } from '@/lib/personalize';
 import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
+import { LEAD_STATUSES, LEAD_STATUS_LABELS } from '@/lib/leadStatus';
 
 const SAMPLE_LEAD = { name: 'Acme Logistics', category: 'Logistics', state: 'Lagos', website: 'acmelogistics.com' };
 
@@ -310,8 +311,8 @@ function NewCampaignModal({
               <div className="relative">
                 <select value={statFilter} onChange={e => setStatFilter(e.target.value)} className={selectCls}>
                   <option value="">All Status</option>
-                  {['new', 'contacted', 'qualified', 'ignored'].map(s => (
-                    <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                  {LEAD_STATUSES.map(s => (
+                    <option key={s} value={s}>{LEAD_STATUS_LABELS[s]}</option>
                   ))}
                 </select>
                 <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />

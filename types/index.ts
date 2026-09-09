@@ -1,6 +1,6 @@
 
 // ── Lead ────────────────────────────────────────────────────────
-export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'ignored';
+export type LeadStatus = 'new' | 'contacted' | 'responded' | 'qualified' | 'converted' | 'ignored';
 
 export interface Lead {
   id:           string;
@@ -43,6 +43,16 @@ export interface LeadContact {
   linkedin_search_url: string | null;
   source:              'team_page' | 'google_search' | 'facebook' | 'manual';
   created_at:          string;
+}
+
+// ── Lead Activity (timestamped notes / interaction history) ────────
+export interface LeadActivity {
+  id:         string;
+  lead_id:    string;
+  company_id: string;
+  note:       string;
+  created_at: string;
+  updated_at: string;
 }
 
 // ── Scrape Job ───────────────────────────────────────────────────

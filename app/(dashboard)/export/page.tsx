@@ -6,6 +6,7 @@ import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData
 import { ChevronDown, X } from 'lucide-react';
 import { DemoPlanBlockedCard } from '@/app/_components/DemoPlanBlockedCard';
 import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
+import { LEAD_STATUSES, LEAD_STATUS_LABELS } from '@/lib/leadStatus';
 
 const FORMAT_OPTIONS = [
   { id: 'xlsx', label: 'Excel (.xlsx)', desc: 'Full data with all fields',    locked: false },
@@ -158,8 +159,8 @@ export default function ExportPage() {
             <div className="relative">
               <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={selectCls}>
                 <option value="">All Status</option>
-                {['new', 'contacted', 'qualified', 'ignored'].map(s => (
-                  <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                {LEAD_STATUSES.map(s => (
+                  <option key={s} value={s}>{LEAD_STATUS_LABELS[s]}</option>
                 ))}
               </select>
               <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />

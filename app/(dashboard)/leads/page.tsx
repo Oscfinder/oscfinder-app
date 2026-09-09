@@ -11,6 +11,8 @@ import { Lead } from '@/types';
 import { cn } from '@/lib/utils';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { ViewModal, EditModal, MessageModal, DeleteModal, AddModal } from '@/app/_components/RowActionModals';
+import { StatusDropdown } from '@/app/_components/StatusDropdown';
+import { LEAD_STATUSES, LEAD_STATUS_LABELS } from '@/lib/leadStatus';
 import { buildFindPeopleLinks, buildFindEmailUrl } from '@/lib/findPeopleLinks';
 
 const FIND_PEOPLE_ICON = [Linkedin, Search, Facebook];
@@ -69,19 +71,10 @@ function FindPeopleMenu({ companyName, align = 'left' }: { companyName: string; 
 
 type ModalType = 'view' | 'edit' | 'message' | 'delete' | 'add' | 'bulk-send' | null;
 
-const STATUS_OPTIONS = ['new', 'contacted', 'qualified', 'ignored'] as const;
-
 function getCompanyLinkedInUrl(lead: Lead): string {
   if (lead.linkedin_url) return lead.linkedin_url;
   return `https://www.google.com/search?q=${encodeURIComponent(`"${lead.name}" site:linkedin.com/company/`)}`;
 }
-
-const STATUS_BADGE: Record<string, string> = {
-  contacted: 'bg-[#dff2f9] text-[#006285]',
-  qualified:  'bg-[#dff7ee] text-[#00A86B]',
-  ignored:    'bg-[#fff3e0] text-[#e67e22]',
-  new:        'bg-[#f3f4f6] text-[#888888]',
-};
 
 function ActionBtn({ icon: Icon, label, color, onClick }: {
   icon: React.ElementType; label: string; color: string; onClick: () => void;
@@ -346,8 +339,8 @@ export default function LeadsPage() {
               className="h-9 pl-3 pr-8 rounded-lg border border-[#E5E7EB] bg-white text-[13px] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC] text-[#0A1628]"
             >
               <option value="">All Status</option>
-              {STATUS_OPTIONS.map(s => (
-                <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+              {LEAD_STATUSES.map(s => (
+                <option key={s} value={s}>{LEAD_STATUS_LABELS[s]}</option>
               ))}
             </select>
             <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
@@ -484,7 +477,6 @@ export default function LeadsPage() {
                 </td></tr>
               ) : leads.map((lead, i) => {
                 const isChecked  = selected.has(lead.id);
-                const badgeCls   = STATUS_BADGE[lead.status] ?? STATUS_BADGE.new;
                 return (
                   <tr
                     key={lead.id}
@@ -546,9 +538,7 @@ export default function LeadsPage() {
                       )}
                     </td>
                     <td className="px-3.5 py-3">
-                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full capitalize ${badgeCls}`}>
-                        {lead.status}
-                      </span>
+                      <StatusDropdown leadId={lead.id} status={lead.status} onChanged={invalidateLeads} />
                     </td>
                     <td className="px-3.5 py-3 text-[13px] whitespace-nowrap">
                       {(lead.lead_contacts?.[0]?.count ?? 0) > 0 ? (

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
+import { LEAD_STATUSES } from '@/lib/leadStatus';
 
-const EDITABLE_FIELDS = ['name', 'address', 'website', 'emails', 'phones', 'category', 'state', 'local_govt'] as const;
+const EDITABLE_FIELDS = ['name', 'address', 'website', 'emails', 'phones', 'category', 'state', 'local_govt', 'status'] as const;
 
 export async function PATCH(
   req: NextRequest,
@@ -28,6 +29,9 @@ export async function PATCH(
   }
   if (Object.keys(fields).length === 0)
     return NextResponse.json({ error: 'No editable fields provided' }, { status: 400 });
+
+  if ('status' in fields && !LEAD_STATUSES.includes(fields.status as never))
+    return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
 
   // Same name-uniqueness guard as creating a lead — renaming into a collision with
   // another lead isn't allowed either.
@@ -66,11 +70,30 @@ export async function PATCH(
     }
   }
 
+  // Read the prior status (if it's changing) so we can log the transition —
+  // must happen before the update below overwrites it.
+  let previousStatus: string | null = null;
+  if ('status' in fields) {
+    const { data: current } = await supabaseAdmin.from('leads').select('status').eq('id', id).eq('company_id', companyId).single();
+    previousStatus = current?.status ?? null;
+  }
+
   // Prevent updating another company's lead
   const query = supabaseAdmin.from('leads').update(fields).eq('id', id).eq('company_id', companyId);
 
   const { data, error: dbError } = await query.select().single();
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });
+
+  // Auto-log the status change as an activity entry — gives a paper trail
+  // without requiring the user to write a note for every status update.
+  if (previousStatus && previousStatus !== fields.status) {
+    await supabaseAdmin.from('lead_activities').insert({
+      lead_id:    id,
+      company_id: companyId,
+      note:       `Status changed from '${previousStatus}' to '${fields.status}'`,
+    });
+  }
+
   return NextResponse.json(data);
 }
 
