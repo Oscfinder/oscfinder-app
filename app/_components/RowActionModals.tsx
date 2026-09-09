@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { X, Globe, Mail, Phone, MapPin, Briefcase, Trash2, Send, AlertTriangle, PlusCircle, CheckCheck, ChevronDown, Search } from 'lucide-react';
+import { X, Globe, Mail, Phone, MapPin, Briefcase, Trash2, Send, AlertTriangle, PlusCircle, CheckCheck, ChevronDown, Search, Pencil, Check } from 'lucide-react';
 import { Lead, RequiresAcknowledgment } from '@/types';
 import { Button } from './Button';
 import { SendLimitConsentModal } from './SendLimitConsentModal';
@@ -54,6 +54,88 @@ function SearchLink({ label, url }: { label: string; url: string }) {
   );
 }
 
+// Inline edit for the Emails/Phones rows in ViewModal — lets the user save a
+// value found via the "Search for email/phone" link (or correct a bad one)
+// without leaving the modal to open the full EditModal. Uses the same
+// PATCH /api/leads/[id] endpoint as EditModal, scoped to just this one field.
+function EditableContactField({
+  leadId, field, values, placeholder, searchLabel, searchUrl, onSaved,
+}: {
+  leadId:      string;
+  field:       'emails' | 'phones';
+  values:      string[];
+  placeholder: string;
+  searchLabel: string;
+  searchUrl:   string;
+  onSaved:     (values: string[]) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState(values.join(', '));
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState('');
+
+  const startEdit = () => { setDraft(values.join(', ')); setError(''); setEditing(true); };
+
+  const save = async () => {
+    const parsed = draft.split(',').map(v => v.trim()).filter(Boolean);
+    setSaving(true);
+    setError('');
+    try {
+      const res  = await fetch(`/api/leads/${leadId}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ [field]: parsed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error ?? 'Failed to save'); setSaving(false); return; }
+      onSaved(parsed);
+      setEditing(false);
+      setSaving(false);
+    } catch {
+      setError('Failed to save');
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div>
+        <div className="flex items-center gap-1.5">
+          <input
+            autoFocus
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+            placeholder={placeholder}
+            disabled={saving}
+            className="flex-1 min-w-0 h-8 px-2.5 rounded-md border border-[#0099CC] text-sm focus:outline-none disabled:opacity-50"
+          />
+          <button onClick={save} disabled={saving} title="Save" className="shrink-0 text-[#006285] hover:text-[#0099CC] disabled:opacity-50 transition-colors">
+            <Check size={16} />
+          </button>
+          <button onClick={() => setEditing(false)} disabled={saving} title="Cancel" className="shrink-0 text-gray-400 hover:text-gray-600 disabled:opacity-50 transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+        {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="min-w-0 break-words">
+        {values.length
+          ? values.join(', ')
+          : <SearchLink label={searchLabel} url={searchUrl} />}
+      </div>
+      <button onClick={startEdit} title="Edit" className="shrink-0 text-gray-300 hover:text-[#006285] transition-colors">
+        <Pencil size={13} />
+      </button>
+    </div>
+  );
+}
+
 function DetailRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start gap-3 py-2.5 border-b border-gray-50 last:border-0">
@@ -69,7 +151,17 @@ function DetailRow({ icon: Icon, label, value }: { icon: React.ElementType; labe
 }
 
 // ─── VIEW MODAL ────────────────────────────────────────────────────────────
-export function ViewModal({ lead, onClose }: { lead: Lead; onClose: () => void }) {
+// onUpdated is optional so callers that don't care about keeping their own
+// leads list in sync (there are none today, but future callers might mount
+// ViewModal without a query to invalidate) aren't forced to pass one.
+export function ViewModal({ lead, onClose, onUpdated }: { lead: Lead; onClose: () => void; onUpdated?: () => void }) {
+  // Local copies so the modal reflects an inline email/phone save immediately
+  // — the `lead` prop itself is owned by the parent's query cache and won't
+  // change until that refetches, which onUpdated() triggers in the
+  // background but doesn't wait on.
+  const [emails, setEmails] = useState(lead.emails ?? []);
+  const [phones, setPhones] = useState(lead.phones ?? []);
+
   return (
     <Modal onClose={onClose}>
       <ModalHeader title={lead.name} subtitle="Company details" onClose={onClose} />
@@ -81,14 +173,20 @@ export function ViewModal({ lead, onClose }: { lead: Lead; onClose: () => void }
             : null
         } />
         <DetailRow icon={Mail}      label="Emails"   value={
-          lead.emails?.length
-            ? lead.emails.join(', ')
-            : <SearchLink label="Search for email" url={buildFindEmailUrl(lead.name)} />
+          <EditableContactField
+            leadId={lead.id} field="emails" values={emails}
+            placeholder="e.g. info@company.com, sales@company.com"
+            searchLabel="Search for email" searchUrl={buildFindEmailUrl(lead.name)}
+            onSaved={v => { setEmails(v); onUpdated?.(); }}
+          />
         } />
         <DetailRow icon={Phone}     label="Phones"   value={
-          lead.phones?.length
-            ? lead.phones.join(', ')
-            : <SearchLink label="Search for phone" url={buildFindPhoneUrl(lead.name)} />
+          <EditableContactField
+            leadId={lead.id} field="phones" values={phones}
+            placeholder="e.g. +234 801 234 5678"
+            searchLabel="Search for phone" searchUrl={buildFindPhoneUrl(lead.name)}
+            onSaved={v => { setPhones(v); onUpdated?.(); }}
+          />
         } />
         <DetailRow icon={Briefcase} label="Category" value={lead.category} />
         <DetailRow icon={MapPin}    label="Location" value={[lead.local_govt, lead.state].filter(Boolean).join(', ')} />

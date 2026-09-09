@@ -1100,3 +1100,24 @@
   update (confirmed the same when this came up during the subscription-terms
   task) — the task's own wording made this optional.
 - `tsc --noEmit` and `npm run build` clean.
+
+### Inline email/phone edit in the lead ViewModal
+- Implemented the item explicitly marked optional/skippable in the
+  Find Email/Find Phone task — the user asked for it directly afterward.
+- `app/_components/RowActionModals.tsx` — new `EditableContactField`, used
+  for both the Emails and Phones rows in `ViewModal`: shows the current
+  value (or the existing "Search for email/phone" link when empty) with a
+  pencil button; clicking it swaps in a comma-separated text input with
+  save/cancel, Enter-to-save and Escape-to-cancel, saving via the same
+  `PATCH /api/leads/[id]` the full EditModal already uses (scoped to just
+  `{ emails: [...] }` or `{ phones: [...] }` — no new endpoint, and the
+  route's existing duplicate-email guard still applies). Lets a user go
+  straight from "found the email on Google" to saved, without leaving the
+  modal to open the full Edit form.
+- `ViewModal` now takes an optional `onUpdated` callback, called after a
+  successful inline save so the parent's leads-list query gets invalidated
+  in the background — `app/(dashboard)/leads/page.tsx` wires it to the same
+  `invalidateLeads()` the other row actions already use. The modal itself
+  updates instantly from local state regardless, so the save doesn't wait on
+  that refetch.
+- `tsc --noEmit` and `npm run build` clean.

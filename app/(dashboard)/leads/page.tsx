@@ -600,7 +600,7 @@ export default function LeadsPage() {
       />
 
       {modal === 'add'       &&                 <AddModal     onSave={() => { invalidateLeads(); close(); }} onClose={close} />}
-      {modal === 'view'      && active        && <ViewModal    lead={active} onClose={close} />}
+      {modal === 'view'      && active        && <ViewModal    lead={active} onClose={close} onUpdated={invalidateLeads} />}
       {modal === 'edit'      && active        && <EditModal    lead={active} onSave={handleEdit} onClose={close} />}
       {modal === 'message'   && active        && <MessageModal lead={active} onSent={handleMailSent} onClose={close} />}
       {modal === 'delete'    && active        && <DeleteModal  lead={active} onConfirm={handleDelete} onClose={close} />}
