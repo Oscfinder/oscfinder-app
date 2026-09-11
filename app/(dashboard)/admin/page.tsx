@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, CheckCircle, XCircle, ChevronDown, X, RefreshCw, AlertTriangle, Pencil, Eye } from 'lucide-react';
+import { Plus, CheckCircle, XCircle, ChevronDown, X, RefreshCw, AlertTriangle, Pencil, Eye, Search } from 'lucide-react';
+import { Pagination } from '@/app/_components/Pagination';
 import {
   AdminCompanyOverview, Invoice, RevenueSummary, Company,
   CompanyPlan, InvoiceType,
@@ -565,11 +566,33 @@ export default function AdminPage() {
   const [updatingId,   setUpdatingId] = useState<string | null>(null);
   const [suspendConfirm, setSuspendConfirm] = useState<AdminCompanyOverview | null>(null);
   const [revertConfirm,  setRevertConfirm]  = useState<Invoice | null>(null);
+  const [companySearch, setCompanySearch] = useState('');
+  const [companyPage,   setCompanyPage]   = useState(1);
+  const [companyPerPage, setCompanyPerPage] = useState(10);
 
   const { data: companies = [], isLoading: coLoading } = useQuery<AdminCompanyOverview[]>({
     queryKey: ['admin-companies'],
     queryFn:  () => fetch('/api/admin/companies').then(r => r.json()),
   });
+
+  // Client-side search + pagination over the already-fetched full list — this
+  // same `companies` array also feeds renewalsDue and the invoice company
+  // picker below, so filtering happens only where it's rendered (the
+  // Companies tab table), not on the shared query itself.
+  const filteredCompanies = companies.filter(c => {
+    const q = companySearch.trim().toLowerCase();
+    if (!q) return true;
+    return c.name.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q);
+  });
+  const companyTotalPages = Math.max(1, Math.ceil(filteredCompanies.length / companyPerPage));
+  const pagedCompanies = filteredCompanies.slice(
+    (companyPage - 1) * companyPerPage,
+    companyPage * companyPerPage
+  );
+
+  useEffect(() => {
+    setCompanyPage(1);
+  }, [companySearch]);
 
   const { data: invoices = [], isLoading: invLoading } = useQuery<Invoice[]>({
     queryKey: ['admin-invoices'],
@@ -716,10 +739,27 @@ export default function AdminPage() {
       {/* ── Companies Tab ───────────────────────────────────────── */}
       {tab === 'companies' && (
         <>
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-3">
+            <div className="relative w-full max-w-xs">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#888888]" />
+              <input
+                value={companySearch}
+                onChange={e => setCompanySearch(e.target.value)}
+                placeholder="Search companies..."
+                className="w-full h-9 pl-8 pr-8 rounded-lg border border-[#E5E7EB] bg-white text-[13px] text-[#0A1628] placeholder:text-[#888888] focus:outline-none focus:ring-2 focus:ring-[#0099CC]/20 focus:border-[#0099CC]"
+              />
+              {companySearch && (
+                <button
+                  onClick={() => setCompanySearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] hover:text-[#0A1628] transition-colors"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
             <button
               onClick={() => setShowNewCo(true)}
-              className="flex items-center gap-1.5 h-9 px-4 rounded-lg bg-[#00C48C] hover:bg-[#00A86B] text-white text-[13px] font-semibold transition-colors"
+              className="flex items-center gap-1.5 h-9 px-4 rounded-lg bg-[#00C48C] hover:bg-[#00A86B] text-white text-[13px] font-semibold transition-colors shrink-0"
             >
               <Plus size={14} /> New Company
             </button>
@@ -738,10 +778,12 @@ export default function AdminPage() {
                 <tbody>
                   {coLoading ? (
                     <tr><td colSpan={9} className="py-12 text-center text-[13px] text-[#888888]">Loading...</td></tr>
-                  ) : companies.length === 0 ? (
-                    <tr><td colSpan={9} className="py-12 text-center text-[13px] text-[#888888]">No companies yet.</td></tr>
+                  ) : filteredCompanies.length === 0 ? (
+                    <tr><td colSpan={9} className="py-12 text-center text-[13px] text-[#888888]">
+                      {companySearch ? 'No companies match your search.' : 'No companies yet.'}
+                    </td></tr>
                   ) : (
-                    companies.map(c => (
+                    pagedCompanies.map(c => (
                       <tr key={c.id} className="hover:bg-[#fafbfc] border-b border-[#f3f4f6] last:border-0">
                         <td className={tdCls}>
                           <p className="text-[13px] font-semibold text-[#0A1628]">{c.name}</p>
@@ -822,6 +864,15 @@ export default function AdminPage() {
               </table>
             </div>
           </div>
+
+          <Pagination
+            page={companyPage}
+            totalPages={companyTotalPages}
+            totalItems={filteredCompanies.length}
+            perPage={companyPerPage}
+            onPageChange={setCompanyPage}
+            onPerPageChange={n => { setCompanyPerPage(n); setCompanyPage(1); }}
+          />
         </>
       )}
 

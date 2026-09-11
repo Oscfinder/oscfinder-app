@@ -1322,3 +1322,21 @@
   Agencies'`) now correctly renders "Companies in Digital Marketing
   Agencies are using...".
 - `tsc --noEmit` and `npm run build` clean.
+
+## 2026-09-12
+
+### Search + pagination for the admin Companies tab
+- `GET /api/admin/companies` already returns the full company list in one
+  shot (also feeds Renewals Due and the New Invoice company picker, both
+  computed client-side from the same query) — no server-side pagination
+  existed anywhere in this route, and the table just rendered every row.
+  Added client-side search + pagination over that same already-fetched
+  list, scoped to just the Companies tab's table, rather than changing the
+  shared query (Renewals Due and the invoice picker still see every
+  company, unaffected).
+- `app/(dashboard)/admin/page.tsx` — new search input (name or email,
+  case-insensitive substring, with a clear button) filters `companies`
+  before pagination; reuses the existing `Pagination` component (already
+  used on the Leads table) rather than building a new one. Defaults to 10
+  per page, resets to page 1 on a new search or a page-size change.
+- `tsc --noEmit` and `npm run build` clean.
