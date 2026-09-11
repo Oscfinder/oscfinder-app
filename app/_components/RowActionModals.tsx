@@ -17,7 +17,10 @@ import { LeadActivityLog } from './LeadActivityLog';
 import { StatusDropdown } from './StatusDropdown';
 
 // ─── shared backdrop + shell ───────────────────────────────────────────────
-function Modal({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+// Exported so SendToAllContactsModal (a distinct top-level modal, not part of
+// ViewModal's own render tree) can reuse the same shell/header instead of a
+// second copy.
+export function Modal({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -28,7 +31,7 @@ function Modal({ onClose, children }: { onClose: () => void; children: React.Rea
   );
 }
 
-function ModalHeader({ title, subtitle, onClose }: { title: string; subtitle?: string; onClose: () => void }) {
+export function ModalHeader({ title, subtitle, onClose }: { title: string; subtitle?: string; onClose: () => void }) {
   return (
     <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100">
       <div>

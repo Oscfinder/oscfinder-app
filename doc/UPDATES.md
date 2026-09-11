@@ -1338,3 +1338,44 @@
   used on the Leads table) rather than building a new one. Defaults to 10
   per page, resets to page 1 on a new search or a page-size change.
 - `tsc --noEmit` and `npm run build` clean.
+
+### "Send to All Contacts" in the lead ViewModal
+- One-click personalized email to every contact at a company with an email
+  on file — each gets their own send with their own name in the greeting,
+  rather than the one-at-a-time send icon added earlier.
+- **`app/_components/SendToAllContactsModal.tsx`** (new) — Option A from the
+  task (loop `/api/send-email` sequentially per contact, no new batch
+  endpoint) since a lead's contact count is small enough that this is fast
+  and it reuses every existing gate for free: plan email-limit 403s,
+  soft-limit/hard-ceiling handling (the same resumable pause-on-409/resume-
+  after-acknowledgment pattern as `BulkSendModal`), and the lead
+  `mail_sent`/`status → contacted` update already built into
+  `/api/send-email`. `{{name}}`/`{{company_name}}` are personalized
+  per-recipient right before each send (not once for the whole batch), so
+  "Hi Tunde" and "Hi Amaka" render correctly for the same template. Template
+  picker groups the "(Personal)" templates first (recommended for this
+  flow) with the company-level ones below.
+- **Duplicate-send guard**: on open, fetches the lead's activity log and
+  flags any contact emailed in the last 24h (parses the `<email>` out of
+  either this modal's own summary note or the send-icon's per-contact note)
+  — shown as an inline warning next to that contact's checkbox, not a hard
+  block, so the user can still knowingly resend.
+- **One combined activity note per batch** (`"Sent email to 3 contacts:
+  Tunde Bakare, Amaka Obi, Raymond Maduagwu"`) rather than one note per
+  contact — `contactName` is deliberately omitted from each
+  `/api/send-email` call here (which would otherwise also log an individual
+  "Emailed X <email>" note per send) to avoid double-logging every contact
+  twice in the same activity feed.
+- Contacts without an email are shown greyed out and unselectable ("no
+  email — skipped"); the button itself (`LeadContactsSection.tsx`) only
+  renders when at least one contact has an email, showing the count in its
+  label.
+- Failed sends can be retried individually after a batch completes (retry
+  re-sends just the failed subset, leaving already-successful ones alone).
+- `Modal`/`ModalHeader` (`RowActionModals.tsx`) exported for reuse here
+  instead of a second copy of the shared shell.
+- Not tested against a real send this pass — the mailbox's SMTP auth was in
+  a temporary provider-side lockout earlier today (see prior conversation),
+  and repeated connection attempts risk making that worse. Verified via
+  `tsc --noEmit`/`npm run build` and code review only; recommend a live
+  test once the mailbox is confirmed healthy again.

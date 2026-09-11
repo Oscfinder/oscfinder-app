@@ -1,11 +1,12 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, Pencil, Trash2, Plus, User, UserSearch, Linkedin, Facebook, Mail, Phone, Send } from 'lucide-react';
+import { Search, Pencil, Trash2, Plus, User, UserSearch, Linkedin, Facebook, Mail, Phone, Send, MailPlus } from 'lucide-react';
 import { Lead, LeadContact } from '@/types';
 import { cn } from '@/lib/utils';
 import { buildFindPeopleLinks, buildContactEmailSearchUrl, buildContactPhoneSearchUrl } from '@/lib/findPeopleLinks';
 import { MessageModal } from './RowActionModals';
+import { SendToAllContactsModal } from './SendToAllContactsModal';
 
 const FIND_PEOPLE_ICON = [Linkedin, Search, Facebook];
 
@@ -38,6 +39,7 @@ export function LeadContactsSection({ lead, onUpdated }: { lead: Lead; onUpdated
   const [editForm, setEditForm]       = useState<ContactForm>(EMPTY_FORM);
   const [deletingId, setDeletingId]   = useState<string | null>(null);
   const [messagingContact, setMessagingContact] = useState<LeadContact | null>(null);
+  const [sendingToAll, setSendingToAll] = useState(false);
 
   const { data: contacts = [], isLoading } = useQuery<LeadContact[]>({
     queryKey: ['lead-contacts', leadId],
@@ -254,6 +256,15 @@ export function LeadContactsSection({ lead, onUpdated }: { lead: Lead; onUpdated
         </div>
       )}
 
+      {contacts.filter(c => c.email).length > 0 && (
+        <button
+          onClick={() => setSendingToAll(true)}
+          className="flex items-center justify-center gap-1.5 w-full mt-2 h-9 rounded-lg border border-[#006285]/20 bg-[#006285]/5 text-[12px] font-semibold text-[#006285] hover:bg-[#006285]/10 transition-colors"
+        >
+          <MailPlus size={13} /> Send to All Contacts ({contacts.filter(c => c.email).length})
+        </button>
+      )}
+
       {adding && (
         <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2.5 mt-2 space-y-2">
           <div className="grid grid-cols-2 gap-2">
@@ -283,6 +294,18 @@ export function LeadContactsSection({ lead, onUpdated }: { lead: Lead; onUpdated
             onUpdated?.();
           }}
           onClose={() => setMessagingContact(null)}
+        />
+      )}
+
+      {sendingToAll && (
+        <SendToAllContactsModal
+          lead={lead}
+          contacts={contacts}
+          onSent={() => {
+            queryClient.invalidateQueries({ queryKey: ['lead-activities', leadId] });
+            onUpdated?.();
+          }}
+          onClose={() => setSendingToAll(false)}
         />
       )}
     </div>
