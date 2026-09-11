@@ -1323,8 +1323,6 @@
   Agencies are using...".
 - `tsc --noEmit` and `npm run build` clean.
 
-## 2026-09-12
-
 ### Search + pagination for the admin Companies tab
 - `GET /api/admin/companies` already returns the full company list in one
   shot (also feeds Renewals Due and the New Invoice company picker, both
