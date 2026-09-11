@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   const companyId = await getEffectiveCompanyId(user);
 
   const body = await req.json();
-  const { name, template_id, filters = {}, send_now = false, design_id } = body;
+  const { name, template_id, filters = {}, send_now = false, design_id, send_to } = body;
 
   if (!name?.trim())
     return NextResponse.json({ error: 'Campaign name is required' }, { status: 400 });
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Send Now (queues for the campaign worker — see app/api/campaigns/process) ──
-  return queueCampaignSend(companyId, { name: name.trim(), template_id, filters, design_id });
+  return queueCampaignSend(companyId, { name: name.trim(), template_id, filters, design_id, send_to });
 }
 
 // Shared by POST (new campaign) and PATCH /api/email/campaigns/[id] (sending an
@@ -104,9 +104,10 @@ export async function queueCampaignSend(
     filters: { category?: string; state?: string; status?: string };
     existingCampaignId?: string;
     design_id?: string;
+    send_to?: 'company' | 'contacts' | 'both';
   }
 ): Promise<NextResponse> {
-  const { name, template_id, filters, existingCampaignId, design_id } = opts;
+  const { name, template_id, filters, existingCampaignId, design_id, send_to = 'company' } = opts;
 
   if (!companyId)
     return NextResponse.json({ error: 'No company associated with this account' }, { status: 403 });
@@ -150,7 +151,59 @@ export async function queueCampaignSend(
   if (leadsError)
     return NextResponse.json({ error: leadsError.message }, { status: 500 });
 
-  const recipients = (leads as any[]).filter(l => l.emails?.[0]);
+  // Each entry becomes one campaign_recipients row: `contact_name` set only for
+  // a contact-level send (used to personalize {{name}}; null for a company-email
+  // row, matching every other filters-based recipient built here today).
+  type Recipient = { lead: any; email: string; contact_name: string | null };
+  let recipients: Recipient[] = [];
+
+  if (send_to === 'company') {
+    recipients = (leads as any[])
+      .filter(l => l.emails?.[0])
+      .map(l => ({ lead: l, email: l.emails[0], contact_name: null }));
+  } else {
+    // 'contacts' or 'both' — pull every contact with an email for the matched
+    // leads in one query rather than per-lead.
+    const leadIds = (leads as any[]).map(l => l.id);
+    const { data: contacts = [], error: contactsError } = leadIds.length
+      ? await supabaseAdmin
+          .from('lead_contacts')
+          .select('lead_id, name, email')
+          .in('lead_id', leadIds)
+          .not('email', 'is', null)
+      : { data: [], error: null };
+
+    if (contactsError)
+      return NextResponse.json({ error: contactsError.message }, { status: 500 });
+
+    const contactsByLead = new Map<string, { name: string; email: string }[]>();
+    for (const c of contacts as any[]) {
+      if (!contactsByLead.has(c.lead_id)) contactsByLead.set(c.lead_id, []);
+      contactsByLead.get(c.lead_id)!.push({ name: c.name, email: c.email });
+    }
+
+    for (const lead of leads as any[]) {
+      const leadContacts = contactsByLead.get(lead.id) ?? [];
+      const seenEmails = new Set<string>(); // dedupes 'both' when a contact shares the company's own address
+
+      if (send_to === 'both' && lead.emails?.[0]) {
+        recipients.push({ lead, email: lead.emails[0], contact_name: null });
+        seenEmails.add(lead.emails[0].toLowerCase());
+      }
+
+      if (leadContacts.length > 0) {
+        for (const c of leadContacts) {
+          if (seenEmails.has(c.email.toLowerCase())) continue;
+          recipients.push({ lead, email: c.email, contact_name: c.name });
+          seenEmails.add(c.email.toLowerCase());
+        }
+      } else if (send_to === 'contacts' && lead.emails?.[0]) {
+        // No contact has an email — fall back to the company email rather than
+        // silently dropping this lead from the campaign.
+        recipients.push({ lead, email: lead.emails[0], contact_name: null });
+      }
+    }
+  }
 
   if (recipients.length === 0)
     return NextResponse.json(
@@ -230,12 +283,13 @@ export async function queueCampaignSend(
   const { error: recipientsError } = await supabaseAdmin
     .from('campaign_recipients')
     .insert(
-      recipients.map(lead => ({
-        campaign_id: campaign.id,
-        company_id:  companyId,
-        lead_id:     lead.id,
-        email:       lead.emails[0],
-        status:      'queued',
+      recipients.map(r => ({
+        campaign_id:  campaign.id,
+        company_id:   companyId,
+        lead_id:      r.lead.id,
+        email:        r.email,
+        contact_name: r.contact_name,
+        status:       'queued',
       }))
     );
 

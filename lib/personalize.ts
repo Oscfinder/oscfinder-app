@@ -4,13 +4,18 @@
 // campaign compose preview, the template preview — can personalize sample data
 // without pulling a server route file (and its supabaseAdmin import) into the
 // browser bundle.
+// `contactName` is set when the recipient is a specific person (a lead_contacts
+// row) rather than a lead's generic company inbox — {{name}} falls back to
+// 'there' ("Hi there,") when sending to a company email with no named contact.
 export function personalize(
   text: string,
-  lead: { name: string; category: string; state?: string; website?: string }
+  lead: { name: string; category: string; state?: string; website?: string },
+  contactName?: string
 ) {
   return text
     .replace(/\{\{company_name\}\}/gi, lead.name)
     .replace(/\{\{category\}\}/gi,     lead.category)
     .replace(/\{\{state\}\}/gi,        lead.state   ?? '')
-    .replace(/\{\{website\}\}/gi,      lead.website ?? '');
+    .replace(/\{\{website\}\}/gi,      lead.website ?? '')
+    .replace(/\{\{name\}\}/gi,         contactName ?? 'there');
 }

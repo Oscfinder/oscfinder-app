@@ -78,7 +78,11 @@ function PreviewModal({ tpl, onClose }: { tpl: MailTemplate; onClose: () => void
           <pre className="bg-[#F8FAFC] rounded-lg px-4 py-3 text-[13px] text-[#0A1628] whitespace-pre-wrap font-sans leading-relaxed">{tpl.body}</pre>
         </div>
         <p className="text-[12px] text-[#888888]">
-          💡 <span className="font-mono bg-gray-100 px-1 rounded text-[#0A1628]">{'{{company_name}}'}</span> will be replaced when sending.
+          💡 <span className="font-mono bg-gray-100 px-1 rounded text-[#0A1628]">{'{{company_name}}'}</span>,{' '}
+          <span className="font-mono bg-gray-100 px-1 rounded text-[#0A1628]">{'{{name}}'}</span> (the contact's
+          name — "there" when sending to a company email), <span className="font-mono bg-gray-100 px-1 rounded text-[#0A1628]">{'{{category}}'}</span>,{' '}
+          <span className="font-mono bg-gray-100 px-1 rounded text-[#0A1628]">{'{{state}}'}</span> and{' '}
+          <span className="font-mono bg-gray-100 px-1 rounded text-[#0A1628]">{'{{website}}'}</span> are replaced when sending.
         </p>
       </div>
       <div className="px-6 py-3 border-t border-[#E5E7EB] flex justify-between items-center bg-[#F8FAFC] rounded-b-2xl">

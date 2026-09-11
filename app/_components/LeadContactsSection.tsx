@@ -1,10 +1,11 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, Pencil, Trash2, Plus, User, UserSearch, Linkedin, Facebook, Mail, Phone } from 'lucide-react';
-import { LeadContact } from '@/types';
+import { Search, Pencil, Trash2, Plus, User, UserSearch, Linkedin, Facebook, Mail, Phone, Send } from 'lucide-react';
+import { Lead, LeadContact } from '@/types';
 import { cn } from '@/lib/utils';
 import { buildFindPeopleLinks, buildContactEmailSearchUrl, buildContactPhoneSearchUrl } from '@/lib/findPeopleLinks';
+import { MessageModal } from './RowActionModals';
 
 const FIND_PEOPLE_ICON = [Linkedin, Search, Facebook];
 
@@ -24,7 +25,9 @@ interface ContactForm {
 
 const EMPTY_FORM: ContactForm = { name: '', title: '', email: '', phone: '' };
 
-export function LeadContactsSection({ leadId, companyName }: { leadId: string; companyName: string }) {
+export function LeadContactsSection({ lead, onUpdated }: { lead: Lead; onUpdated?: () => void }) {
+  const leadId = lead.id;
+  const companyName = lead.name;
   const findPeopleLinks = buildFindPeopleLinks(companyName);
   const queryClient = useQueryClient();
   const [adding, setAdding]           = useState(false);
@@ -34,6 +37,7 @@ export function LeadContactsSection({ leadId, companyName }: { leadId: string; c
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [editForm, setEditForm]       = useState<ContactForm>(EMPTY_FORM);
   const [deletingId, setDeletingId]   = useState<string | null>(null);
+  const [messagingContact, setMessagingContact] = useState<LeadContact | null>(null);
 
   const { data: contacts = [], isLoading } = useQuery<LeadContact[]>({
     queryKey: ['lead-contacts', leadId],
@@ -192,8 +196,15 @@ export function LeadContactsSection({ leadId, companyName }: { leadId: string; c
                       </span>
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
                         {c.email ? (
-                          <span className="flex items-center gap-1 text-[12px] text-gray-600 truncate">
+                          <span className="flex items-center gap-1.5 text-[12px] text-gray-600 truncate">
                             <Mail size={11} className="text-gray-400 shrink-0" /> {c.email}
+                            <button
+                              onClick={() => setMessagingContact(c)}
+                              title={`Send email to ${c.name}`}
+                              className="shrink-0 w-5 h-5 rounded flex items-center justify-center text-[#006285] hover:bg-[#dff2f9] transition-colors"
+                            >
+                              <Send size={11} />
+                            </button>
                           </span>
                         ) : (
                           <a
@@ -259,6 +270,20 @@ export function LeadContactsSection({ leadId, companyName }: { leadId: string; c
             </button>
           </div>
         </div>
+      )}
+
+      {messagingContact && (
+        <MessageModal
+          lead={lead}
+          recipientEmail={messagingContact.email!}
+          recipientName={messagingContact.name}
+          onSent={() => {
+            setMessagingContact(null);
+            queryClient.invalidateQueries({ queryKey: ['lead-activities', leadId] });
+            onUpdated?.();
+          }}
+          onClose={() => setMessagingContact(null)}
+        />
       )}
     </div>
   );

@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   const { user, error } = await requireAuth();
   if (error) return error;
 
-  const { leadId, to, subject, body, design_id } = await req.json();
+  const { leadId, to, subject, body, design_id, contactName } = await req.json();
 
   if (!to || !subject || !body)
     return NextResponse.json({ error: 'to, subject and body are required' }, { status: 400 });
@@ -108,6 +108,17 @@ export async function POST(req: NextRequest) {
       .eq('company_id', companyId);
 
     await query;
+
+    // Set only for a contact-level send (LeadContactsSection's send icon) —
+    // a paper trail for who specifically was emailed, distinct from the
+    // company-wide mail_sent/status flip above.
+    if (contactName && typeof to === 'string') {
+      await supabaseAdmin.from('lead_activities').insert({
+        lead_id:    leadId,
+        company_id: companyId,
+        note:       `Emailed ${contactName} <${to}>`,
+      });
+    }
   }
 
   return NextResponse.json({ success: true });

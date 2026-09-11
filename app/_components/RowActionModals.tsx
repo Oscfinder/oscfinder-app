@@ -215,7 +215,7 @@ export function ViewModal({ lead, onClose, onUpdated }: { lead: Lead; onClose: (
 
         <LeadActivityLog leadId={lead.id} />
 
-        <LeadContactsSection leadId={lead.id} companyName={lead.name} />
+        <LeadContactsSection lead={lead} onUpdated={onUpdated} />
       </div>
       <div className="px-6 py-3 border-t border-gray-100 flex justify-end">
         <Button variant="outline" onClick={onClose}>Close</Button>
@@ -298,13 +298,24 @@ export function EditModal({ lead, onSave, onClose }: EditModalProps) {
 }
 
 // ─── MESSAGE MODAL ─────────────────────────────────────────────────────────
-interface MessageModalProps { lead: Lead; onSent: () => void; onClose: () => void; }
+// recipientEmail/recipientName override the lead's own company email — set by
+// LeadContactsSection when the user clicks the send icon next to a specific
+// contact instead of opening this from the leads table (which always targets
+// the company email).
+interface MessageModalProps {
+  lead:            Lead;
+  onSent:          () => void;
+  onClose:         () => void;
+  recipientEmail?: string;
+  recipientName?:  string;
+}
 
-export function MessageModal({ lead, onSent, onClose }: MessageModalProps) {
-  const [to]         = useState(lead.emails?.[0] ?? '');
+export function MessageModal({ lead, onSent, onClose, recipientEmail, recipientName }: MessageModalProps) {
+  const [to]         = useState(recipientEmail ?? lead.emails?.[0] ?? '');
+  const greeting = recipientName ?? `${lead.name} Team`;
   const [subject, setSubject] = useState(`Partnership Opportunity with ${lead.name}`);
   const [body, setBody]       = useState(
-    `Dear ${lead.name} Team,\n\nWe would like to explore a potential partnership with your organization.\n\nKindly reach out to us at your earliest convenience.\n\nBest regards,\nThe companyFinder Team`
+    `Dear ${greeting},\n\nWe would like to explore a potential partnership with your organization.\n\nKindly reach out to us at your earliest convenience.\n\nBest regards,\nThe companyFinder Team`
   );
   const [designId, setDesignId] = useState(DEFAULT_DESIGN_ID);
   const [sending, setSending] = useState(false);
@@ -316,7 +327,7 @@ export function MessageModal({ lead, onSent, onClose }: MessageModalProps) {
   const doSend = () => fetch('/api/send-email', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ leadId: lead.id, to, subject, body, design_id: designId }),
+    body:    JSON.stringify({ leadId: lead.id, to, subject, body, design_id: designId, contactName: recipientName }),
   });
 
   const handleSend = async () => {
@@ -371,7 +382,11 @@ export function MessageModal({ lead, onSent, onClose }: MessageModalProps) {
 
   return (
     <Modal onClose={onClose}>
-      <ModalHeader title="Send Email" subtitle={`To: ${to || 'No email available'}`} onClose={onClose} />
+      <ModalHeader
+        title="Send Email"
+        subtitle={recipientName ? `To: ${recipientName} <${to}>` : `To: ${to || 'No email available'}`}
+        onClose={onClose}
+      />
       <div className="px-6 py-4 space-y-3">
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">To</label>

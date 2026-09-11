@@ -83,6 +83,7 @@ function NewCampaignModal({
   const [catFilter,   setCatFilter]   = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [statFilter,  setStatFilter]  = useState('');
+  const [sendTo,      setSendTo]      = useState<'company' | 'contacts' | 'both'>('company');
   const [showPreview, setShowPreview] = useState(false);
   const [showFullPreview, setShowFullPreview] = useState(false);
   const [isSending,   setIsSending]   = useState(false);
@@ -118,6 +119,7 @@ function NewCampaignModal({
       filters:     { category: catFilter, state: stateFilter, status: statFilter },
       send_now:    sendNow,
       design_id:   designId,
+      send_to:     sendTo,
     });
     return editDraft
       ? fetch(`/api/email/campaigns/${editDraft.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: payload })
@@ -318,6 +320,27 @@ function NewCampaignModal({
                 <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
               </div>
             </div>
+          </div>
+
+          {/* Send to — company inbox, individual decision-maker contacts, or both */}
+          <div className="border-t border-[#f3f4f6] pt-4">
+            <p className="text-[12px] font-semibold text-[#1A3A5C] mb-2.5">Send To</p>
+            <div className="relative">
+              <select value={sendTo} onChange={e => setSendTo(e.target.value as typeof sendTo)} className={selectCls}>
+                <option value="company">Company email (default)</option>
+                <option value="contacts">Decision-maker contacts</option>
+                <option value="both">Both</option>
+              </select>
+              <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
+            </div>
+            {sendTo !== 'company' && (
+              <p className="text-[11px] text-[#888888] mt-1.5">
+                Sends to each matching lead's contacts with an email on file (a lead
+                with none falls back to its company email{sendTo === 'both' ? ' — company + contacts, deduplicated' : ''}).
+                The exact recipient count may differ from the estimate below, which
+                counts leads, not individual contacts.
+              </p>
+            )}
           </div>
 
           {/* Summary bar */}

@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
 
   const { data: pending, error } = await supabaseAdmin
     .from('campaign_recipients')
-    .select('id, campaign_id, company_id, lead_id, email, lead:leads(name, category, state, website)')
+    .select('id, campaign_id, company_id, lead_id, email, contact_name, lead:leads(name, category, state, website)')
     .eq('status', 'queued')
     .order('created_at', { ascending: true });
 
@@ -135,9 +135,9 @@ export async function GET(req: NextRequest) {
       visitedCampaignIds.add(row.campaign_id);
 
       const lead = row.lead ?? { name: '', category: '', state: '', website: '' };
-      const subject = personalize(template.subject, lead);
+      const subject = personalize(template.subject, lead, row.contact_name);
       const html = buildEmailHtml(
-        personalize(template.body, lead),
+        personalize(template.body, lead, row.contact_name),
         sender.reply_to ?? sender.email,
         campaignInfo.design_id,
         sender.display_name

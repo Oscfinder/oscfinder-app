@@ -1207,3 +1207,75 @@
   name/title/email/phone inputs → save) already covers filling in a found
   value.
 - `tsc --noEmit` and `npm run build` clean.
+
+### Send emails to individual contacts, and campaign targeting by contact email
+- Two related asks: a per-contact "send email" shortcut from the contact card,
+  and the ability for a campaign to reach a lead's named decision-makers
+  instead of only its generic company inbox.
+- **Real mismatch found and resolved before building anything**: the task's
+  Part 2 assumed campaigns let you pick individual leads (a per-lead
+  radio/checkbox list to attach a contact-email picker to). They don't —
+  `NewCampaignModal` targets an audience purely by filters
+  (category/state/status); the backend resolves "every lead matching these
+  filters" into `campaign_recipients` only at send time, with no per-lead
+  list anywhere in the UI. Flagged this and got the user's direction before
+  writing any of Part 2: build the task's own fallback ("Approach B") — a
+  campaign-level "Send To" toggle — instead of a picker that has nothing to
+  attach to.
+- **`lib/personalize.ts`** — added a real `{{name}}` variable (didn't exist
+  before this task; every existing template only ever personalized
+  `{{company_name}}`/`{{category}}`/`{{state}}`/`{{website}}`, confirmed by
+  grepping every call site). Resolves to the contact's name when sending to a
+  specific person, falls back to `'there'` ("Hi there,") for a generic
+  company-email send. Threaded through `app/api/campaigns/process/route.ts`
+  via the new `campaign_recipients.contact_name` column.
+- **`app/_components/LeadContactsSection.tsx`** — now takes `lead`/`onUpdated`
+  props (was `leadId`/`companyName`) so it can render the existing
+  `MessageModal` directly. Each contact with an email now shows a small send
+  icon next to it; clicking opens `MessageModal` pre-filled with that
+  contact's email and name.
+- **`app/_components/RowActionModals.tsx`**'s `MessageModal` gained optional
+  `recipientEmail`/`recipientName` props (Option A from the task — kept the
+  sending logic in one place rather than a parallel `ContactEmailModal`).
+  When set, they override the lead's own company email and personalize the
+  greeting ("Dear Tunde," instead of "Dear Ouranos Technologies Team,"). The
+  leads table's existing company-level "Message" action is unaffected — it
+  just never passes these two new props.
+- **`app/api/send-email/route.ts`** — accepts an optional `contactName`; when
+  present (i.e. this was a contact-level send), logs a `lead_activities` row
+  ("Emailed Tunde Bakare <tunde@...>") after the send succeeds — the
+  activity-log paper trail the task asked for, reusing the table from the
+  2026-09-10 activity-log feature rather than inventing new tracking.
+- **`supabase/migrations/027_campaign_recipient_contact_name.sql`** — adds
+  `campaign_recipients.contact_name` (nullable — null for every existing row
+  and every future company-email recipient).
+- **`app/api/email/campaigns/route.ts`**'s `queueCampaignSend` — new
+  `send_to: 'company' | 'contacts' | 'both'` option (default `'company'`,
+  so every existing campaign/draft keeps today's exact behavior with no
+  param at all). `'contacts'` sends to each matching lead's contacts with an
+  email on file, falling back to the company email for a lead with none
+  rather than silently dropping it from the campaign. `'both'` sends to the
+  company email AND every contact email, deduplicated by address within a
+  lead (a contact sharing the company's own address collapses to one row,
+  per the user's explicit instruction) — one `lead_contacts` query across
+  all matched leads, not one query per lead. `app/api/email/campaigns/[id]/
+  route.ts`'s PATCH (sending an existing draft) threads `send_to` through
+  the same way it already does `filters` — neither is persisted on
+  `email_campaigns`, both are decided fresh at send time.
+- **`app/(dashboard)/email/page.tsx`**'s `NewCampaignModal` — new "Send To"
+  dropdown next to the existing category/state/status filters, with a note
+  that the leads-matched count above it is an estimate (it counts leads, not
+  the individual contacts a `'contacts'`/`'both'` send will actually reach).
+- **`app/(dashboard)/templates/page.tsx`** — the template-variable hint now
+  lists all 5 variables (was just `{{company_name}}`), so `{{name}}`'s
+  existence and its "there" fallback aren't a surprise when composing a
+  template meant for contact-level sends.
+- Verified against the real Supabase project with throwaway data (a test
+  lead + 2 contacts, deleted after): the `contact_name` column exists post-
+  migration, `personalize()`'s `{{name}}`/fallback behavior, the
+  `lead_activities` note format for a contact send, the `'contacts'`-mode
+  no-contacts-on-file fallback, and `'both'`-mode dedupe (a contact sharing
+  the lead's own company email collapsed to one recipient, the real contact
+  kept distinct) — all confirmed working as written, no orphaned rows left
+  behind afterward.
+- `tsc --noEmit` and `npm run build` clean. Migration 027 has been run.

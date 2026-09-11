@@ -75,7 +75,7 @@ export async function PATCH(
   const companyId = await getEffectiveCompanyId(user);
 
   const body = await req.json();
-  const { name, template_id, filters = {}, send_now = false, design_id } = body;
+  const { name, template_id, filters = {}, send_now = false, design_id, send_to } = body;
 
   if (!name?.trim())
     return NextResponse.json({ error: 'Campaign name is required' }, { status: 400 });
@@ -108,6 +108,7 @@ export async function PATCH(
     filters,
     existingCampaignId: id,
     design_id,
+    send_to,
   });
 }
 
