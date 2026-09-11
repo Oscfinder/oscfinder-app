@@ -1,13 +1,15 @@
 'use client';
-import { useState } from 'react';
-import { X, Globe, Mail, Phone, MapPin, Briefcase, Trash2, Send, AlertTriangle, PlusCircle, CheckCheck, ChevronDown, Search, Pencil, Check } from 'lucide-react';
-import { Lead, RequiresAcknowledgment } from '@/types';
+import { useState, useEffect } from 'react';
+import { X, Globe, Mail, Phone, MapPin, Briefcase, Trash2, Send, AlertTriangle, PlusCircle, CheckCheck, ChevronDown, Search, Pencil, Check, MailOpen } from 'lucide-react';
+import { Lead, RequiresAcknowledgment, MailTemplate } from '@/types';
 import { Button } from './Button';
 import { SendLimitConsentModal } from './SendLimitConsentModal';
 import { cn } from '@/lib/utils';
 import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
 import { NIGERIAN_LGAS_BY_STATE } from '@/app/data/nigeriaLgas';
 import { EMAIL_DESIGNS, DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
+import { SUGGESTED_DESIGN_BY_TITLE } from '@/lib/seedTemplateDesigns';
+import { personalize } from '@/lib/personalize';
 import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
 import { buildFindEmailUrl, buildFindPhoneUrl } from '@/lib/findPeopleLinks';
 import { LeadContactsSection } from './LeadContactsSection';
@@ -323,6 +325,29 @@ export function MessageModal({ lead, onSent, onClose, recipientEmail, recipientN
   const [sendError, setSendError] = useState('');
   const [pendingAck, setPendingAck] = useState<RequiresAcknowledgment | null>(null);
   const [acking, setAcking] = useState(false);
+  const [templates, setTemplates] = useState<MailTemplate[]>([]);
+  const [templateId, setTemplateId] = useState('');
+
+  useEffect(() => {
+    fetch('/api/templates')
+      .then(r => r.json())
+      .then(data => setTemplates(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
+
+  // Selecting a template fills in subject/body (personalized for this specific
+  // recipient — {{name}} resolves to the contact's name here, same as a
+  // contact-level campaign send); still freely editable afterward, same as
+  // BulkSendModal's template picker.
+  const applyTemplate = (id: string) => {
+    setTemplateId(id);
+    const tpl = templates.find(t => t.id === id);
+    if (!tpl) return;
+    setSubject(personalize(tpl.subject, lead, recipientName));
+    setBody(personalize(tpl.body, lead, recipientName));
+    const suggested = SUGGESTED_DESIGN_BY_TITLE[tpl.title];
+    if (suggested) setDesignId(suggested);
+  };
 
   const doSend = () => fetch('/api/send-email', {
     method:  'POST',
@@ -391,6 +416,24 @@ export function MessageModal({ lead, onSent, onClose, recipientEmail, recipientN
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">To</label>
           <input value={to} readOnly className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-500 cursor-not-allowed" />
+        </div>
+        <div>
+          <label className="flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            <MailOpen size={12} /> Template (optional)
+          </label>
+          <div className="relative">
+            <select
+              value={templateId}
+              onChange={e => applyTemplate(e.target.value)}
+              className="w-full h-10 pl-3 pr-8 rounded-lg border border-gray-300 text-sm appearance-none cursor-pointer bg-white focus:outline-none focus:ring-2 focus:ring-[#006285]/30 focus:border-[#006285]"
+            >
+              <option value="">— Write your own —</option>
+              {templates.map(t => (
+                <option key={t.id} value={t.id}>{t.title} ({t.tag})</option>
+              ))}
+            </select>
+            <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
         </div>
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Subject</label>

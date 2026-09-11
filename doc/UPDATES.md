@@ -1279,3 +1279,21 @@
   kept distinct) — all confirmed working as written, no orphaned rows left
   behind afterward.
 - `tsc --noEmit` and `npm run build` clean. Migration 027 has been run.
+
+### Template picker for the single-send MessageModal
+- User noticed the leads table's "Message" action and the new contact-card
+  send icon couldn't select a template — only `BulkSendModal` and
+  `NewCampaignModal` had ever been wired to `/api/templates`. `MessageModal`
+  (`RowActionModals.tsx`) was always a manual composer only; not a bug, just
+  a gap this fixes.
+- Added a "Template (optional)" dropdown above Subject, fetching
+  `/api/templates` the same way `BulkSendModal` does. Selecting one runs
+  `personalize()` (`lib/personalize.ts`) against subject/body with this
+  specific recipient — `{{name}}` resolves to the contact's name for a
+  contact-level send (via the send icon) or falls back to `'there'` for a
+  company-level send (via the leads table), same personalization the
+  campaign worker uses — and applies the template's suggested design
+  (`SUGGESTED_DESIGN_BY_TITLE`), matching `BulkSendModal`/`NewCampaignModal`'s
+  convention. Subject/body stay freely editable afterward, same as picking a
+  template anywhere else in the app.
+- `tsc --noEmit` and `npm run build` clean.
