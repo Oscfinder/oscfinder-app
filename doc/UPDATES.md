@@ -1297,3 +1297,28 @@
   convention. Subject/body stay freely editable afterward, same as picking a
   template anywhere else in the app.
 - `tsc --noEmit` and `npm run build` clean.
+
+### Bug fix: BulkSendModal only ever replaced {{company_name}}
+- User reported a real send: selected the "Outreach — Generic B2B" template
+  via the leads table's bulk "Send Template" action against a test lead
+  (`category: 'Digital Marketing Agencies'`) and received an email with the
+  literal text "Companies in {{category}} are using..." — the variable never
+  got substituted.
+- Root cause: `BulkSendModal.tsx` had its own local `fillTemplate()` —
+  `text.replace(/\{\{company_name\}\}/g, lead.name)` — a separate, incomplete
+  reimplementation that never called the real `lib/personalize.ts`. It only
+  ever handled `{{company_name}}`; `{{category}}`, `{{state}}`, `{{website}}`,
+  and the newer `{{name}}` all silently passed through as literal text on
+  every bulk send since this modal was built. `MessageModal`,
+  `NewCampaignModal`, and the campaign worker were never affected — all
+  three already called the real `personalize()`.
+- Fixed by deleting `fillTemplate()` and importing `personalize` from
+  `lib/personalize` instead, at both call sites (the subject/body sent per
+  recipient). Updated the footer hint (previously only mentioned
+  `{{company_name}}`) to list all 5 variables, matching the same fix already
+  made to the Templates page and BulkSendModal's own precedent.
+- Verified the exact reported scenario: `personalize()` against a lead
+  shaped like the real "test" lead (`category: 'Digital Marketing
+  Agencies'`) now correctly renders "Companies in Digital Marketing
+  Agencies are using...".
+- `tsc --noEmit` and `npm run build` clean.

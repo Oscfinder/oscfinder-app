@@ -8,14 +8,13 @@ import { cn } from '@/lib/utils';
 import { EMAIL_DESIGNS, DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
 import { SUGGESTED_DESIGN_BY_TITLE } from '@/lib/seedTemplateDesigns';
 import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
+import { personalize } from '@/lib/personalize';
 
 interface BulkSendModalProps {
   selected: Lead[];
   onSent: (ids: string[]) => void;
   onClose: () => void;
 }
-
-const fillTemplate = (text: string, lead: Lead) => text.replace(/\{\{company_name\}\}/g, lead.name);
 
 export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps) {
   const [templates, setTemplates]   = useState<MailTemplate[]>([]);
@@ -71,8 +70,8 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
           body:    JSON.stringify({
             leadId:    lead.id,
             to:        lead.emails[0],
-            subject:   fillTemplate(chosen.subject, lead),
-            body:      fillTemplate(chosen.body, lead),
+            subject:   personalize(chosen.subject, lead),
+            body:      personalize(chosen.body, lead),
             design_id: designId,
           }),
         });
@@ -234,7 +233,11 @@ export function BulkSendModal({ selected, onSent, onClose }: BulkSendModalProps)
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50 rounded-b-2xl">
           <p className="text-xs text-gray-400">
-            <span className="font-mono bg-gray-200 px-1 rounded text-gray-600 text-[11px]">{'{{company_name}}'}</span> will be replaced per recipient
+            <span className="font-mono bg-gray-200 px-1 rounded text-gray-600 text-[11px]">{'{{company_name}}'}</span>,{' '}
+            <span className="font-mono bg-gray-200 px-1 rounded text-gray-600 text-[11px]">{'{{category}}'}</span>,{' '}
+            <span className="font-mono bg-gray-200 px-1 rounded text-gray-600 text-[11px]">{'{{state}}'}</span>,{' '}
+            <span className="font-mono bg-gray-200 px-1 rounded text-gray-600 text-[11px]">{'{{website}}'}</span> and{' '}
+            <span className="font-mono bg-gray-200 px-1 rounded text-gray-600 text-[11px]">{'{{name}}'}</span> ("there") are replaced per recipient
           </p>
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={onClose} disabled={sending || done}>Cancel</Button>
