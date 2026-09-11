@@ -1121,3 +1121,89 @@
   updates instantly from local state regardless, so the save doesn't wait on
   that refetch.
 - `tsc --noEmit` and `npm run build` clean.
+
+## 2026-09-10
+
+### Lead activity log + manual status change
+- Two features requested together for outreach tracking: a per-lead note
+  history (mini-CRM), and a way to move a lead through the pipeline by hand
+  instead of only auto-flipping `new` → `contacted` on send.
+- **`supabase/migrations/025_lead_activities.sql`** (needs to be run in
+  Supabase SQL Editor) — new `lead_activities` table (`lead_id`,
+  `company_id`, `note`, `created_at`, `updated_at`), cascade-deletes with
+  its lead, RLS following the exact tenant-isolation pattern from
+  `022_lead_contacts.sql` (defense-in-depth only — routes use
+  `supabaseAdmin` and scope by `company_id` themselves).
+- **`app/api/leads/[id]/activities/route.ts`** (GET/POST) and
+  **`.../[activityId]/route.ts`** (PATCH/DELETE) — same auth +
+  company-scoping shape as the existing `lead_contacts` routes (verify the
+  lead belongs to the caller's effective company, then scope every write by
+  both `lead_id` and `company_id`). List is ordered `created_at DESC`.
+- **`types/index.ts`** — `LeadStatus` extended from
+  `'new' | 'contacted' | 'qualified' | 'ignored'` to add `'responded'` and
+  `'converted'`, giving the full pipeline `new → contacted → responded →
+  qualified → converted` (plus `ignored` at any point). New `LeadActivity`
+  interface.
+- **`lib/leadStatus.ts`** (new) — single source of truth for status order,
+  display labels, and badge colors. Worth calling out: before this, the
+  4-status list was hardcoded separately in three places (the leads table
+  filter, the email page's bulk-send filter, and the export page's filter)
+  — all three would have silently kept excluding `responded`/`converted`
+  from their dropdowns if left alone. All three now import from here.
+- **`app/_components/StatusDropdown.tsx`** (new) — clickable status badge
+  that opens a dropdown of all 6 statuses; used both inline in the leads
+  table row (no need to open the ViewModal to reclassify a lead) and in the
+  ViewModal itself. Optimistically flips its own color/label on selection,
+  PATCHes `/api/leads/[id]`, reverts on failure.
+- **`app/_components/LeadActivityLog.tsx`** (new) — add/edit/delete notes in
+  the ViewModal, same visual/interaction pattern as the existing
+  `LeadContactsSection` (inline edit-in-place, confirm-before-delete).
+  Shows "(edited)" when `updated_at` differs from `created_at`.
+- **`app/api/leads/[id]/route.ts`** — `status` added to the PATCH route's
+  `EDITABLE_FIELDS`, validated against the real status list. When `status`
+  changes, the route now reads the prior value before applying the update
+  and auto-inserts a `lead_activities` row (`"Status changed from 'X' to
+  'Y'"`) — a paper trail without the user writing a note for every change.
+- **Bug found and fixed during verification:** the `leads.status` column
+  has a DB-level check constraint (`leads_status_check`, added outside the
+  migrations folder — see `doc/1_DATABASE_MIGRATION.md`) that still only
+  allowed the original 4 values. The TypeScript type and the route's own
+  validation both accepted `responded`/`converted`, but the database itself
+  would have rejected the write. Added
+  **`supabase/migrations/026_lead_status_expand.sql`** to drop and
+  recreate the constraint with all 6 values.
+- Verified against the real Supabase project rather than just `tsc`/build:
+  a script using the service-role client exercised the exact queries each
+  route performs — insert/list/edit/delete on activities, tenant-isolation
+  (update scoped to a wrong `company_id` affects zero rows), the
+  auto-activity note on status change, both new statuses actually
+  persisting, and cascade delete — against a throwaway test lead created
+  and deleted at the end of the run (confirmed no orphaned rows remained).
+  This is what caught the check-constraint bug above; `tsc`/build alone
+  would not have.
+- `tsc --noEmit` and `npm run build` clean. Migrations 025 and 026 both
+  need to be run manually in Supabase SQL Editor — until then, activities
+  are unreachable (table doesn't exist) and setting `responded`/`converted`
+  fails at the database level even though the UI offers them.
+
+## 2026-09-11
+
+### Find Email / Find Phone search links for individual contacts
+- Extends the existing company-level "Find Email"/"Find Phone" pattern
+  (`buildFindEmailUrl`/`buildFindPhoneUrl` on leads missing contact info)
+  down to individual contacts within a lead — a manually-added contact like
+  "Tunde Bakare, Managing Director" with no email/phone had no quick next
+  step before this.
+- **`lib/findPeopleLinks.ts`** — added `buildContactEmailSearchUrl` /
+  `buildContactPhoneSearchUrl`, reusing the file's existing
+  `googleSearchUrl()` helper rather than duplicating the
+  `encodeURIComponent` call the task's own snippet inlined.
+- **`app/_components/LeadContactsSection.tsx`** — each contact card (which
+  previously showed only name/title/source, with email/phone only editable,
+  never displayed) now shows the actual email/phone when present, or a
+  "Find Email"/"Find Phone" link (opens a Google search in a new tab) when
+  missing — both render side by side via `flex-wrap` when both are empty.
+  No new edit UI needed — the contact's existing inline edit (pencil icon →
+  name/title/email/phone inputs → save) already covers filling in a found
+  value.
+- `tsc --noEmit` and `npm run build` clean.

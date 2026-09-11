@@ -1,10 +1,10 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, Pencil, Trash2, Plus, User, UserSearch, Linkedin, Facebook } from 'lucide-react';
+import { Search, Pencil, Trash2, Plus, User, UserSearch, Linkedin, Facebook, Mail, Phone } from 'lucide-react';
 import { LeadContact } from '@/types';
 import { cn } from '@/lib/utils';
-import { buildFindPeopleLinks } from '@/lib/findPeopleLinks';
+import { buildFindPeopleLinks, buildContactEmailSearchUrl, buildContactPhoneSearchUrl } from '@/lib/findPeopleLinks';
 
 const FIND_PEOPLE_ICON = [Linkedin, Search, Facebook];
 
@@ -190,6 +190,34 @@ export function LeadContactsSection({ leadId, companyName }: { leadId: string; c
                       )}>
                         {SOURCE_LABEL[c.source] ?? c.source}
                       </span>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {c.email ? (
+                          <span className="flex items-center gap-1 text-[12px] text-gray-600 truncate">
+                            <Mail size={11} className="text-gray-400 shrink-0" /> {c.email}
+                          </span>
+                        ) : (
+                          <a
+                            href={buildContactEmailSearchUrl(c.name, companyName)}
+                            target="_blank" rel="noreferrer"
+                            className="flex items-center gap-1 text-[11px] font-medium text-[#006285] hover:text-[#0099CC] transition-colors"
+                          >
+                            <Search size={11} /> Find Email
+                          </a>
+                        )}
+                        {c.phone ? (
+                          <span className="flex items-center gap-1 text-[12px] text-gray-600 truncate">
+                            <Phone size={11} className="text-gray-400 shrink-0" /> {c.phone}
+                          </span>
+                        ) : (
+                          <a
+                            href={buildContactPhoneSearchUrl(c.name, companyName)}
+                            target="_blank" rel="noreferrer"
+                            className="flex items-center gap-1 text-[11px] font-medium text-[#006285] hover:text-[#0099CC] transition-colors"
+                          >
+                            <Search size={11} /> Find Phone
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">

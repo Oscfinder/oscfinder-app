@@ -30,3 +30,13 @@ export function buildFindEmailUrl(companyName: string): string {
 export function buildFindPhoneUrl(companyName: string): string {
   return googleSearchUrl(`"${companyName}" phone number Nigeria`);
 }
+
+// Same pattern, one level down — a specific person at the company rather
+// than the company itself, used on individual contacts in LeadContactsSection.
+export function buildContactEmailSearchUrl(contactName: string, companyName: string): string {
+  return googleSearchUrl(`"${contactName}" "${companyName}" email`);
+}
+
+export function buildContactPhoneSearchUrl(contactName: string, companyName: string): string {
+  return googleSearchUrl(`"${contactName}" "${companyName}" phone number`);
+}
