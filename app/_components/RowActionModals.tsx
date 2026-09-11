@@ -66,7 +66,7 @@ function SearchLink({ label, url }: { label: string; url: string }) {
 // without leaving the modal to open the full EditModal. Uses the same
 // PATCH /api/leads/[id] endpoint as EditModal, scoped to just this one field.
 function EditableContactField({
-  leadId, field, values, placeholder, searchLabel, searchUrl, onSaved,
+  leadId, field, values, placeholder, searchLabel, searchUrl, onSaved, onSend,
 }: {
   leadId:      string;
   field:       'emails' | 'phones';
@@ -75,6 +75,7 @@ function EditableContactField({
   searchLabel: string;
   searchUrl:   string;
   onSaved:     (values: string[]) => void;
+  onSend?:     () => void; // set only on the Emails row — opens MessageModal for lead.emails[0]
 }) {
   const [editing, setEditing] = useState(false);
   const [draft,   setDraft]   = useState(values.join(', '));
@@ -136,9 +137,16 @@ function EditableContactField({
           ? values.join(', ')
           : <SearchLink label={searchLabel} url={searchUrl} />}
       </div>
-      <button onClick={startEdit} title="Edit" className="shrink-0 text-gray-300 hover:text-[#006285] transition-colors">
-        <Pencil size={13} />
-      </button>
+      <div className="flex items-center gap-2 shrink-0">
+        {onSend && values.length > 0 && (
+          <button onClick={onSend} title="Send email" className="text-[#006285] hover:text-[#004d66] transition-colors">
+            <Send size={13} />
+          </button>
+        )}
+        <button onClick={startEdit} title="Edit" className="text-gray-300 hover:text-[#006285] transition-colors">
+          <Pencil size={13} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -169,6 +177,7 @@ export function ViewModal({ lead, onClose, onUpdated }: { lead: Lead; onClose: (
   const [emails, setEmails] = useState(lead.emails ?? []);
   const [phones, setPhones] = useState(lead.phones ?? []);
   const [status, setStatus] = useState(lead.status);
+  const [showMessage, setShowMessage] = useState(false);
 
   return (
     <Modal onClose={onClose}>
@@ -192,6 +201,7 @@ export function ViewModal({ lead, onClose, onUpdated }: { lead: Lead; onClose: (
             placeholder="e.g. info@company.com, sales@company.com"
             searchLabel="Search for email" searchUrl={buildFindEmailUrl(lead.name)}
             onSaved={v => { setEmails(v); onUpdated?.(); }}
+            onSend={() => setShowMessage(true)}
           />
         } />
         <DetailRow icon={Phone}     label="Phones"   value={
@@ -225,6 +235,14 @@ export function ViewModal({ lead, onClose, onUpdated }: { lead: Lead; onClose: (
       <div className="px-6 py-3 border-t border-gray-100 flex justify-end">
         <Button variant="outline" onClick={onClose}>Close</Button>
       </div>
+
+      {showMessage && (
+        <MessageModal
+          lead={{ ...lead, emails }}
+          onSent={() => { setShowMessage(false); onUpdated?.(); }}
+          onClose={() => setShowMessage(false)}
+        />
+      )}
     </Modal>
   );
 }

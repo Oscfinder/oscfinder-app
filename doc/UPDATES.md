@@ -1379,3 +1379,23 @@
   and repeated connection attempts risk making that worse. Verified via
   `tsc --noEmit`/`npm run build` and code review only; recommend a live
   test once the mailbox is confirmed healthy again.
+
+### Send icon next to the company email in the ViewModal
+- The Emails row only ever let you view/edit the address, not email it —
+  same gap the contact-card send icon fixed for individual contacts, now
+  closed for the company-level email too.
+- `EditableContactField` (`RowActionModals.tsx`) gained an optional `onSend`
+  prop, passed only on the Emails row (not Phones) — renders a small send
+  icon next to the existing pencil, only when the field has a value (no
+  icon when empty, since there's nothing to send to — the "Search for
+  email" link already covers that case).
+- `ViewModal` opens the existing `MessageModal` on click, passed
+  `{ ...lead, emails }` rather than the raw `lead` prop so a just-saved
+  inline email edit (also local state, not yet reflected in the parent's
+  stale `lead` prop) is respected immediately rather than sending to a
+  stale address.
+- No new modal, no backend changes — reuses the exact `MessageModal` the
+  leads table's row action and the contact send icon already use, so the
+  template picker, plan-limit/sender-limit handling, and the
+  `mail_sent`/`status → contacted` update all come for free.
+- `tsc --noEmit` and `npm run build` clean.
