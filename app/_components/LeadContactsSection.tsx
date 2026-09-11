@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, Pencil, Trash2, Plus, User, UserSearch, Linkedin, Facebook, Mail, Phone, Send, MailPlus } from 'lucide-react';
 import { Lead, LeadContact } from '@/types';
 import { cn } from '@/lib/utils';
-import { buildFindPeopleLinks, buildContactEmailSearchUrl, buildContactPhoneSearchUrl } from '@/lib/findPeopleLinks';
+import { buildFindPeopleLinks, buildContactEmailSearchUrl, buildContactPhoneSearchUrl, buildContactLinkedinSearchUrl } from '@/lib/findPeopleLinks';
 import { MessageModal } from './RowActionModals';
 import { SendToAllContactsModal } from './SendToAllContactsModal';
 
@@ -235,12 +235,12 @@ export function LeadContactsSection({ lead, onUpdated }: { lead: Lead; onUpdated
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <a
-                      href={c.linkedin_url || c.linkedin_search_url || '#'}
+                      href={c.linkedin_url || c.linkedin_search_url || buildContactLinkedinSearchUrl(c.name, companyName)}
                       target="_blank" rel="noreferrer"
                       title="Find on LinkedIn"
-                      className="w-7 h-7 rounded-md flex items-center justify-center text-gray-400 hover:bg-white hover:text-[#006285] transition-colors"
+                      className="w-7 h-7 rounded-md flex items-center justify-center text-gray-400 hover:bg-[#e8f4fa] hover:text-[#0077b5] transition-colors"
                     >
-                      <Search size={13} />
+                      <Linkedin size={13} />
                     </a>
                     <button onClick={() => startEdit(c)} title="Edit" className="w-7 h-7 rounded-md flex items-center justify-center text-gray-400 hover:bg-white hover:text-[#006285] transition-colors">
                       <Pencil size={13} />

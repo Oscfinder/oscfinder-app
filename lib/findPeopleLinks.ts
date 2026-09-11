@@ -40,3 +40,12 @@ export function buildContactEmailSearchUrl(contactName: string, companyName: str
 export function buildContactPhoneSearchUrl(contactName: string, companyName: string): string {
   return googleSearchUrl(`"${contactName}" "${companyName}" phone number`);
 }
+
+// Fallback only — every contact normally already has `linkedin_search_url`
+// set at creation time (services/contactExtraction.ts's buildLinkedinSearchUrl,
+// a different query shape, server-only). This covers the rare contact with
+// neither that nor a confirmed linkedin_url, so the action icon never links
+// to a dead '#'.
+export function buildContactLinkedinSearchUrl(contactName: string, companyName: string): string {
+  return googleSearchUrl(`"${contactName}" "${companyName}" site:linkedin.com/in/`);
+}

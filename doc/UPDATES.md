@@ -1399,3 +1399,23 @@
   template picker, plan-limit/sender-limit handling, and the
   `mail_sent`/`status → contacted` update all come for free.
 - `tsc --noEmit` and `npm run build` clean.
+
+### LinkedIn icon fix on contact cards
+- The task asked to add a LinkedIn icon to each contact's action row — but
+  that action already existed: the leftmost icon there always opened a
+  LinkedIn search (`c.linkedin_url || c.linkedin_search_url`), just rendered
+  with the `Search` (magnifying-glass) icon instead of `Linkedin`, which is
+  why it read as a plain "search" icon rather than a LinkedIn one. Fixed the
+  icon itself (`Linkedin` from lucide-react, LinkedIn-blue hover) instead of
+  adding a second, redundant button that would open the same link — it was
+  already first in the row, so no reordering was needed either.
+- **Real gap fixed alongside it**: the href fell back to a dead `'#'` when a
+  contact had neither `linkedin_url` nor `linkedin_search_url` (normally
+  always set at creation time, but not guaranteed for older rows). Added
+  **`buildContactLinkedinSearchUrl`** (`lib/findPeopleLinks.ts`) — the exact
+  query shape the task specified (`"name" "company" site:linkedin.com/in/`)
+  — as a client-side fallback, distinct from the server-side
+  `buildLinkedinSearchUrl` (`services/contactExtraction.ts`) that already
+  sets `linkedin_search_url` on every new contact with a different, looser
+  query shape.
+- `tsc --noEmit` and `npm run build` clean.
