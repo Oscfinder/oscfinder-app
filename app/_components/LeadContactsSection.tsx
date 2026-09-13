@@ -45,7 +45,15 @@ export function LeadContactsSection({ lead, onUpdated }: { lead: Lead; onUpdated
 
   const { data: contacts = [], isLoading } = useQuery<LeadContact[]>({
     queryKey: ['lead-contacts', leadId],
-    queryFn:  () => fetch(`/api/leads/${leadId}/contacts`).then(r => r.json()),
+    // GET /api/leads/[id]/contacts returns { error: '...' } (not an array)
+    // when the lead can't be found for the caller's effective company — e.g.
+    // an admin's impersonation state changing while this modal is open. Every
+    // other fetch in this codebase guards for exactly this shape
+    // (BulkSendModal/MessageModal's template fetches); this one didn't, and
+    // `contacts.filter(...)` below crashed the whole page when it happened
+    // (confirmed live via client_error_logs — TypeError: M.filter is not a
+    // function, twice, same deployed chunk).
+    queryFn:  () => fetch(`/api/leads/${leadId}/contacts`).then(r => r.json()).then(d => Array.isArray(d) ? d : []),
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['lead-contacts', leadId] });

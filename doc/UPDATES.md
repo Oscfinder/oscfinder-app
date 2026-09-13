@@ -1538,3 +1538,40 @@
   needed). `LeadContactsSection.tsx` now passes `text-[11px]`. Icon size
   trimmed 12 → 11 to match `Search`'s icon size in the same row.
 - `tsc --noEmit` and `npm run build` clean.
+
+## 2026-09-14
+
+### Root cause found for the recurring `app/error.tsx` crash — real bug, not caching
+- User hit the global error boundary a third time (twice total logged by the
+  2026-09-13 crash-logging feature), same message both times: `TypeError:
+  M.filter is not a function`, on `/leads`, identical minified stack, same
+  deployed chunk hashes 10 hours apart. Identical chunk hashes across two
+  occurrences ruled out the "stale bundle vs. a new deploy" theory floated
+  after the first report — no deploy happened between them, so this was a
+  reproducible bug in the one build, not a caching fluke.
+- **Found the exact line** by downloading the actual deployed chunk
+  (`https://app.oscfinder.com/_next/static/chunks/0y~311f~vyxm5.js`) and
+  reading the source at the stack trace's exact byte offset — no source maps
+  needed. It decoded to `M.filter(e=>e.email).length>0` — the "Send to All
+  Contacts" button's visibility check in `LeadContactsSection.tsx`, where
+  `M` is the minified name for `contacts`.
+- **Root cause**: `LeadContactsSection.tsx`'s `contacts` query did
+  `fetch(...).then(r => r.json())` with no shape guard — the one fetch in
+  this whole file/feature set that didn't follow the pattern every other
+  fetch here already uses (`BulkSendModal`/`MessageModal`'s template
+  fetches: `Array.isArray(data) ? data : []`). `GET /api/leads/[id]/
+  contacts` returns `{ error: 'Lead not found' }` (not an array) whenever
+  the lead can't be resolved for the caller's effective company — plausible
+  trigger: an admin's impersonation state changing while a lead's ViewModal
+  is still open. `contacts.filter(...)` then threw on that object instead of
+  an array, crashing the whole page (an uncaught client-render error takes
+  down everything below the nearest error boundary — the root one, since
+  none is scoped closer).
+- **Fixed**: added the exact same `.then(d => Array.isArray(d) ? d : [])`
+  guard used everywhere else. A lead the caller can no longer access now
+  renders "No contacts found for this company" (already the existing empty
+  state) instead of crashing.
+- Confirms the crash-logging feature added the day before did exactly what
+  it was built for — a client-side error with zero prior server-side trace
+  became fully diagnosable in a few minutes.
+- `tsc --noEmit` and `npm run build` clean.
