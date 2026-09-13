@@ -50,6 +50,16 @@ export function buildContactLinkedinSearchUrl(contactName: string, companyName: 
   return googleSearchUrl(`"${contactName}" "${companyName}" site:linkedin.com/in/`);
 }
 
+// Same fallback pattern as the phone/email search links — shown alongside
+// "Find Phone" (not instead of it) when a lead/contact has no number on file.
+export function buildFindWhatsAppUrl(companyName: string): string {
+  return googleSearchUrl(`"${companyName}" WhatsApp number`);
+}
+
+export function buildContactWhatsAppSearchUrl(contactName: string, companyName: string): string {
+  return googleSearchUrl(`"${contactName}" "${companyName}" WhatsApp`);
+}
+
 // WhatsApp click-to-chat (wa.me) needs digits only, in international format
 // with no leading '+'. Numbers stored here are almost always Nigerian —
 // scraped/entered as either a local 0-prefixed number or already

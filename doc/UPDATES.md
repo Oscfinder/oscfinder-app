@@ -1479,3 +1479,49 @@
   earlier session too; Email is the only contact-info column on that
   table), so the ViewModal is the only place this applies.
 - `tsc --noEmit` and `npm run build` clean.
+
+### "Find WhatsApp" links + WhatsApp message template dropdown
+- **Multi-tenancy conflict found again, resolved before building**: the
+  task's 3 real templates were written as Simon/OsCFinder's own sales pitch
+  ("I'm Simon from OsCFinder Technologies... our B2B lead generation
+  platform..."), but `lib/whatsappTemplates.ts` is a hardcoded constant
+  shared by every company on the platform — not a per-company DB table like
+  `email_templates`. Shipped as written, every other tenant would see that
+  exact pitch when messaging their own leads. Same conflict as the earlier
+  WhatsApp default-message decision this session. Asked the user directly
+  this time given how much specific copy was involved — confirmed: rewrite
+  the 3 templates as neutral copy usable by any tenant, add a
+  `{{sender_name}}` variable (pulls from the logged-in user's display name)
+  for future use, and keep Simon's own specific pitches as
+  "Custom message..." rather than baked-in defaults. Real per-company
+  WhatsApp templates (DB-backed, like email) are future work, out of scope
+  here.
+- **`lib/findPeopleLinks.ts`** — added `buildFindWhatsAppUrl(companyName)`
+  and `buildContactWhatsAppSearchUrl(contactName, companyName)`, shown
+  alongside (not replacing) the existing `buildFindPhoneUrl`/
+  `buildContactPhoneSearchUrl` — both fire when a lead/contact has no phone
+  on file.
+- **`lib/whatsappTemplates.ts`** (new) — `WHATSAPP_TEMPLATES` (Introduction /
+  Follow-up / Demo invite / Custom message, generic per above) and
+  `buildWhatsAppTemplateUrl()`, verified against the same 3 Nigerian-number
+  formats as `buildWhatsAppUrl` plus the `{{name}}`→"there" and
+  `{{company}}`→"your company" fallbacks and the empty-message
+  (Custom-message) no-`?text=` case.
+- **`app/_components/WhatsAppDropdown.tsx`** (new) — same open/outside-
+  click-to-close pattern as `FindPeopleMenu`/`NotificationBell`; reads
+  `{{sender_name}}` from `supabase.auth.getUser()`'s `user_metadata.full_name`
+  (set at provisioning for every account — `lib/provisionUser.ts`) rather
+  than adding a new API route just for this, cached with `staleTime:
+  Infinity` so every dropdown instance on a page (one per phone number)
+  collapses to a single request.
+- **`app/_components/WhatsAppIcon.tsx`** — added `WhatsAppSearchLink`
+  (WhatsApp-green "Find WhatsApp" link, same visual pattern as the existing
+  `SearchLink`) alongside the icon component already there.
+- **`app/_components/LeadContactsSection.tsx`** / **`RowActionModals.tsx`**
+  — the plain wa.me anchor from the last session's WhatsApp-icon feature is
+  now `WhatsAppDropdown` in both places; the empty-phone state shows "Find
+  WhatsApp" next to the existing "Find Phone" (`EditableContactField` gained
+  `companyName`/`whatsappSearchUrl` props, both Phones-row-only).
+- Skipped the leads table again — still no Phone column there, confirmed
+  fresh this pass (same finding as the last WhatsApp-icon task).
+- `tsc --noEmit` and `npm run build` clean.

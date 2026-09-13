@@ -4,10 +4,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, Pencil, Trash2, Plus, User, UserSearch, Linkedin, Facebook, Mail, Phone, Send, MailPlus } from 'lucide-react';
 import { Lead, LeadContact } from '@/types';
 import { cn } from '@/lib/utils';
-import { buildFindPeopleLinks, buildContactEmailSearchUrl, buildContactPhoneSearchUrl, buildContactLinkedinSearchUrl, buildWhatsAppUrl } from '@/lib/findPeopleLinks';
+import { buildFindPeopleLinks, buildContactEmailSearchUrl, buildContactPhoneSearchUrl, buildContactLinkedinSearchUrl, buildContactWhatsAppSearchUrl } from '@/lib/findPeopleLinks';
 import { MessageModal } from './RowActionModals';
 import { SendToAllContactsModal } from './SendToAllContactsModal';
-import { WhatsAppIcon } from './WhatsAppIcon';
+import { WhatsAppSearchLink } from './WhatsAppIcon';
+import { WhatsAppDropdown } from './WhatsAppDropdown';
 
 const FIND_PEOPLE_ICON = [Linkedin, Search, Facebook];
 
@@ -221,23 +222,19 @@ export function LeadContactsSection({ lead, onUpdated }: { lead: Lead; onUpdated
                         {c.phone ? (
                           <span className="flex items-center gap-1.5 text-[12px] text-gray-600 truncate">
                             <Phone size={11} className="text-gray-400 shrink-0" /> {c.phone}
-                            <a
-                              href={buildWhatsAppUrl(c.phone)}
-                              target="_blank" rel="noreferrer"
-                              title="Open in WhatsApp"
-                              className="shrink-0 w-5 h-5 rounded flex items-center justify-center hover:bg-[#e7f9ef] transition-colors"
-                            >
-                              <WhatsAppIcon size={12} />
-                            </a>
+                            <WhatsAppDropdown phone={c.phone} contactName={c.name} companyName={companyName} />
                           </span>
                         ) : (
-                          <a
-                            href={buildContactPhoneSearchUrl(c.name, companyName)}
-                            target="_blank" rel="noreferrer"
-                            className="flex items-center gap-1 text-[11px] font-medium text-[#006285] hover:text-[#0099CC] transition-colors"
-                          >
-                            <Search size={11} /> Find Phone
-                          </a>
+                          <div className="flex items-center gap-3">
+                            <WhatsAppSearchLink url={buildContactWhatsAppSearchUrl(c.name, companyName)} />
+                            <a
+                              href={buildContactPhoneSearchUrl(c.name, companyName)}
+                              target="_blank" rel="noreferrer"
+                              className="flex items-center gap-1 text-[11px] font-medium text-[#006285] hover:text-[#0099CC] transition-colors"
+                            >
+                              <Search size={11} /> Find Phone
+                            </a>
+                          </div>
                         )}
                       </div>
                     </div>

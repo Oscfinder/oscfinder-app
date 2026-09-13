@@ -11,11 +11,12 @@ import { EMAIL_DESIGNS, DEFAULT_DESIGN_ID } from '@/lib/emailDesigns';
 import { SUGGESTED_DESIGN_BY_TITLE } from '@/lib/seedTemplateDesigns';
 import { personalize } from '@/lib/personalize';
 import { showUpgradeModal, asPlanLimitError } from '@/lib/upgradeEvent';
-import { buildFindEmailUrl, buildFindPhoneUrl, buildWhatsAppUrl } from '@/lib/findPeopleLinks';
+import { buildFindEmailUrl, buildFindPhoneUrl, buildFindWhatsAppUrl } from '@/lib/findPeopleLinks';
 import { LeadContactsSection } from './LeadContactsSection';
 import { LeadActivityLog } from './LeadActivityLog';
 import { StatusDropdown } from './StatusDropdown';
-import { WhatsAppIcon } from './WhatsAppIcon';
+import { WhatsAppSearchLink } from './WhatsAppIcon';
+import { WhatsAppDropdown } from './WhatsAppDropdown';
 
 // ─── shared backdrop + shell ───────────────────────────────────────────────
 // Exported so SendToAllContactsModal (a distinct top-level modal, not part of
@@ -67,17 +68,19 @@ function SearchLink({ label, url }: { label: string; url: string }) {
 // without leaving the modal to open the full EditModal. Uses the same
 // PATCH /api/leads/[id] endpoint as EditModal, scoped to just this one field.
 function EditableContactField({
-  leadId, field, values, placeholder, searchLabel, searchUrl, onSaved, onSend, showWhatsApp,
+  leadId, field, values, placeholder, searchLabel, searchUrl, onSaved, onSend, showWhatsApp, companyName, whatsappSearchUrl,
 }: {
-  leadId:       string;
-  field:        'emails' | 'phones';
-  values:       string[];
-  placeholder:  string;
-  searchLabel:  string;
-  searchUrl:    string;
-  onSaved:      (values: string[]) => void;
-  onSend?:      () => void; // set only on the Emails row — opens MessageModal for lead.emails[0]
-  showWhatsApp?: boolean;   // set only on the Phones row — one wa.me icon per number
+  leadId:             string;
+  field:              'emails' | 'phones';
+  values:             string[];
+  placeholder:        string;
+  searchLabel:        string;
+  searchUrl:          string;
+  onSaved:            (values: string[]) => void;
+  onSend?:            () => void; // set only on the Emails row — opens MessageModal for lead.emails[0]
+  showWhatsApp?:      boolean;    // set only on the Phones row — one WhatsApp dropdown per number
+  companyName?:       string;     // set only on the Phones row — used by the WhatsApp dropdown's {{company}}
+  whatsappSearchUrl?: string;     // set only on the Phones row — "Find WhatsApp" shown alongside "Find Phone" when empty
 }) {
   const [editing, setEditing] = useState(false);
   const [draft,   setDraft]   = useState(values.join(', '));
@@ -136,20 +139,20 @@ function EditableContactField({
     <div className="flex items-center justify-between gap-2">
       <div className="min-w-0 break-words">
         {values.length === 0 ? (
-          <SearchLink label={searchLabel} url={searchUrl} />
+          whatsappSearchUrl ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <WhatsAppSearchLink url={whatsappSearchUrl} />
+              <SearchLink label={searchLabel} url={searchUrl} />
+            </div>
+          ) : (
+            <SearchLink label={searchLabel} url={searchUrl} />
+          )
         ) : showWhatsApp ? (
           <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
             {values.map((v, i) => (
               <span key={i} className="inline-flex items-center gap-1">
                 {v}{i < values.length - 1 && ','}
-                <a
-                  href={buildWhatsAppUrl(v)}
-                  target="_blank" rel="noreferrer"
-                  title="Open in WhatsApp"
-                  className="shrink-0"
-                >
-                  <WhatsAppIcon size={14} />
-                </a>
+                <WhatsAppDropdown phone={v} companyName={companyName ?? ''} />
               </span>
             ))}
           </div>
@@ -231,6 +234,8 @@ export function ViewModal({ lead, onClose, onUpdated }: { lead: Lead; onClose: (
             searchLabel="Search for phone" searchUrl={buildFindPhoneUrl(lead.name)}
             onSaved={v => { setPhones(v); onUpdated?.(); }}
             showWhatsApp
+            companyName={lead.name}
+            whatsappSearchUrl={buildFindWhatsAppUrl(lead.name)}
           />
         } />
         <DetailRow icon={Briefcase} label="Category" value={lead.category} />

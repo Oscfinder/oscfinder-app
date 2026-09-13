@@ -8,3 +8,19 @@ export function WhatsAppIcon({ size = 14 }: { size?: number }) {
     </svg>
   );
 }
+
+// Same visual pattern as the plain-text SearchLink used for "Find Email"/
+// "Find Phone" (RowActionModals.tsx), but WhatsApp-green so it reads
+// distinctly from those when shown side by side.
+export function WhatsAppSearchLink({ url }: { url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center gap-1 text-[#1DA851] hover:text-[#25D366] font-medium transition-colors"
+    >
+      <WhatsAppIcon size={12} /> Find WhatsApp
+    </a>
+  );
+}
