@@ -16,6 +16,21 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error('[GlobalError]', error);
+
+    // Fire-and-forget — the console log disappears the moment the page is
+    // refreshed, which is exactly what someone hitting this screen does next.
+    // Never awaited/blocking, and any failure here is silently ignored so a
+    // broken logging call can't make this screen itself throw.
+    fetch('/api/client-errors', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        message: error.message,
+        stack:   error.stack,
+        digest:  error.digest,
+        url:     typeof window !== 'undefined' ? window.location.href : undefined,
+      }),
+    }).catch(() => {});
   }, [error]);
 
   return (
