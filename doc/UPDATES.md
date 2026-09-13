@@ -1525,3 +1525,16 @@
 - Skipped the leads table again — still no Phone column there, confirmed
   fresh this pass (same finding as the last WhatsApp-icon task).
 - `tsc --noEmit` and `npm run build` clean.
+
+### Fix: "Find WhatsApp" rendering larger than "Find Phone"
+- `WhatsAppSearchLink` set no font-size class at all, so it inherited
+  whatever ambient size its container happened to have — in
+  `LeadContactsSection.tsx`, its paired "Find Phone" link sets an explicit
+  `text-[11px]`, so "Find WhatsApp" rendered visibly larger next to it.
+- Added an optional `className` prop so a caller can pin an explicit size to
+  match its own paired "Find Phone" link exactly, rather than hardcoding one
+  size into the shared component (the ViewModal's pair inherits a different
+  ambient size — 14px via `DetailRow`'s `text-sm` — where no override was
+  needed). `LeadContactsSection.tsx` now passes `text-[11px]`. Icon size
+  trimmed 12 → 11 to match `Search`'s icon size in the same row.
+- `tsc --noEmit` and `npm run build` clean.

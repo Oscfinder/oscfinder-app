@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils';
+
 // Real WhatsApp glyph (lucide has no brand icon for it) — used everywhere a
 // phone number gets a "chat on WhatsApp" action, so this exists once instead
 // of the same inline SVG duplicated across RowActionModals/LeadContactsSection.
@@ -11,16 +13,19 @@ export function WhatsAppIcon({ size = 14 }: { size?: number }) {
 
 // Same visual pattern as the plain-text SearchLink used for "Find Email"/
 // "Find Phone" (RowActionModals.tsx), but WhatsApp-green so it reads
-// distinctly from those when shown side by side.
-export function WhatsAppSearchLink({ url }: { url: string }) {
+// distinctly from those when shown side by side. No font-size baked in by
+// default (matches SearchLink, which also has none — both inherit the
+// caller's ambient text size) — `className` lets a caller pin an explicit
+// size to match its own paired "Find Phone" link exactly.
+export function WhatsAppSearchLink({ url, className }: { url: string; className?: string }) {
   return (
     <a
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="flex items-center gap-1 text-[#1DA851] hover:text-[#25D366] font-medium transition-colors"
+      className={cn('flex items-center gap-1 text-[#1DA851] hover:text-[#25D366] font-medium transition-colors', className)}
     >
-      <WhatsAppIcon size={12} /> Find WhatsApp
+      <WhatsAppIcon size={11} /> Find WhatsApp
     </a>
   );
 }

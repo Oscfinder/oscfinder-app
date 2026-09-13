@@ -226,7 +226,7 @@ export function LeadContactsSection({ lead, onUpdated }: { lead: Lead; onUpdated
                           </span>
                         ) : (
                           <div className="flex items-center gap-3">
-                            <WhatsAppSearchLink url={buildContactWhatsAppSearchUrl(c.name, companyName)} />
+                            <WhatsAppSearchLink url={buildContactWhatsAppSearchUrl(c.name, companyName)} className="text-[11px]" />
                             <a
                               href={buildContactPhoneSearchUrl(c.name, companyName)}
                               target="_blank" rel="noreferrer"
