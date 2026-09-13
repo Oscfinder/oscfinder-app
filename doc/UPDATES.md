@@ -1419,3 +1419,63 @@
   sets `linkedin_search_url` on every new contact with a different, looser
   query shape.
 - `tsc --noEmit` and `npm run build` clean.
+
+## 2026-09-13
+
+### Server-side logging for the root error boundary
+- User hit `app/error.tsx` (the app's global crash screen) twice with no
+  reproduction steps and no server-side trace — `console.error('[GlobalError]',
+  error)` only ever wrote to the browser console, gone the moment the page is
+  refreshed (which is exactly what someone hitting this screen does next).
+- **`supabase/migrations/028_client_error_logs.sql`** (needs to be run in
+  Supabase SQL Editor) — new `client_error_logs` table (`message`, `stack`,
+  `digest`, `url`, `user_id`, `company_id`, `created_at`). Deliberately not
+  reusing `system_logs` — that table requires a non-null `admin_id` (it's
+  admin-action history), but a crash can hit any user, or even happen mid
+  session-expiry with no valid user at all. RLS restricts direct reads to
+  admins; the insert path bypasses it via `supabaseAdmin` like every other
+  route.
+- **`app/api/client-errors/route.ts`** (new) — deliberately no
+  `requireAuth()`, since this must stay reachable exactly when auth itself is
+  broken (an expired/invalid refresh token slipping past the guards already
+  in `middleware.ts`/`getSession()`). `getSession()` is called in its own
+  try/catch for the same reason — a throw there is often the crash's own
+  cause and must never stop the report from being written. Always returns
+  200-ish JSON, never lets a failure here become a second error.
+- `app/error.tsx` — added a fire-and-forget `fetch()` to the new route
+  alongside the existing console log, sending `message`/`stack`/`digest`/
+  current URL.
+- No UI to view these yet (not asked for) — queried directly via script when
+  needed, same as every other live-data check this session.
+- `tsc --noEmit` and `npm run build` clean. Migration 028 needs to be run
+  manually in Supabase SQL Editor — until then, the insert silently fails
+  (caught by the route's own try/catch) and nothing is lost that wasn't
+  already being lost before this change.
+
+### WhatsApp icon on lead and contact phone numbers
+- **`lib/findPeopleLinks.ts`** — added `buildWhatsAppUrl(phone, message?)`,
+  verified against the task's own 3 test cases (`+234 813 930 4329`,
+  `08139304329`, `234-813-930-4329` all correctly resolve to
+  `wa.me/2348139304329`). **Deliberately did not wire in the suggested
+  hardcoded default message** ("Hi, I'm Simon from OsCFinder
+  Technologies...") — this is a multi-tenant app (54+ companies use it
+  today), and baking one company's founder/name into every other tenant's
+  WhatsApp outreach button would be wrong for all of them. `message` stays
+  a genuinely optional parameter on the function for a future per-company
+  default; every call site here passes none.
+- **`app/_components/WhatsAppIcon.tsx`** (new) — the inline SVG from the
+  task, extracted into one shared component instead of duplicating it
+  across the 2 files that use it.
+- **`app/_components/LeadContactsSection.tsx`** — WhatsApp icon next to a
+  contact's phone number (only when present; "Find Phone" still shows
+  otherwise, unchanged).
+- **`app/_components/RowActionModals.tsx`** — the ViewModal's Phones row
+  (`EditableContactField`) gained an optional `showWhatsApp` prop (Phones
+  only, not Emails): each number now renders with its own WhatsApp icon
+  instead of the whole list being one joined string, so a lead with
+  multiple phones gets one icon per number as the task asked.
+- Skipped the leads table (`app/(dashboard)/leads/page.tsx`) per the task's
+  own fallback — confirmed there's no Phone column there (checked in an
+  earlier session too; Email is the only contact-info column on that
+  table), so the ViewModal is the only place this applies.
+- `tsc --noEmit` and `npm run build` clean.

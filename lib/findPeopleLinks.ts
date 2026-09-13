@@ -49,3 +49,23 @@ export function buildContactPhoneSearchUrl(contactName: string, companyName: str
 export function buildContactLinkedinSearchUrl(contactName: string, companyName: string): string {
   return googleSearchUrl(`"${contactName}" "${companyName}" site:linkedin.com/in/`);
 }
+
+// WhatsApp click-to-chat (wa.me) needs digits only, in international format
+// with no leading '+'. Numbers stored here are almost always Nigerian —
+// scraped/entered as either a local 0-prefixed number or already
+// international — so a bare 0 or a short (<=11-digit) number both default to
+// the +234 country code; anything already 234-prefixed or longer is left as-is.
+export function buildWhatsAppUrl(phone: string, message?: string): string {
+  let cleaned = phone.replace(/[^0-9]/g, '');
+
+  if (cleaned.startsWith('0')) {
+    cleaned = '234' + cleaned.slice(1);
+  }
+
+  if (!cleaned.startsWith('234') && cleaned.length <= 11) {
+    cleaned = '234' + cleaned;
+  }
+
+  const url = `https://wa.me/${cleaned}`;
+  return message ? `${url}?text=${encodeURIComponent(message)}` : url;
+}
