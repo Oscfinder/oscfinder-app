@@ -1,13 +1,14 @@
 'use client';
 import { useState, useMemo } from 'react';
-import { MapPin, Briefcase, Search, ChevronDown } from 'lucide-react';
+import { MapPin, Search, ChevronDown } from 'lucide-react';
 import { ScrapedResultsModal } from '@/app/_components/ScrapedResultsModal';
 import { ScrapeProgress } from '@/app/_components/ScrapeProgress';
 import { Button } from '@/app/_components/Button';
 import { SingleCompanySearch } from '@/app/_components/SingleCompanySearch';
+import { CategoryCombobox } from '@/app/_components/CategoryCombobox';
 import { Lead } from '@/types';
 import { cn } from '@/lib/utils';
-import { NIGERIAN_STATES, COMPANY_CATEGORIES } from '@/app/data/newCompaniesData';
+import { NIGERIAN_STATES } from '@/app/data/newCompaniesData';
 import { NIGERIAN_LGAS_BY_STATE } from '@/app/data/nigeriaLgas';
 import { useScrapeJob } from '@/hooks/useScrapeJob';
 import { useLeads } from '@/hooks/useLeads';
@@ -236,14 +237,7 @@ export default function ScrapePage() {
             ) : (
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <SelectField
-                  label="Industry / Category *"
-                  icon={Briefcase}
-                  value={category}
-                  onChange={setCategory}
-                  options={COMPANY_CATEGORIES}
-                  placeholder="Select category..."
-                />
+                <CategoryCombobox value={category} onChange={setCategory} />
                 <SelectField
                   label="State *"
                   icon={MapPin}

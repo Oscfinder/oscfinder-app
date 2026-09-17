@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { supabaseAdmin }                                            from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 import { checkLimit, logUsage, planLimitExceededResponse }          from '@/lib/usage';
+import { trackCategorySearch }                                      from '@/lib/categories';
 import { getCompanies, getPlaceDetails }                            from '@/services/googlePlaces';
 import { createGoogleSearchBudget }                                 from '@/services/contactExtraction';
 import { enrichAndSaveLead }                                        from '@/lib/leadEnrichment';
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
   if (jobError) return NextResponse.json({ error: jobError.message }, { status: 500 });
 
   await logUsage(companyId, 'google_search');
+  await trackCategorySearch(companyId, category);
 
   // `after()` keeps the serverless invocation alive until the pipeline
   // finishes, instead of letting the platform freeze/kill it once the

@@ -555,7 +555,16 @@ function NewInvoiceModal({
 }
 
 // ── Main Admin Page ────────────────────────────────────────────────
-type Tab = 'companies' | 'billing' | 'renewals' | 'revenue';
+type Tab = 'companies' | 'billing' | 'renewals' | 'revenue' | 'categories';
+
+interface SearchedCategory {
+  id:                string;
+  name:              string;
+  search_count:      number;
+  unique_user_count: number;
+  promoted:          boolean;
+  last_searched_at:  string;
+}
 
 export default function AdminPage() {
   const queryClient    = useQueryClient();
@@ -606,10 +615,34 @@ export default function AdminPage() {
     enabled:  tab === 'revenue',
   });
 
+  const { data: categories = [] } = useQuery<SearchedCategory[]>({
+    queryKey: ['admin-categories'],
+    queryFn:  () => fetch('/api/admin/categories').then(r => r.json()),
+    enabled:  tab === 'categories',
+  });
+
   const refreshAll = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-companies'] });
     queryClient.invalidateQueries({ queryKey: ['admin-invoices'] });
     queryClient.invalidateQueries({ queryKey: ['admin-revenue'] });
+    queryClient.invalidateQueries({ queryKey: ['admin-categories'] });
+  };
+
+  const promoteCategory = async (id: string, promoted: boolean) => {
+    setUpdatingId(id);
+    await fetch(`/api/admin/categories/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body:   JSON.stringify({ promoted }),
+    });
+    setUpdatingId(null);
+    queryClient.invalidateQueries({ queryKey: ['admin-categories'] });
+  };
+
+  const deleteCategory = async (id: string) => {
+    setUpdatingId(id);
+    await fetch(`/api/admin/categories/${id}`, { method: 'DELETE' });
+    setUpdatingId(null);
+    queryClient.invalidateQueries({ queryKey: ['admin-categories'] });
   };
 
   const patchCompany = async (id: string, updates: object) => {
@@ -701,6 +734,7 @@ export default function AdminPage() {
     { key: 'billing',   label: 'Billing'   },
     { key: 'renewals',  label: `Renewals Due${renewalsDue.length > 0 ? ` (${renewalsDue.length})` : ''}` },
     { key: 'revenue',   label: 'Revenue'   },
+    { key: 'categories', label: 'Categories' },
   ];
 
   const thCls = 'px-4 py-2.5 text-left text-[11px] font-bold tracking-[0.8px] uppercase text-[#888888] border-b border-[#E5E7EB] whitespace-nowrap';
@@ -1060,6 +1094,79 @@ export default function AdminPage() {
         ) : (
           <div className="text-center py-12 text-[13px] text-[#888888]">Loading revenue data...</div>
         )
+      )}
+
+      {tab === 'categories' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <StatCard label="Total Categories" value={categories.length} sub="official + custom" iconBg="bg-[#dff2f9]" />
+            <StatCard
+              label="Custom Categories"
+              value={categories.filter(c => !c.promoted).length}
+              sub="typed by users, not yet promoted"
+              iconBg="bg-[#fff3e0]"
+            />
+            <StatCard
+              label="Promoted"
+              value={categories.filter(c => c.promoted).length}
+              sub="shown as official"
+              iconBg="bg-[#dff7ee]"
+            />
+          </div>
+
+          <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  {['Category', 'Searches', 'Unique Companies', 'Status', 'Last Searched', ''].map(h => (
+                    <th key={h} className={thCls}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {categories.map(c => (
+                  <tr key={c.id} className="hover:bg-[#fafbfc] border-b border-[#F1F1F1] last:border-0">
+                    <td className={cn(tdCls, 'text-[13px] font-semibold text-[#0A1628]')}>{c.name}</td>
+                    <td className={cn(tdCls, 'font-mono text-[12px] text-[#0A1628]')}>{c.search_count}</td>
+                    <td className={cn(tdCls, 'font-mono text-[12px] text-[#0A1628]')}>{c.unique_user_count}</td>
+                    <td className={tdCls}>
+                      <span className={cn(
+                        'text-[11px] font-bold px-2.5 py-0.5 rounded-full capitalize',
+                        c.promoted ? 'bg-[#dff7ee] text-[#00A86B]' : 'bg-[#f3f4f6] text-[#888888]'
+                      )}>
+                        {c.promoted ? 'Official' : 'Custom'}
+                      </span>
+                    </td>
+                    <td className={cn(tdCls, 'text-[12px] text-[#888888] whitespace-nowrap')}>{fmtDate(c.last_searched_at)}</td>
+                    <td className={tdCls}>
+                      <div className="flex items-center gap-1.5">
+                        {!c.promoted && (
+                          <button
+                            onClick={() => promoteCategory(c.id, true)}
+                            disabled={updatingId === c.id}
+                            className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#dff2f9] text-[#006285] hover:bg-[#c8eaf7] transition-colors disabled:opacity-40 whitespace-nowrap"
+                          >
+                            Promote
+                          </button>
+                        )}
+                        <button
+                          onClick={() => deleteCategory(c.id)}
+                          disabled={updatingId === c.id}
+                          className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#ffeaea] text-[#e74c3c] hover:bg-[#ffd6d6] transition-colors disabled:opacity-40 whitespace-nowrap"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {categories.length === 0 && (
+                  <tr><td colSpan={6} className="text-center py-12 text-[13px] text-[#888888]">No categories yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* Modals */}

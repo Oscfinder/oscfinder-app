@@ -2,6 +2,7 @@ import { NextRequest, NextResponse }                                from 'next/s
 import { supabaseAdmin }                                            from '@/lib/supabase-server';
 import { requireAuth, requireActiveAccount, getEffectiveCompanyId } from '@/lib/auth';
 import { checkLimit, logUsage, planLimitExceededResponse }          from '@/lib/usage';
+import { trackCategorySearch }                                      from '@/lib/categories';
 import { createGoogleSearchBudget }                                 from '@/services/contactExtraction';
 import { enrichAndSaveLead }                                        from '@/lib/leadEnrichment';
 import { createNotification }                                       from '@/lib/notifications';
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
   // already short-circuited before this point, so a 409 never costs a
   // credit.
   await logUsage(companyId, 'google_search');
+  await trackCategorySearch(companyId, category || 'Uncategorized');
 
   if (!result) {
     return NextResponse.json({

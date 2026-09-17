@@ -1601,3 +1601,60 @@
   `leads/page.tsx`) — they all just pass `lead.name` straight through to
   these builders.
 - `tsc --noEmit` clean.
+
+---
+
+## 2026-09-18
+
+### Feature: Custom categories (Phase 1, Part 1 of "Custom Categories + Master Company Database")
+- First half of a two-part feature (split by user request — the master
+  company database half is planned separately, later). Before this, Generate
+  Leads only let a user pick from the hardcoded 24-item `COMPANY_CATEGORIES`
+  array (`app/data/newCompaniesData.ts`) — anything outside that list
+  couldn't be searched at all.
+- **New migration** `supabase/migrations/029_searched_categories.sql` —
+  `searched_categories` (name, normalized_name, search_count,
+  unique_user_count, promoted, timestamps), seeded with the existing 24
+  categories as `promoted: true`; `category_user_searches` (dedups which
+  companies have searched which category, `UNIQUE(category_id, company_id)`,
+  so `unique_user_count` only increments once per company). No RLS on either
+  — same rationale as the master-DB tables planned for Part 2: shared,
+  non-tenant-scoped data, accessed only via `supabaseAdmin`.
+- **New `lib/categories.ts`** — `trackCategorySearch(companyId, category)`:
+  upserts `searched_categories` by `normalized_name` (increment
+  `search_count`/`last_searched_at`, or insert a new row for a never-seen
+  category), then records the company in `category_user_searches`, only
+  bumping `unique_user_count` when that insert is genuinely new for this
+  company (relies on the unique constraint to detect repeats).
+- Wired into both scrape entry points — `app/api/scrape/route.ts` and
+  `app/api/scrape/single/route.ts` — right next to their existing
+  `logUsage(companyId, 'google_search')` call, so every scrape submission
+  (batch or single) tracks its category regardless of downstream success.
+- **New API**: `GET /api/categories` (any logged-in user — `official`
+  categories alphabetical, `recent` = non-promoted with `search_count >= 2`,
+  newest-first, capped at 10) and `POST /api/categories/track` (kept per the
+  spec for completeness/future manual use, though the scrape routes call
+  `trackCategorySearch()` directly rather than round-tripping through HTTP
+  since they're already server-side). Admin-only `GET /api/admin/categories`
+  and `PATCH`/`DELETE /api/admin/categories/[id]` (promote / delete a custom
+  category, both logged via `logAdminAction`).
+- **New `app/_components/CategoryCombobox.tsx`** — replaces the plain
+  `<select>` on the Generate Leads page. Visual chrome copied from
+  `SelectField`'s existing classes (`scrape/page.tsx`), open/close-on-
+  outside-click copied from `FindPeopleMenu`'s ref+mousedown pattern
+  (`leads/page.tsx`). The input's value *is* the `category` state, so typing
+  a brand-new category and submitting just works — no separate "confirm"
+  step. Falls back to the static `COMPANY_CATEGORIES` list (still exported,
+  now fallback-only) if `GET /api/categories` fails.
+- **Admin UI**: new "Categories" tab in `app/(dashboard)/admin/page.tsx` —
+  3 `StatCard`s (total / custom / promoted) + a table with Promote/Delete
+  actions, following the exact table/badge patterns already used by the
+  Companies/Billing tabs.
+- **Known issue found during research, not fixed here** (out of scope for
+  Part 1, flagged for Part 2's plan): `leads.place_id` is a **globally**
+  unique column (`supabase/schema.sql`), not scoped per company, even though
+  `scrape/single` and `scrape/search` already code as if it were
+  per-company. Harmless today (collisions are rare), but Part 2's master DB
+  will make cross-company collisions common — needs a migration to
+  `(company_id, place_id)` uniqueness before Part 2 ships.
+- `tsc --noEmit` and `npm run build` clean.
