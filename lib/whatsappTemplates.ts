@@ -1,3 +1,5 @@
+import { cleanCompanyName } from './findPeopleLinks';
+
 // Generic outreach templates — deliberately tenant-neutral. This is a
 // hardcoded constant shared by every company on the platform (not a
 // per-company DB table like email_templates), so it can't carry any one
@@ -34,8 +36,7 @@ export const WHATSAPP_TEMPLATES: WhatsAppTemplate[] = [
 ];
 
 // Same number-normalization as buildWhatsAppUrl (lib/findPeopleLinks.ts) —
-// duplicated rather than imported to keep this file's only dependency being
-// the template list itself.
+// duplicated here rather than imported, unlike cleanCompanyName below.
 export function buildWhatsAppTemplateUrl(
   phone:        string,
   template:     WhatsAppTemplate,
@@ -53,7 +54,7 @@ export function buildWhatsAppTemplateUrl(
 
   const message = template.message
     .replace(/\{\{name\}\}/g,        contactName || 'there')
-    .replace(/\{\{company\}\}/g,     companyName || 'your company')
+    .replace(/\{\{company\}\}/g,     (companyName && cleanCompanyName(companyName)) || 'your company')
     .replace(/\{\{sender_name\}\}/g, senderName  || '');
 
   return `https://wa.me/${cleaned}?text=${encodeURIComponent(message)}`;
