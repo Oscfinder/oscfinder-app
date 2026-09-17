@@ -1575,3 +1575,29 @@
   it was built for — a client-side error with zero prior server-side trace
   became fully diagnosable in a few minutes.
 - `tsc --noEmit` and `npm run build` clean.
+
+---
+
+## 2026-09-17
+
+### Fix: "Find People"/Find Email/Find Phone/Find WhatsApp search links returning zero results
+- All of these build a Google (or wa.me) search query by quoting the raw
+  Google Places `lead.name` verbatim. Places names often carry a trailing
+  description after the actual business name — e.g. `"Oxgital - Digital
+  Marketing, Website and Advertising Agency in Lagos, Nigeria"` — which no
+  LinkedIn/Facebook profile or search result matches as one literal string,
+  so the search returned nothing.
+- **Fixed** in `lib/findPeopleLinks.ts`: added `cleanCompanyName()` (splits
+  the name on the first `-`, `|`, `,`, or `·` and keeps only what's before
+  it) and applied it inside every search-URL builder — `buildFindPeopleLinks`,
+  `buildFindEmailUrl`, `buildFindPhoneUrl`, `buildContactEmailSearchUrl`,
+  `buildContactPhoneSearchUrl`, `buildContactLinkedinSearchUrl`,
+  `buildFindWhatsAppUrl`, `buildContactWhatsAppSearchUrl`.
+- `lib/whatsappTemplates.ts`'s `buildWhatsAppTemplateUrl()` now imports and
+  applies the same `cleanCompanyName()` to the `{{company}}` placeholder in
+  WhatsApp template messages, so a pre-filled message also reads "Oxgital"
+  rather than the full Places description.
+- No caller changes needed (`LeadContactsSection.tsx`, `RowActionModals.tsx`,
+  `leads/page.tsx`) — they all just pass `lead.name` straight through to
+  these builders.
+- `tsc --noEmit` clean.
